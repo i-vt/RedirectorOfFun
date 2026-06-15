@@ -3,6 +3,9 @@
 > Modified from [coffeegist/now-you-see-me](https://github.com/coffeegist/now-you-see-me).  
 > Automated nginx C2 redirector with SSL, blocklisting, UA filtering, and more.
 
+<img width="543" height="498" alt="image" src="https://github.com/user-attachments/assets/b413caaf-9a91-49e4-942b-fec431dc7356" />
+
+
 ---
 
 ## Features
