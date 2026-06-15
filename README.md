@@ -1,4 +1,4 @@
-# NYSM — Now You See Me (Enhanced)
+# RedirectorOfFun
 
 > Modified from [coffeegist/now-you-see-me](https://github.com/coffeegist/now-you-see-me).  
 > Automated nginx C2 redirector with SSL, blocklisting, UA filtering, and more.
