@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Service Incident — CrestDesk Update Service</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:      #1e3a5f;
+      --navy-dark: #152d4a;
+      --bg:        #f9fafb;
+      --surface:   #ffffff;
+      --border:    #e5e7eb;
+      --text:      #111827;
+      --muted:     #6b7280;
+      --mono-bg:   #f3f4f6;
+      --amber:     #d97706;
+      --amber-bg:  #fffbeb;
+      --amber-bdr: #fde68a;
+      --green:     #16a34a;
+      --green-bg:  #f0fdf4;
+      --red:       #dc2626;
+      --accent:    #2563eb;
+      --radius:    4px;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    nav {
+      background: var(--navy);
+      border-bottom: 3px solid var(--navy-dark);
+      padding: 0 24px;
+    }
+    .nav-inner {
+      max-width: 860px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 52px;
+    }
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+    .nav-logo {
+      width: 28px; height: 28px;
+      background: #ffffff22;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .nav-logo svg { fill: #fff; }
+    .nav-name { color: #fff; font-size: 14px; font-weight: 600; }
+    .nav-name span { color: #93c5fd; font-weight: 400; }
+    .nav-links { display: flex; gap: 24px; list-style: none; }
+    .nav-links a { color: #93c5fd; text-decoration: none; font-size: 13px; transition: color 0.15s; }
+    .nav-links a:hover { color: #fff; }
+
+    .page {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 36px 24px 72px;
+    }
+
+    /* ── Incident header ─────────────────────────────────────────── */
+    .incident-header {
+      background: var(--amber-bg);
+      border: 1px solid var(--amber-bdr);
+      border-left: 5px solid var(--amber);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      margin-bottom: 32px;
+    }
+    .incident-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .incident-id {
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.03em;
+    }
+    .incident-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--amber-bg);
+      border: 1px solid var(--amber);
+      color: var(--amber);
+      border-radius: 3px;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .pulse {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--amber);
+      animation: pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.35; }
+    }
+
+    .incident-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.01em;
+      margin-bottom: 6px;
+    }
+    .incident-summary {
+      font-size: 13.5px;
+      color: #374151;
+      line-height: 1.55;
+    }
+
+    /* ── Impact section ──────────────────────────────────────────── */
+    .impact-row {
+      display: flex;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 36px;
+    }
+    .impact-cell {
+      flex: 1;
+      background: var(--surface);
+      padding: 14px 16px;
+    }
+    .impact-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .impact-value {
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 500;
+    }
+    .chip {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+    .chip-amber { background: #fef3c7; color: #92400e; }
+    .chip-green { background: #dcfce7; color: #14532d; }
+
+    /* ── Section label ───────────────────────────────────────────── */
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── Component status ────────────────────────────────────────── */
+    .component-list {
+      list-style: none;
+      margin-bottom: 36px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .component-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: 13.5px;
+      gap: 12px;
+    }
+    .component-item:last-child { border-bottom: none; }
+    .component-name { font-weight: 500; color: var(--text); }
+    .component-detail { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-amber   { background: var(--amber); }
+    .dot-green   { background: var(--green); }
+    .dot-red     { background: var(--red); }
+
+    /* ── Timeline ────────────────────────────────────────────────── */
+    .timeline {
+      position: relative;
+      margin-bottom: 36px;
+      padding-left: 20px;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 4px; top: 8px; bottom: 8px;
+      width: 2px;
+      background: var(--border);
+    }
+    .tl-entry {
+      position: relative;
+      margin-bottom: 24px;
+    }
+    .tl-entry:last-child { margin-bottom: 0; }
+    .tl-dot {
+      position: absolute;
+      left: -20px; top: 5px;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 2px solid var(--border);
+    }
+    .tl-dot.current {
+      background: var(--amber);
+      border-color: var(--amber);
+    }
+    .tl-dot.resolved {
+      background: var(--green);
+      border-color: var(--green);
+    }
+    .tl-time {
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 11.5px;
+      color: var(--muted);
+      margin-bottom: 3px;
+      letter-spacing: 0.03em;
+    }
+    .tl-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .tl-body {
+      font-size: 13px;
+      color: #374151;
+      line-height: 1.55;
+    }
+    .tl-tag {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 3px;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .tl-tag-monitoring  { background: #dbeafe; color: #1e40af; }
+    .tl-tag-identified  { background: #fef3c7; color: #92400e; }
+    .tl-tag-investigating { background: #fee2e2; color: #991b1b; }
+
+    /* ── Subscribe box ───────────────────────────────────────────── */
+    .subscribe-box {
+      background: var(--mono-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+    .subscribe-text { font-size: 13.5px; color: var(--text); }
+    .subscribe-text p { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .btn {
+      display: inline-block;
+      padding: 8px 18px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+
+    footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .footer-copy { font-size: 12px; color: var(--muted); }
+    .footer-links { display: flex; gap: 18px; list-style: none; }
+    .footer-links a { font-size: 12px; color: var(--muted); text-decoration: none; }
+    .footer-links a:hover { color: var(--accent); }
+
+    .mono { font-family: "Consolas", "Courier New", monospace; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a class="nav-brand" href="#">
+      <div class="nav-logo">
+        <svg viewBox="0 0 20 20" width="16" height="16">
+          <path d="M3 4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4zm0 6a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2zm1 5a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2H4z"/>
+        </svg>
+      </div>
+      <div class="nav-name">Crestfield Software <span>/ Service Status</span></div>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#">All Incidents</a></li>
+      <li><a href="#">Maintenance</a></li>
+      <li><a href="#">Subscribe</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="page">
+
+  <div class="incident-header">
+    <div class="incident-meta">
+      <span class="incident-id">INC-20260615-0047 &nbsp;&middot;&nbsp; Opened 13:08 UTC &nbsp;&middot;&nbsp; Auto-Update Delivery</span>
+      <span class="incident-status-badge">
+        <span class="pulse"></span>
+        Monitoring
+      </span>
+    </div>
+    <h1 class="incident-title">Auto-Update Delivery — Elevated Error Rate</h1>
+    <p class="incident-summary">
+      A subset of CrestDesk clients experienced failed or timed-out update checks between 13:08 and 14:23 UTC. 
+      The root cause has been identified and a fix deployed. Error rates have returned to baseline. 
+      We are monitoring to confirm full resolution before closing this incident.
+    </p>
+  </div>
+
+  <!-- Impact summary -->
+  <div class="impact-row">
+    <div class="impact-cell">
+      <div class="impact-label">Affected component</div>
+      <div class="impact-value">Auto-Update Delivery API</div>
+    </div>
+    <div class="impact-cell">
+      <div class="impact-label">Impact</div>
+      <div class="impact-value"><span class="chip chip-amber">Degraded performance</span></div>
+    </div>
+    <div class="impact-cell">
+      <div class="impact-label">Duration</div>
+      <div class="impact-value">1h 15m (13:08 – 14:23 UTC)</div>
+    </div>
+    <div class="impact-cell">
+      <div class="impact-label">Next update</div>
+      <div class="impact-value mono">15:00 UTC</div>
+    </div>
+  </div>
+
+  <!-- Component status -->
+  <div class="section-label">Component Status</div>
+  <ul class="component-list">
+    <li class="component-item">
+      <div>
+        <div class="component-name">Auto-Update Delivery API</div>
+        <div class="component-detail">Handles update checks and package download requests from CrestDesk clients</div>
+      </div>
+      <span class="chip chip-amber">Degraded</span>
+    </li>
+    <li class="component-item">
+      <div>
+        <div class="component-name">License Validation Service</div>
+        <div class="component-detail">Seat activation and license entitlement checks</div>
+      </div>
+      <span class="chip chip-green">Operational</span>
+    </li>
+    <li class="component-item">
+      <div>
+        <div class="component-name">Customer Support Portal</div>
+        <div class="component-detail">support.crestfieldsoftware.com</div>
+      </div>
+      <span class="chip chip-green">Operational</span>
+    </li>
+    <li class="component-item">
+      <div>
+        <div class="component-name">Package Download CDN</div>
+        <div class="component-detail">Direct package downloads from the customer portal</div>
+      </div>
+      <span class="chip chip-green">Operational</span>
+    </li>
+    <li class="component-item">
+      <div>
+        <div class="component-name">Telemetry Ingest</div>
+        <div class="component-detail">Crash reporting and diagnostic event collection</div>
+      </div>
+      <span class="chip chip-green">Operational</span>
+    </li>
+  </ul>
+
+  <!-- Timeline -->
+  <div class="section-label">Incident Timeline</div>
+  <div class="timeline">
+
+    <div class="tl-entry">
+      <div class="tl-dot current"></div>
+      <div class="tl-time">15 Jun 2026 &nbsp;14:51 UTC</div>
+      <div class="tl-title"><span class="tl-tag tl-tag-monitoring">Monitoring</span>Error rate nominal</div>
+      <div class="tl-body">
+        Error rate on update-delivery endpoints has returned to &lt;0.1% over the past 28 minutes, consistent with baseline. 
+        We are maintaining heightened monitoring on the affected node group and will close the incident at 15:00 UTC 
+        if no further anomalies are observed.
+      </div>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-dot"></div>
+      <div class="tl-time">15 Jun 2026 &nbsp;14:23 UTC</div>
+      <div class="tl-title"><span class="tl-tag tl-tag-monitoring">Monitoring</span>Fix deployed</div>
+      <div class="tl-body">
+        A connection pool configuration change has been rolled to all affected nodes 
+        (<span class="mono">update-delivery-eu-west-2a</span> through <span class="mono">update-delivery-eu-west-2c</span>). 
+        Error rate is declining. Clients that failed their update check during the incident window 
+        will retry automatically on their next scheduled interval.
+      </div>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-dot"></div>
+      <div class="tl-time">15 Jun 2026 &nbsp;13:47 UTC</div>
+      <div class="tl-title"><span class="tl-tag tl-tag-identified">Identified</span>Root cause confirmed</div>
+      <div class="tl-body">
+        Root cause identified as connection pool exhaustion on the 
+        <span class="mono">update-delivery-eu-west-2</span> node group, triggered by 
+        a background metadata index rebuild that was consuming an unexpectedly large number of database connections. 
+        A configuration change is being prepared and will be deployed within the next 30–40 minutes.
+      </div>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-dot"></div>
+      <div class="tl-time">15 Jun 2026 &nbsp;13:31 UTC</div>
+      <div class="tl-title"><span class="tl-tag tl-tag-investigating">Investigating</span>Impact confirmed</div>
+      <div class="tl-body">
+        Customer impact confirmed. Clients sending update check requests to the affected node group are 
+        receiving HTTP 503 responses or experiencing request timeouts. Clients on unaffected node groups 
+        are operating normally. Engineer assigned, investigation in progress.
+      </div>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-dot"></div>
+      <div class="tl-time">15 Jun 2026 &nbsp;13:12 UTC</div>
+      <div class="tl-title"><span class="tl-tag tl-tag-investigating">Investigating</span>Alert triggered</div>
+      <div class="tl-body">
+        Automated monitoring detected an elevated error rate (11.4%) on the 
+        <span class="mono">/api/v2/update/check</span> endpoint, 
+        exceeding the 2% alert threshold. On-call engineer paged.
+      </div>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-dot"></div>
+      <div class="tl-time">15 Jun 2026 &nbsp;13:08 UTC</div>
+      <div class="tl-title">Incident opened</div>
+      <div class="tl-body">
+        First reports of failed update checks received via support portal. 
+        Incident <span class="mono">INC-20260615-0047</span> opened.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Subscribe -->
+  <div class="subscribe-box">
+    <div class="subscribe-text">
+      <strong>Subscribe to incident updates</strong>
+      <p>Receive email or SMS notifications for this and future incidents affecting your selected components.</p>
+    </div>
+    <a class="btn btn-primary" href="#">Manage notifications</a>
+  </div>
+
+  <footer>
+    <div class="footer-copy">
+      &copy; 2026 Crestfield Software, Inc. &mdash; Managed by CrestDesk Operations Team
+    </div>
+    <ul class="footer-links">
+      <li><a href="#">Privacy Policy</a></li>
+      <li><a href="#">Terms of Service</a></li>
+      <li><a href="#">Contact Support</a></li>
+    </ul>
+  </footer>
+
+</div>
+</body>
+</html>
