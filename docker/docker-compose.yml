@@ -1,0 +1,45 @@
+version: "3.8"
+
+# ─── Usage ────────────────────────────────────────────────────────────────────
+# 1. Copy .env.example to .env and fill in your values.
+# 2. docker compose up -d --build
+# 3. Exec into the container to run certbot manually for first-time cert:
+#    docker compose exec redirector certbot --nginx -d $DOMAIN_NAME ...
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  redirector:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: nysm-redirector
+    restart: unless-stopped
+
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME}
+      - C2_SERVER=${C2_SERVER}
+      - C2_SCHEME=${C2_SCHEME:-http}
+      - UA_PATTERN=${UA_PATTERN:-}
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      # Persist Let's Encrypt certificates across container restarts
+      - letsencrypt:/etc/letsencrypt
+      # Mount blocklist as writable so cron updates survive
+      - ./blocklist.conf:/etc/nginx/blocklist.conf
+      # Persist logs for post-op review (scrub before leaving)
+      - nginx-logs:/var/log/nginx
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  letsencrypt:
+  nginx-logs:

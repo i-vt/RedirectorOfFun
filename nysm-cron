@@ -1,0 +1,22 @@
+# /etc/cron.d/nysm — certificate renewal for NYSM redirector
+#
+# Certbot recommends attempting renewal twice a day.
+# Renewal only occurs when the certificate is within 30 days of expiry.
+# A random sleep (up to 1 hour) staggers renewals across many hosts.
+
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# ─── Certificate renewal (06:00 and 18:00) ──────────────────────────────────
+0 6,18 * * * root python3 -c 'import random, time; time.sleep(random.random() * 3600)' \
+  && certbot renew --quiet \
+  && nginx -t 2>/dev/null \
+  && systemctl reload nginx
+
+# ─── Expiry alert (08:00 daily) ──────────────────────────────────────────────
+# Logs a warning to syslog if any certificate expires within 14 days.
+0 8 * * * root for cert in /etc/letsencrypt/live/*/cert.pem; do \
+  domain=$(echo "$cert" | awk -F'/' '{print $5}'); \
+  days=$(( ( $(date -d "$(openssl x509 -enddate -noout -in "$cert" | cut -d= -f2)" +%s) - $(date +%s) ) / 86400 )); \
+  [ "$days" -lt 14 ] && logger -t nysm "WARNING: certificate for $domain expires in $days days"; \
+done

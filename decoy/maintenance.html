@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scheduled Maintenance</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f6f8;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 3rem 2.5rem;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .icon {
+      font-size: 3rem;
+      margin-bottom: 1.25rem;
+    }
+
+    h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 0.6rem; color: #111; }
+    p  { font-size: 0.95rem; color: #666; line-height: 1.6; margin-bottom: 0.75rem; }
+
+    .badge {
+      display: inline-block;
+      background: #fff7ed;
+      color: #c2410c;
+      border: 1px solid #fed7aa;
+      border-radius: 9999px;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      letter-spacing: 0.02em;
+    }
+
+    footer {
+      margin-top: 2rem;
+      font-size: 0.75rem;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🔧</div>
+    <span class="badge">Maintenance in Progress</span>
+    <h1>We'll be right back</h1>
+    <p>
+      This service is temporarily unavailable while we perform scheduled
+      maintenance. We apologise for any inconvenience.
+    </p>
+    <p style="font-size:0.85rem;color:#aaa;">
+      Expected downtime: up to 30 minutes.<br>
+      Please try again shortly.
+    </p>
+  </div>
+  <footer>&copy; 2024 Update Services. All rights reserved.</footer>
+</body>
+</html>
