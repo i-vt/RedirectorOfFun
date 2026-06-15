@@ -185,9 +185,34 @@ verify_dns() {
 
   nysm_action "Verifying DNS for $domain..."
 
-  # Resolve the domain using Python (no extra packages needed)
+  # Remove any stale /etc/hosts entry for this domain left by a previous
+  # failed run. If present it would shadow real DNS and fool the check below.
+  if grep -qE "\s+${domain}(\s|$)" /etc/hosts 2>/dev/null; then
+    nysm_warning "Removing stale /etc/hosts entry for $domain (left by a previous run)..."
+    sed -i "/${domain}/d" /etc/hosts
+  fi
+
+  # Query public DNS via Google DNS-over-HTTPS — bypasses /etc/hosts and the
+  # system stub resolver entirely, so we always see what the internet sees.
+  # socket.gethostbyname() reads /etc/hosts first which causes false mismatches
+  # when a previous failed run left a stale 127.0.0.1 entry for the domain.
   local dns_ip
-  dns_ip=$(python3 -c "import socket; print(socket.gethostbyname('$domain'))" 2>/dev/null)
+  dns_ip=$(curl -sf --max-time 10 \
+    "https://dns.google/resolve?name=${domain}&type=A" \
+    | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    ans = [r['data'] for r in d.get('Answer', []) if r.get('type') == 1]
+    print(ans[0] if ans else '')
+except:
+    pass
+" 2>/dev/null)
+
+  # Fallback: dig with explicit resolver (also bypasses /etc/hosts)
+  if [ -z "$dns_ip" ] && command -v dig &>/dev/null; then
+    dns_ip=$(dig +short "$domain" @8.8.8.8 2>/dev/null | grep -E '^[0-9]' | head -1)
+  fi
 
   if [ -z "$dns_ip" ]; then
     nysm_error "DNS lookup for '$domain' returned nothing."
@@ -195,7 +220,7 @@ verify_dns() {
     error_exit "Fix DNS and re-run."
   fi
 
-  # Detect this server's public IP
+  # Detect this server's own public IP
   local my_ip
   my_ip=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null \
        || curl -s --max-time 5 https://ifconfig.me 2>/dev/null \
@@ -206,8 +231,8 @@ verify_dns() {
     nysm_error "  $domain resolves to : $dns_ip"
     nysm_error "  This server's IP is  : $my_ip"
     nysm_error "Let's Encrypt will try to reach $dns_ip on port 80 — the ACME challenge WILL fail."
-    nysm_error "Update your DNS A record so $domain points to $my_ip and wait for propagation."
-    if ! nysm_confirm "I have fixed DNS and want to continue anyway:"; then
+    nysm_error "Update your DNS A record so $domain → $my_ip and wait for propagation (~1 min at TTL 60)."
+    if ! nysm_confirm "DNS is correct and I want to continue anyway:"; then
       error_exit "Aborted. Fix DNS and re-run."
     fi
   else
@@ -380,12 +405,6 @@ nysm_initialize() {
   run_cmd systemctl restart nginx
   check_errors
 
-  # Update /etc/hosts
-  if [ $DRY_RUN -eq 0 ]; then
-    grep -qxF "127.0.0.1 $domain_name" /etc/hosts || \
-      echo "127.0.0.1 $domain_name" >> /etc/hosts
-  fi
-
   nysm_save_profile "$domain_name" "$c2_server" "$ua_pattern" "$use_https_upstream"
   send_webhook "Redirector online: $domain_name → $c2_server"
   nysm_action "Done! Redirector is live at https://$domain_name"
@@ -426,9 +445,6 @@ nysm_teardown() {
     run_cmd apt-get purge -y nginx certbot python3-certbot-nginx
     run_cmd apt-get autoremove -y
   fi
-
-  nysm_action "Cleaning /etc/hosts entry..."
-  run_cmd sed -i "/127.0.0.1 $domain_name/d" /etc/hosts
 
   nysm_action "Scrubbing nginx logs..."
   run_cmd truncate -s 0 /var/log/nginx/access.log 2>/dev/null || true
