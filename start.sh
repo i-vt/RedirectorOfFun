@@ -102,7 +102,7 @@ fi
 # Catch port conflicts with other stacks before compose reports a cryptic
 # daemon error. Compose projects are named after the directory, so a reset
 # in one checkout never sees another checkout's running containers.
-STACK_DIR_NAME=$(basename "$PWD" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_-' '_')
+STACK_DIR_NAME=$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '_')
 if [[ $RESET -eq 0 ]]; then
   for port in 80 443; do
     occupants=$(docker ps --filter "publish=$port" --format '{{.Names}}' 2>/dev/null || true)

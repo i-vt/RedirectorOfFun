@@ -24,7 +24,9 @@ jobs:
       - name: Functional tests
         run: python manage.py test --tag functional
       - name: Startup self-test
-        run: python manage.py selftest --strict
+        run: |
+          python manage.py migrate --noinput
+          python manage.py selftest --strict
 
   shell:
     name: Shell scripts
@@ -39,6 +41,8 @@ jobs:
   compose:
     name: Compose configuration
     runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci-validation-only
     steps:
       - uses: actions/checkout@v4
       - name: Validate compose files

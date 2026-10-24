@@ -49,7 +49,7 @@ build_image() {
 
 run_backend_suite() {
   local tag=$1
-  echo "\n=== ${tag^^} TESTS ==="
+  printf "\n=== %s TESTS ===\n" "${tag^^}"
   "${TEST_COMPOSE[@]}" run --rm --no-deps \
     -e DJANGO_SETTINGS_MODULE=config.settings \
     test-panel python manage.py test --tag "$tag" --verbosity 1
@@ -91,7 +91,7 @@ build_browser_runner() {
 }
 
 run_e2e_suite() {
-  echo "\n=== END-TO-END FULL SUITE ==="
+  printf "\n=== END-TO-END FULL SUITE ===\n"
   "${TEST_COMPOSE[@]}" up -d test-panel
   echo "Waiting for isolated stack at http://localhost:3100…"
   for attempt in $(seq 1 60); do
@@ -145,4 +145,4 @@ case "$MODE" in
     ;;
 esac
 
-echo "\nAll requested test stages passed."
+printf "\nAll requested test stages passed.\n"
