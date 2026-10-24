@@ -40,10 +40,6 @@ if [[ $RESET -eq 1 ]]; then
     read -r -p "This destroys all control-plane data. Continue? [y/N] " answer
     [[ "$answer" =~ ^[yY] ]] || { echo "Aborted."; exit 1; }
   fi
-  "${COMPOSE[@]}" down -v --remove-orphans || true
-  rm -f .env
-  rm -rf var staticfiles .test-runtime
-  echo "Reset complete."
 fi
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -51,10 +47,7 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-ENV_FRESH=0
-if [[ ! -f .env ]]; then
-  echo "Creating .env with generated secrets…"
-  ENV_FRESH=1
+create_env() {
   DJANGO_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
   ANALYTICS_SALT=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
   POSTGRES_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')
@@ -71,6 +64,32 @@ text = text.replace("replace-with-random-prefix", os.environ["OP_PREFIX"])
 Path(".env").write_text(text)
 PY
   chmod 600 .env 2>/dev/null || true
+}
+
+ENV_FRESH=0
+if [[ $RESET -eq 1 && ! -f .env ]]; then
+  # Compose refuses to even load the file for `down` when the required
+  # POSTGRES_PASSWORD is unset; a throwaway .env guarantees the teardown
+  # actually reaches the old containers and volumes.
+  echo "Creating a temporary .env so the teardown can run…"
+  create_env
+fi
+
+if [[ $RESET -eq 1 ]]; then
+  if ! "${COMPOSE[@]}" down -v --remove-orphans; then
+    echo "Error: compose down failed; not starting a stack against unknown state." >&2
+    echo "Inspect leftovers with: docker ps -a | grep redirectoroffun" >&2
+    exit 1
+  fi
+  rm -f .env
+  rm -rf var staticfiles .test-runtime
+  echo "Reset complete."
+fi
+
+if [[ ! -f .env ]]; then
+  echo "Creating .env with generated secrets…"
+  ENV_FRESH=1
+  create_env
 else
   echo "Using existing .env; no secrets were replaced."
   if [[ $RESET -eq 0 ]]; then
