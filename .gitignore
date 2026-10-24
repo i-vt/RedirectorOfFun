@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+db.sqlite3
+staticfiles/
+.env
+.coverage
+htmlcov/
+.DS_Store
+.test-runtime/
+.test-deps/
