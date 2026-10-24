@@ -1,0 +1,8 @@
+# Browser runner for the end-to-end suite. Everything (Playwright, Chromium,
+# and its system libraries) lives inside the image so the host OS stays clean.
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir "playwright>=1.50,<2" \
+    && playwright install --with-deps chromium
+
+WORKDIR /suite

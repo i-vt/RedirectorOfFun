@@ -11,7 +11,7 @@ services:
       DJANGO_SECRET_KEY: "end-to-end-test-only-secret"
       ANALYTICS_IP_HASH_SALT: "end-to-end-test-only-analytics-salt"
       ALLOWED_HOSTS: "*"
-      BOOTSTRAP_BASE_URL: "http://localhost:3100"
+      BOOTSTRAP_BASE_URL: "http://test-panel:3100"
       ANALYTICS_ALERT_THRESHOLD: "1000"
       PORT: "3000"
     ports:
@@ -24,3 +24,10 @@ services:
       timeout: 3s
       retries: 30
       start_period: 5s
+
+  test-browser:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.browser
+    image: redirector-control-plane-browser:test
+    # Nothing here runs by default; test.sh drives it with compose run.

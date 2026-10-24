@@ -3,10 +3,20 @@ set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-if [[ $# -gt 1 ]] || [[ $# -eq 1 && "${1:-}" != "--edge" ]]; then
-  echo "Usage: ./start.sh [--edge]" >&2
-  exit 2
-fi
+RESET=0
+ASSUME_YES=0
+EDGE=0
+for arg in "$@"; do
+  case "$arg" in
+    --reset) RESET=1 ;;
+    --edge) EDGE=1 ;;
+    --yes|-y) ASSUME_YES=1 ;;
+    *)
+      echo "Usage: ./start.sh [--edge] [--reset] [--yes]" >&2
+      exit 2
+      ;;
+  esac
+done
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Error: Docker is required. Install Docker with the Compose plugin." >&2
@@ -20,6 +30,20 @@ else
   echo "Error: Docker Compose is required." >&2
   exit 1
 fi
+
+if [[ $RESET -eq 1 ]]; then
+  echo "Reset removes the compose stack, its volumes (database, certificates,"
+  echo "logs), the generated .env, and local runtime directories."
+  if [[ $ASSUME_YES -eq 0 ]]; then
+    read -r -p "This destroys all control-plane data. Continue? [y/N] " answer
+    [[ "$answer" =~ ^[yY] ]] || { echo "Aborted."; exit 1; }
+  fi
+  "${COMPOSE[@]}" down -v --remove-orphans || true
+  rm -f .env
+  rm -rf var staticfiles .test-runtime
+  echo "Reset complete."
+fi
+
 if ! command -v python3 >/dev/null 2>&1; then
   echo "Error: python3 is required to generate initial secrets." >&2
   exit 1
@@ -43,10 +67,15 @@ PY
   chmod 600 .env 2>/dev/null || true
 else
   echo "Using existing .env; no secrets were replaced."
+  if [[ $RESET -eq 0 ]]; then
+    echo "Hint: if you rebuilt .env from scratch, old database volumes hold the"
+    echo "old password. Use ./start.sh --reset to wipe them, or docker compose"
+    echo "down -v before restarting."
+  fi
 fi
 
 PROFILE_ARGS=()
-if [[ "${1:-}" == "--edge" ]]; then
+if [[ $EDGE -eq 1 ]]; then
   PROFILE_ARGS=(--profile edge)
   echo "Starting the control plane and redirector edge…"
 else
@@ -75,4 +104,5 @@ printf 'Initial setup URL (printed only for an unclaimed instance):\n'
 printf '\nUseful commands:\n'
 printf '  Logs:      docker compose logs -f panel collector notification-worker\n'
 printf '  Stop:      docker compose down\n'
+printf '  Reset all: ./start.sh --reset\n'
 printf '  Full test: ./test.sh --all\n'

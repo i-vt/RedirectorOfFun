@@ -20,11 +20,6 @@ else
   echo "Error: Docker Compose is required." >&2
   exit 1
 fi
-PYTHON="${PYTHON:-python3}"
-if ! command -v "$PYTHON" >/dev/null 2>&1; then
-  echo "Error: python3 is required." >&2
-  exit 1
-fi
 if ! command -v curl >/dev/null 2>&1; then
   echo "Error: curl is required for readiness checks." >&2
   exit 1
@@ -60,37 +55,15 @@ run_backend_suite() {
     test-panel python manage.py test --tag "$tag" --verbosity 1
 }
 
-prepare_browser() {
-  if ! "$PYTHON" -c 'import playwright' >/dev/null 2>&1; then
-    echo "Installing Playwright test dependency…"
-    "$PYTHON" -m pip install --user -r requirements-test.txt
-  fi
-  if command -v chromium >/dev/null 2>&1; then
-    export CHROMIUM_BIN="${CHROMIUM_BIN:-$(command -v chromium)}"
-  elif command -v chromium-browser >/dev/null 2>&1; then
-    export CHROMIUM_BIN="${CHROMIUM_BIN:-$(command -v chromium-browser)}"
-  elif command -v google-chrome >/dev/null 2>&1; then
-    export CHROMIUM_BIN="${CHROMIUM_BIN:-$(command -v google-chrome)}"
-  elif [[ -z "${CHROMIUM_BIN:-}" ]] && ! "$PYTHON" - <<'PY' >/dev/null 2>&1
-import os
-from playwright.sync_api import sync_playwright
-with sync_playwright() as p:
-    assert os.path.exists(p.chromium.executable_path)
-PY
-  then
-    echo "Installing Chromium for end-to-end tests…"
-    "$PYTHON" -m playwright install chromium
-  fi
-}
-
 seed_nginx_log() {
   echo "Seeding dynamic nginx JSON fixture…"
-  "$PYTHON" - <<'PY'
+  "${TEST_COMPOSE[@]}" run --rm --no-deps -T \
+    test-panel python - <<'PY'
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 now = datetime.now(timezone.utc)
-path = Path(".test-runtime/nginx-access.json")
+path = Path("/test-runtime/nginx-access.json")
 with path.open("w") as handle:
     for index in range(55):
         requested_path = "/download" if index % 2 == 0 else f"/missing/{index % 5}"
@@ -112,6 +85,11 @@ with path.open("w") as handle:
 PY
 }
 
+build_browser_runner() {
+  echo "Building isolated browser runner (Playwright + Chromium inside Docker; nothing touches the host OS)…"
+  "${TEST_COMPOSE[@]}" build test-browser
+}
+
 run_e2e_suite() {
   echo "\n=== END-TO-END FULL SUITE ==="
   "${TEST_COMPOSE[@]}" up -d test-panel
@@ -130,18 +108,20 @@ run_e2e_suite() {
   seed_nginx_log
   "${TEST_COMPOSE[@]}" exec -T test-panel python manage.py ingest_404_logs --path /test-runtime/nginx-access.json --once
   "${TEST_COMPOSE[@]}" exec -T test-panel python manage.py deliver_notifications --once
-  BOOTSTRAP_URL=$("${TEST_COMPOSE[@]}" logs test-panel 2>&1 | sed -nE 's#.*(http://localhost:3100/setup/[^/[:space:]]+/).*#\1#p' | tail -1)
+  BOOTSTRAP_URL=$("${TEST_COMPOSE[@]}" logs test-panel 2>&1 | sed -nE 's#.*(http://[^/[:space:]]+/setup/[^/[:space:]]+/).*#\1#p' | tail -1)
   if [[ -z "$BOOTSTRAP_URL" ]]; then
     echo "Could not obtain the one-time setup URL from test-panel logs." >&2
     exit 1
   fi
-  prepare_browser
-  E2E_BASE_URL="http://localhost:3100" \
-  E2E_BOOTSTRAP_URL="$BOOTSTRAP_URL" \
-  E2E_EXPECTED_EVENTS=55 \
-  E2E_EXPECTED_DOWNLOADS=27 \
-  E2E_EXPECTED_DOWNLOAD_POSTS=9 \
-    "$PYTHON" tests/e2e/full_suite.py
+  build_browser_runner
+  "${TEST_COMPOSE[@]}" run --rm --no-deps \
+    -e E2E_BASE_URL="http://test-panel:3100" \
+    -e E2E_BOOTSTRAP_URL="$BOOTSTRAP_URL" \
+    -e E2E_EXPECTED_EVENTS=55 \
+    -e E2E_EXPECTED_DOWNLOADS=27 \
+    -e E2E_EXPECTED_DOWNLOAD_POSTS=9 \
+    -v "$PWD/tests:/suite/tests:ro" \
+    test-browser tests/e2e/full_suite.py
 }
 
 case "$MODE" in

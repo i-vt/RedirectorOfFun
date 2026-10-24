@@ -259,6 +259,8 @@ Event and audit list endpoints use cursor pagination. Operator administration re
 
 The script creates `.env` with unique secrets on first run, builds and starts PostgreSQL, the panel, collector, and notification worker, waits for readiness, and prints the initial setup URL. Existing `.env` values are never replaced. To include the original redirector edge service after configuring its variables, run `./start.sh --edge`. If your filesystem does not preserve executable bits, use `bash start.sh` instead.
 
+To wipe everything and start clean — containers, volumes (database, certificates, logs), the generated `.env`, and local runtime directories — run `./start.sh --reset`. It asks for confirmation first; pass `--yes` to skip the prompt. Use this instead of manual cleanup: deleting `.env` while the Postgres volume survives leaves the old database holding the old password, and the panel will fail its healthcheck with authentication errors.
+
 ### Full test suite
 
 ```bash
@@ -271,7 +273,7 @@ The complete suite runs three isolated stages:
 2. **Functional tests:** 119 tests for Django views, workflows, management commands, permissions, retention, log rotation, every API endpoint, and the full gate surface (dispatch, one-time/expiry semantics, token and TOTP gates, submission approval and denial flows, auto-rule end-to-end, Telegram text commands and inline callbacks, Web Push delivery and pruning, undo/burn semantics, watermarks, decoy canaries, JA3/JA4 gating, mobile UI, deployment templates, domain pinning, pwndrop proxying, bans, auto-ban, agent rotation, two-factor login, security enrollment, notifications).
 3. **End-to-end tests:** 9 real-browser tests covering bootstrap, login/logout, navigation, charts, filtering, pagination, XSS safety, invitations, acceptance, revocation, notifications, all API operations, health checks, custom 404s, and mobile layouts.
 
-The test script builds `docker-compose.test.yml`, starts a disposable stack on port 3100, generates time-current nginx fixtures, and destroys the test database and containers afterward. It does not use the development or production database. Playwright and Chromium are installed if neither is available. Set `KEEP_TEST_ENV=1` to retain the isolated stack for debugging.
+The test script builds `docker-compose.test.yml`, starts a disposable stack on port 3100, generates time-current nginx fixtures, and destroys the test database and containers afterward. It does not use the development or production database. The browser stage runs in its own container — Playwright, Chromium, and all of their system libraries live inside `docker/Dockerfile.browser`, so the host OS needs only Docker and curl. Nothing is pip-installed on the host. Set `KEEP_TEST_ENV=1` to retain the isolated stack for debugging.
 
 Individual stages are available as `./test.sh --unit`, `./test.sh --functional`, and `./test.sh --e2e`. If your filesystem does not preserve executable bits, use `bash test.sh --all` (or the corresponding stage flag).
 
