@@ -132,7 +132,7 @@ With `--edge`, the redirector owns 80/443 instead; reach the panel via the comme
 
 ### nginx 404 integration
 
-`default.conf` now emits only 404 responses to `/var/log/nginx/access.json` using structured JSON. The collector reads that file asynchronously and stores hashes of client addresses rather than raw IPs.
+`default.conf` and the panel web tier (`docker/panel-web.conf`) emit only 404 responses to `/var/log/nginx/access.json` using the same structured JSON; both share the `nginx-logs` volume the collector reads asynchronously (storing hashes of client addresses rather than raw IPs). In the default deployment the web tier is the nginx answering 80/443, so every unmatched URL a visitor hits lands in 404 Events.
 
 Run one ingestion pass manually with:
 

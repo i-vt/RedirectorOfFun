@@ -52,6 +52,8 @@ services:
       # mount real certificates over it (fullchain.pem + privkey.pem) for
       # a trusted https:// name.
       - ./docker/certs:/etc/nginx/certs
+      # 404 telemetry for the collector (see panel-web.conf).
+      - nginx-logs:/var/log/nginx
     depends_on:
       panel:
         condition: service_healthy
