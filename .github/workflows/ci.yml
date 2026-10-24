@@ -45,6 +45,8 @@ jobs:
       POSTGRES_PASSWORD: ci-validation-only
     steps:
       - uses: actions/checkout@v4
+      - name: Provide .env for env_file references
+        run: cp .env.example .env
       - name: Validate compose files
         run: |
           docker compose -f docker-compose.yml config -q
