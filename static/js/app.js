@@ -129,4 +129,27 @@
     pollNotifications();
     setInterval(pollNotifications, 15000);
   }
+
+  // Count-up animation for metric/stat numbers (progressive enhancement:
+  // the real value is already rendered, we just rewind and animate it).
+  const counters = document.querySelectorAll("[data-count]");
+  if (counters.length && matchMedia("(prefers-reduced-motion: no-preference)").matches) {
+    const animate = (el) => {
+      const target = parseInt(el.dataset.count, 10);
+      if (Number.isNaN(target)) return;
+      const start = performance.now(), duration = 650;
+      const step = (now) => {
+        const t = Math.min((now - start) / duration, 1);
+        el.textContent = String(Math.round(target * (1 - Math.pow(1 - t, 3))));
+        if (t < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) { animate(entry.target); observer.unobserve(entry.target); }
+      }
+    }, {threshold: .4});
+    counters.forEach(el => observer.observe(el));
+  }
 })();

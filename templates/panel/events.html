@@ -20,7 +20,16 @@ document.addEventListener("click", (event) => {
   const info = event.target.closest(".info-toggle");
   if (info) {
     const row = document.querySelector(info.dataset.target);
-    if (row) row.style.display = row.style.display === "none" ? "" : "none";
+    if (row) {
+      const showing = row.style.display === "none";
+      row.style.display = showing ? "" : "none";
+      if (showing) {
+        row.classList.remove("just-shown");
+        void row.offsetWidth;
+        row.classList.add("just-shown");
+        setTimeout(() => row.classList.remove("just-shown"), 300);
+      }
+    }
   }
 });
 (function () {

@@ -8,16 +8,16 @@
       <div class="mission-status"><span class="status-orbit"><i></i></span><strong>READY</strong><small>DATABASE CONNECTED</small></div>
     </section>
     <section class="metric-grid" aria-label="404 analytics summary">
-      <article class="metric"><span>ALL EVENTS</span><strong>{{ stats.total }}</strong><small>STORED WITHIN RETENTION</small></article>
-      <article class="metric"><span>TODAY / UTC</span><strong>{{ stats.today }}</strong><small>EVENTS TODAY / UTC</small></article>
-      <article class="metric"><span>14-DAY VOLUME</span><strong>{{ stats.period }}</strong><small>FILTERABLE EVENT STREAM</small></article>
-      <article class="metric"><span>UNIQUE PATHS</span><strong>{{ stats.unique_paths }}</strong><small>LAST 14 DAYS</small></article>
+      <article class="metric"><span>ALL EVENTS</span><strong data-count="{{ stats.total }}">{{ stats.total }}</strong><small>STORED WITHIN RETENTION</small></article>
+      <article class="metric"><span>TODAY / UTC</span><strong data-count="{{ stats.today }}">{{ stats.today }}</strong><small>EVENTS TODAY / UTC</small></article>
+      <article class="metric"><span>14-DAY VOLUME</span><strong data-count="{{ stats.period }}">{{ stats.period }}</strong><small>FILTERABLE EVENT STREAM</small></article>
+      <article class="metric"><span>UNIQUE PATHS</span><strong data-count="{{ stats.unique_paths }}">{{ stats.unique_paths }}</strong><small>LAST 14 DAYS</small></article>
     </section>
     <section class="metric-grid" aria-label="Gate summary" style="margin-top:-8px">
-      <article class="metric"><span>ACTIVE LINKS</span><strong>{{ gate_summary.active_links }}</strong><small><a href="{% url 'gate-links' %}">DELIVERY LINKS →</a></small></article>
-      <article class="metric"><span>PENDING APPROVALS</span><strong>{{ gate_summary.pending_approvals }}</strong><small><a href="{% url 'gate-submissions' %}">APPROVAL QUEUE →</a></small></article>
-      <article class="metric"><span>RELEASES / 24H</span><strong>{{ gate_summary.releases_24h }}</strong><small>KEYS + PAYLOADS</small></article>
-      <article class="metric"><span>SUSPICIOUS / 24H</span><strong class="{% if gate_summary.suspicious_24h %}warn-text{% endif %}">{{ gate_summary.suspicious_24h }}</strong><small><a href="{% url 'gate-events' %}">GATE EVENTS →</a></small></article>
+      <article class="metric"><span>ACTIVE LINKS</span><strong data-count="{{ gate_summary.active_links }}">{{ gate_summary.active_links }}</strong><small><a href="{% url 'gate-links' %}">DELIVERY LINKS →</a></small></article>
+      <article class="metric"><span>PENDING APPROVALS</span><strong data-count="{{ gate_summary.pending_approvals }}">{{ gate_summary.pending_approvals }}</strong><small><a href="{% url 'gate-submissions' %}">APPROVAL QUEUE →</a></small></article>
+      <article class="metric"><span>RELEASES / 24H</span><strong data-count="{{ gate_summary.releases_24h }}">{{ gate_summary.releases_24h }}</strong><small>KEYS + PAYLOADS</small></article>
+      <article class="metric"><span>SUSPICIOUS / 24H</span><strong data-count="{{ gate_summary.suspicious_24h }}" class="{% if gate_summary.suspicious_24h %}warn-text{% endif %}">{{ gate_summary.suspicious_24h }}</strong><small><a href="{% url 'gate-events' %}">GATE EVENTS →</a></small></article>
     </section>
     <section class="panel chart-panel">
       <div class="panel-heading"><div><span class="section-label">EVENT TELEMETRY</span><h3>404 volume / 14 days</h3></div><a class="text-link" href="{% url 'events' %}">OPEN EVENT STREAM →</a></div>
