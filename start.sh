@@ -76,6 +76,22 @@ else
   fi
 fi
 
+# Catch port conflicts with other stacks before compose reports a cryptic
+# daemon error. Compose projects are named after the directory, so a reset
+# in one checkout never sees another checkout's running containers.
+STACK_DIR_NAME=$(basename "$PWD" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_-' '_')
+if [[ $RESET -eq 0 ]]; then
+  for port in 80 443; do
+    occupants=$(docker ps --filter "publish=$port" --format '{{.Names}}' 2>/dev/null || true)
+    foreign=$(grep -v "^${STACK_DIR_NAME}-" <<<"$occupants" || true)
+    if [[ -n "$foreign" ]]; then
+      echo "Error: port $port is already published by another container: $foreign" >&2
+      echo "Stop that stack first, e.g.:  docker compose -p <its-directory> down -v" >&2
+      exit 1
+    fi
+  done
+fi
+
 # Catch the classic footgun before compose reports a cryptic "unhealthy":
 # POSTGRES_PASSWORD only applies on first init, so a regenerated .env against
 # a surviving database volume means the panel can never authenticate.
@@ -93,7 +109,6 @@ if [[ $RESET -eq 0 && -f .env ]]; then
       exit 1
     fi
   else
-    STACK_DIR_NAME=$(basename "$PWD" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_-' '_')
     if [[ $ENV_FRESH -eq 1 ]] && docker volume ls --format '{{.Name}}' 2>/dev/null \
         | grep -qi "^${STACK_DIR_NAME}_postgres-data$"; then
       echo "Error: a database volume from a previous run exists, but .env was just regenerated." >&2
