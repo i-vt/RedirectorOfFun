@@ -9,7 +9,8 @@ from notifications.models import NotificationOutbox, NotificationPreference, Pus
 class NotFoundEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = NotFoundEvent
-        fields = ["id", "request_id", "occurred_at", "method", "path", "status", "source_ip_hash", "country_code", "city"]
+        fields = ["id", "request_id", "occurred_at", "method", "path", "status",
+                  "source_ip", "source_ip_hash", "user_agent", "country_code", "city"]
 
 
 class AuditEventSerializer(serializers.ModelSerializer):

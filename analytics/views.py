@@ -35,14 +35,24 @@ def overview(request):
 
 
 def filtered_events(request):
+    from django.db.models import Q
     events = NotFoundEvent.objects.all()
     path = request.GET.get("path", "").strip()
     method = request.GET.get("method", "").strip().upper()
     days = request.GET.get("days", "30")
+    ua = request.GET.get("ua", "").strip()
+    ip = request.GET.get("ip", "").strip()
+    client = request.GET.get("client", "").strip()
     if path:
         events = events.filter(path__icontains=path[:200])
     if method in {"GET", "POST", "HEAD", "PUT", "DELETE", "OPTIONS", "PATCH"}:
         events = events.filter(method=method)
+    if ua:
+        events = events.filter(user_agent__icontains=ua[:200])
+    if ip:
+        events = events.filter(Q(source_ip=ip) | Q(source_ip_hash=ip))
+    if client:
+        events = events.filter(Q(source_ip=client) | Q(source_ip_hash=client))
     if days.isdigit() and 1 <= int(days) <= 365:
         events = events.filter(occurred_at__gte=timezone.now() - timezone.timedelta(days=int(days)))
     return events
@@ -53,7 +63,10 @@ def events_view(request):
     paginator = Paginator(filtered_events(request), 40)
     page = paginator.get_page(request.GET.get("page"))
     template = "panel/_events_table.html" if request.headers.get("HX-Request") else "panel/events.html"
-    return render(request, template, {"title": "404 Events", "page": page, "events": page.object_list})
+    return render(request, template, {
+        "title": "404 Events", "page": page, "events": page.object_list,
+        "show_identifiers": request.GET.get("identifiers") == "1",
+    })
 
 
 @login_required

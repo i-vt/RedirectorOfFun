@@ -1,13 +1,45 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="panel page-panel">
-  <div class="panel-heading"><div><span class="section-label">NGINX LOG INTELLIGENCE</span><h2>404 event stream</h2><p>Search stored events without exposing raw client addresses.</p></div><span class="status-badge good">ASYNC INGESTION</span></div>
-  <form id="event-filters" class="filter-bar" method="get" action="{% url 'events' %}" hx-get="{% url 'events' %}" hx-target="#events-table" hx-push-url="true" hx-trigger="submit, keyup changed delay:450ms from:#filter-path, change from:#filter-method, change from:#filter-days">
+  <div class="panel-heading"><div><span class="section-label">NGINX LOG INTELLIGENCE</span><h2>404 event stream</h2><p>Search stored events by path, method, or any client identifier. Raw IPs and user agents are stored; the client column shows the hash unless you reveal identifiers.</p></div><span class="status-badge good">ASYNC INGESTION</span></div>
+  <form id="event-filters" class="filter-bar" method="get" action="{% url 'events' %}" hx-get="{% url 'events' %}" hx-target="#events-table" hx-push-url="true" hx-trigger="submit, keyup changed delay:450ms from:#filter-path, keyup changed delay:450ms from:#filter-ua, keyup changed delay:450ms from:#filter-ip, keyup changed delay:450ms from:#filter-client, change from:#filter-method, change from:#filter-days">
     <label><span>PATH CONTAINS</span><input id="filter-path" class="field-input" type="search" name="path" value="{{ request.GET.path }}" placeholder="/example" maxlength="200"></label>
+    <label><span>USER AGENT CONTAINS</span><input id="filter-ua" class="field-input" type="search" name="ua" value="{{ request.GET.ua }}" placeholder="curl, python-requests, Mozilla" maxlength="200"></label>
+    <label><span>IP OR HASH</span><input id="filter-ip" class="field-input mono" type="search" name="ip" value="{{ request.GET.ip }}" placeholder="203.0.113.7" maxlength="64"></label>
+    <label><span>CLIENT HASH</span><input id="filter-client" class="field-input mono" type="search" name="client" value="{{ request.GET.client }}" maxlength="64"></label>
     <label><span>METHOD</span><select id="filter-method" class="field-input" name="method"><option value="">All methods</option><option {% if request.GET.method == 'GET' %}selected{% endif %}>GET</option><option {% if request.GET.method == 'POST' %}selected{% endif %}>POST</option><option {% if request.GET.method == 'HEAD' %}selected{% endif %}>HEAD</option><option {% if request.GET.method == 'PUT' %}selected{% endif %}>PUT</option><option {% if request.GET.method == 'DELETE' %}selected{% endif %}>DELETE</option></select></label>
     <label><span>TIME WINDOW</span><select id="filter-days" class="field-input" name="days"><option value="1" {% if request.GET.days == '1' %}selected{% endif %}>Last 24 hours</option><option value="7" {% if request.GET.days == '7' %}selected{% endif %}>Last 7 days</option><option value="30" {% if not request.GET.days or request.GET.days == '30' %}selected{% endif %}>Last 30 days</option><option value="90" {% if request.GET.days == '90' %}selected{% endif %}>Last 90 days</option></select></label>
+    <label class="check"><input id="identifiers-toggle" type="checkbox" {% if show_identifiers %}checked{% endif %}> <span>REVEAL IDENTIFIERS (raw IPs)</span></label>
+    <input type="hidden" name="identifiers" id="identifiers-field" value="{{ request.GET.identifiers }}">
     <button class="button secondary" type="submit">Apply filters</button>
   </form>
   <div id="events-table">{% include "panel/_events_table.html" %}</div>
 </section>
+<script>
+document.addEventListener("click", (event) => {
+  const info = event.target.closest(".info-toggle");
+  if (info) {
+    const row = document.querySelector(info.dataset.target);
+    if (row) row.style.display = row.style.display === "none" ? "" : "none";
+  }
+});
+(function () {
+  const toggle = document.getElementById("identifiers-toggle");
+  const field = document.getElementById("identifiers-field");
+  const form = document.getElementById("event-filters");
+  const sync = () => {
+    document.querySelectorAll(".client-cell .client-hash").forEach(el => el.style.display = toggle.checked ? "none" : "");
+    document.querySelectorAll(".client-cell .client-raw").forEach(el => el.style.display = toggle.checked ? "" : "none");
+  };
+  if (toggle) {
+    sync();
+    toggle.addEventListener("change", () => {
+      field.value = toggle.checked ? "1" : "";
+      sync();
+      if (window.htmx) htmx.trigger(form, "submit");
+    });
+  }
+  document.body.addEventListener("htmx:afterSwap", sync);
+})();
+</script>
 {% endblock %}

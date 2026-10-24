@@ -15,12 +15,14 @@ class SerializerAndPaginationUnitTests(TestCase):
         self.assertNotIn("session_version", data)
         self.assertIn("roles", data)
 
-    def test_event_serializer_contains_hash_not_raw_ip_field(self):
-        event = NotFoundEvent.objects.create(request_id="serialize", occurred_at=timezone.now(), method="GET", path="/", source_ip_hash="a" * 64)
+    def test_event_serializer_exposes_identifiers(self):
+        event = NotFoundEvent.objects.create(
+            request_id="serialize", occurred_at=timezone.now(), method="GET", path="/",
+            source_ip="203.0.113.7", source_ip_hash="a" * 64, user_agent="curl/8.0")
         data = NotFoundEventSerializer(event).data
         self.assertEqual(data["source_ip_hash"], "a" * 64)
-        self.assertNotIn("remote_addr", data)
-        self.assertNotIn("source_ip", data)
+        self.assertEqual(data["source_ip"], "203.0.113.7")
+        self.assertEqual(data["user_agent"], "curl/8.0")
 
     def test_notification_preference_identity_fields_are_read_only(self):
         serializer = NotificationPreferenceSerializer()

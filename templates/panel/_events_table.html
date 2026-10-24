@@ -1,2 +1,25 @@
-{% if events %}<div class="table-wrap"><table><thead><tr><th>OCCURRED / UTC</th><th>METHOD</th><th>REQUESTED PATH</th><th>CLIENT HASH</th><th>STATUS</th></tr></thead><tbody>{% for event in events %}<tr><td class="mono muted nowrap">{{ event.occurred_at|date:"Y-m-d H:i:s" }}</td><td><span class="method">{{ event.method }}</span></td><td class="path-cell" title="{{ event.path }}">{{ event.path }}</td><td class="mono muted">{{ event.source_ip_hash|slice:":12"|default:"-" }}</td><td><span class="status-code">{{ event.status }}</span></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state"><strong>No matching events</strong><p>Change the filters or wait for the collector to ingest new nginx 404 records.</p></div>{% endif %}
-{% if page.paginator.num_pages > 1 %}<nav class="pagination" aria-label="Event pages"><span>PAGE {{ page.number }} / {{ page.paginator.num_pages }}</span><div>{% if page.has_previous %}<a hx-get="?page={{ page.previous_page_number }}&path={{ request.GET.path|urlencode }}&method={{ request.GET.method|urlencode }}&days={{ request.GET.days|urlencode }}" hx-target="#events-table" href="?page={{ page.previous_page_number }}&path={{ request.GET.path|urlencode }}&method={{ request.GET.method|urlencode }}&days={{ request.GET.days|urlencode }}">← Previous</a>{% endif %}{% if page.has_next %}<a hx-get="?page={{ page.next_page_number }}&path={{ request.GET.path|urlencode }}&method={{ request.GET.method|urlencode }}&days={{ request.GET.days|urlencode }}" hx-target="#events-table" href="?page={{ page.next_page_number }}&path={{ request.GET.path|urlencode }}&method={{ request.GET.method|urlencode }}&days={{ request.GET.days|urlencode }}">Next →</a>{% endif %}</div></nav>{% endif %}
+{% if events %}<div class="table-wrap"><table><thead><tr><th>OCCURRED / UTC</th><th>METHOD</th><th>REQUESTED PATH</th><th>CLIENT</th><th>STATUS</th><th></th></tr></thead><tbody>{% for event in events %}
+<tr>
+  <td class="mono muted nowrap">{{ event.occurred_at|date:"Y-m-d H:i:s" }}</td>
+  <td><span class="method">{{ event.method }}</span></td>
+  <td class="path-cell" title="{{ event.path }}">{{ event.path }}</td>
+  <td class="mono muted client-cell">
+    <span class="client-hash">{{ event.source_ip_hash|slice:":12"|default:"—" }}</span>
+    <span class="client-raw" style="display:none">{{ event.source_ip|default:"—" }}</span>
+  </td>
+  <td><span class="status-code">{{ event.status }}</span></td>
+  <td><button class="text-button info-toggle" type="button" data-target="#event-detail-{{ event.pk }}">INFO</button></td>
+</tr>
+<tr class="event-detail" id="event-detail-{{ event.pk }}" style="display:none"><td colspan="6">
+  <dl class="system-list" style="margin:0">
+    <div><dt>RAW IP</dt><dd class="mono">{{ event.source_ip|default:"—" }}</dd></div>
+    <div><dt>IP HASH</dt><dd class="mono">{{ event.source_ip_hash|default:"—" }}</dd></div>
+    <div><dt>USER AGENT</dt><dd class="mono" style="max-width:520px;overflow-wrap:anywhere">{{ event.user_agent|default:"—" }}</dd></div>
+    <div><dt>GEO</dt><dd>{{ event.city }}{% if event.city and event.country_code %}, {% endif %}{{ event.country_code|default:"—" }}</dd></div>
+    <div><dt>REQUEST ID</dt><dd class="mono">{{ event.request_id }}</dd></div>
+    <div><dt>INGESTED / UTC</dt><dd class="mono">{{ event.created_at|date:"Y-m-d H:i:s" }}</dd></div>
+  </dl>
+</td></tr>
+{% endfor %}</tbody></table></div>
+{% if page.paginator.num_pages > 1 %}<nav class="pagination" aria-label="Event pages"><span>PAGE {{ page.number }} / {{ page.paginator.num_pages }}</span><div>{% if page.has_previous %}<a hx-get="?page={{ page.previous_page_number }}&path={{ request.GET.path|urlencode }}&method={{ request.GET.method|urlencode }}&days={{ request.GET.days|urlencode }}&ua={{ request.GET.ua|urlencode }}&ip={{ request.GET.ip|urlencode }}&client={{ request.GET.client|urlencode }}&identifiers={{ request.GET.identifiers|urlencode }}" hx-target="#events-table" href="?page={{ page.previous_page_number }}">← Previous</a>{% endif %}{% if page.has_next %}<a hx-get="?page={{ page.next_page_number }}&path={{ request.GET.path|urlencode }}&method={{ request.GET.method|urlencode }}&days={{ request.GET.days|urlencode }}&ua={{ request.GET.ua|urlencode }}&ip={{ request.GET.ip|urlencode }}&client={{ request.GET.client|urlencode }}&identifiers={{ request.GET.identifiers|urlencode }}" hx-target="#events-table" href="?page={{ page.next_page_number }}">Next →</a>{% endif %}</div></nav>{% endif %}
+{% else %}<div class="empty-state"><strong>No matching events</strong><p>Change the filters or wait for the collector to ingest new nginx 404 records.</p></div>{% endif %}

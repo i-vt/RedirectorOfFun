@@ -22,13 +22,16 @@ def event_from_record(record, raw_line=""):
     occurred_at = parse_datetime(str(record.get("time", ""))) or timezone.now()
     if timezone.is_naive(occurred_at):
         occurred_at = timezone.make_aware(occurred_at, timezone.utc)
+    remote_addr = str(record.get("remote_addr", ""))[:64]
     return NotFoundEvent(
         request_id=request_id,
         occurred_at=occurred_at,
         method=str(record.get("method", "GET"))[:10].upper(),
         path=str(record.get("path", record.get("uri", "/")))[:8192],
         status=404,
-        source_ip_hash=hash_address(str(record.get("remote_addr", ""))),
+        source_ip=remote_addr or None,
+        source_ip_hash=hash_address(remote_addr),
+        user_agent=str(record.get("user_agent", ""))[:1000],
         country_code=str(record.get("country_code", ""))[:2].upper(),
         city=str(record.get("city", ""))[:100],
     )

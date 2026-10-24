@@ -1172,6 +1172,57 @@ class DecoyPageTests(TestCase):
 
 
 @tag("functional")
+class EventIdentifierTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="eidop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+
+    def _make_event(self, **kwargs):
+        from analytics.models import NotFoundEvent
+        defaults = {"request_id": "eid-1", "occurred_at": timezone.now(), "method": "GET",
+                    "path": "/missing", "source_ip": "203.0.113.7",
+                    "source_ip_hash": "ab" * 32, "user_agent": "curl/8.5.0"}
+        defaults.update(kwargs)
+        return NotFoundEvent.objects.create(**defaults)
+
+    def test_filters_by_user_agent_ip_and_client(self):
+        self._make_event()
+        self._make_event(request_id="eid-2", source_ip="198.51.100.9",
+                         source_ip_hash="cd" * 32, user_agent="python-requests/2.31")
+        response = self.client.get("/panel/events/", {"ua": "curl"})
+        self.assertEqual(len(response.context["events"]), 1)
+        response = self.client.get("/panel/events/", {"ip": "198.51.100.9"})
+        self.assertEqual(len(response.context["events"]), 1)
+        response = self.client.get("/panel/events/", {"client": "ab" * 32})
+        self.assertEqual(len(response.context["events"]), 1)
+        response = self.client.get("/panel/events/", {"client": "203.0.113.7"})
+        self.assertEqual(len(response.context["events"]), 1)
+
+    def test_table_contains_detail_rows_and_toggle_markup(self):
+        self._make_event()
+        response = self.client.get("/panel/events/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "info-toggle")
+        self.assertContains(response, "RAW IP")
+        self.assertContains(response, "USER AGENT")
+        self.assertContains(response, "client-raw")
+        self.assertContains(response, "client-hash")
+        self.assertContains(response, "identifiers-toggle")
+
+    def test_collector_maps_new_fields(self):
+        from analytics.services import event_from_record
+        from django.utils import timezone as tz
+        record = {"request_id": "eid-9", "time": tz.now().isoformat(), "method": "get",
+                  "path": "/x", "status": 404, "remote_addr": "203.0.113.55",
+                  "user_agent": "Mozilla/5.0"}
+        event = event_from_record(record)
+        self.assertEqual(event.source_ip, "203.0.113.55")
+        self.assertEqual(event.user_agent, "Mozilla/5.0")
+        self.assertEqual(event.method, "GET")
+
+
+@tag("functional")
 @override_settings(ROOT_URLCONF="config.test_urls")
 class OperatorPrefixTests(TestCase):
     def test_operator_paths_live_under_the_prefix(self):
