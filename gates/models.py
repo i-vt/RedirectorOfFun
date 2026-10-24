@@ -376,12 +376,13 @@ class DecoyPage(models.Model):
 
 def validate_blocking_conditions(value):
     """Validate the rule conditions DSL: a list of {type, pattern, negate?}."""
+    import ipaddress
     import re
     if value in (None, ""):
         return
     if not isinstance(value, list):
         raise ValidationError("Conditions must be a list.")
-    allowed = {"ip", "ua", "asn", "isp", "country", "city"}
+    allowed = {"ip", "cidr", "ua", "asn", "isp", "country", "city"}
     for index, condition in enumerate(value):
         if not isinstance(condition, dict):
             raise ValidationError(f"Condition {index} must be an object.")
@@ -390,10 +391,16 @@ def validate_blocking_conditions(value):
         pattern = condition.get("pattern", "")
         if not isinstance(pattern, str) or not pattern:
             raise ValidationError(f"Condition {index}: pattern must be a non-empty string.")
-        try:
-            re.compile(pattern)
-        except re.error as exc:
-            raise ValidationError(f"Condition {index}: invalid regex: {exc}")
+        if condition.get("type") == "cidr":
+            try:
+                ipaddress.ip_network(pattern, strict=False)
+            except ValueError as exc:
+                raise ValidationError(f"Condition {index}: invalid CIDR: {exc}")
+        else:
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValidationError(f"Condition {index}: invalid regex: {exc}")
         if "negate" in condition and not isinstance(condition["negate"], bool):
             raise ValidationError(f"Condition {index}: negate must be a boolean.")
 
@@ -417,6 +424,12 @@ BLOCK_RULE_PRESETS = [
         {"type": "isp", "pattern": r"(?i)(hosting|hostroyale|egihosting|datacamp|m247|digitalocean|ovh|hetzner|leaseweb)"}]},
     {"name": "preset: everything outside the US", "logic": "not", "conditions": [
         {"type": "country", "pattern": r"^US$"}]},
+    {"name": "preset: block an IP or CIDR (template)", "logic": "any", "conditions": [
+        {"type": "cidr", "pattern": "203.0.113.0/24"}]},
+    {"name": "preset: block a region (template)", "logic": "any", "conditions": [
+        {"type": "country", "pattern": r"^NZ$"}]},
+    {"name": "preset: allow trusted operator (template)", "logic": "any", "action": "allow",
+     "conditions": [{"type": "ip", "pattern": r"^203\.0\.113\.10$"}]},
 ]
 
 
@@ -427,25 +440,70 @@ def seed_blocking_rule_presets():
         BlockingRule.objects.get_or_create(name=preset["name"], defaults={
             "logic": preset["logic"], "conditions": preset["conditions"],
             "enabled": False, "preset": True,
+            "action": preset.get("action", "block"),
         })
 
 
+class RuleSet(models.Model):
+    """An ordered group of rules with a scope. The chain is evaluated top to
+    bottom, first match wins; an ALLOW rule stops the chain, so earlier rules
+    can override later ones."""
+
+    SCOPE_CHOICES = [
+        ("all", "Everything"),
+        ("not_found", "404s only"),
+        ("link", "Specific link"),
+    ]
+
+    name = models.CharField(max_length=120, unique=True)
+    scope = models.CharField(max_length=10, choices=SCOPE_CHOICES, default="all")
+    link = models.ForeignKey("DeliveryLink", null=True, blank=True,
+                             on_delete=models.CASCADE, related_name="rule_sets")
+    enabled = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return self.name
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.scope == "link" and self.link is None:
+            raise ValidationError({"link": "Choose the link this ruleset applies to."})
+        if self.scope != "link" and self.link is not None:
+            raise ValidationError({"link": "A link only applies to link-scoped rulesets."})
+
+
+def default_rule_set():
+    ruleset, _ = RuleSet.objects.get_or_create(
+        name="default (everything)", defaults={"scope": "all", "order": 0})
+    return ruleset
+
+
 class BlockingRule(models.Model):
-    """Block visitors by combining regex conditions over IP, user agent, and
-    enriched network identity (ASN / ISP / country / city) with AND/OR/NONE
-    logic and per-condition negation."""
+    """One rule in an ordered chain. First matching rule wins; action allow
+    lets the request through and stops the chain, action block serves the
+    decoy (and optionally bans)."""
 
     LOGIC_CHOICES = [
         ("all", "ALL conditions match (AND)"),
         ("any", "ANY condition matches (OR)"),
         ("not", "NONE of the conditions match (NOT)"),
     ]
+    ACTION_CHOICES = [("block", "Block"), ("allow", "Allow")]
 
     name = models.CharField(max_length=120)
+    ruleset = models.ForeignKey(RuleSet, null=True, blank=True, on_delete=models.CASCADE,
+                                related_name="rules")
+    order = models.PositiveIntegerField(default=0)
+    action = models.CharField(max_length=6, choices=ACTION_CHOICES, default="block")
     logic = models.CharField(max_length=6, choices=LOGIC_CHOICES, default="all")
     conditions = models.JSONField(default=list, validators=[validate_blocking_conditions])
     enabled = models.BooleanField(default=True)
-    auto_ban = models.BooleanField(default=False, help_text="Also ban the matched IP address.")
+    auto_ban = models.BooleanField(default=False, help_text="Also ban the matched IP address (block action only).")
     preset = models.BooleanField(default=False)
     match_count = models.PositiveIntegerField(default=0)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
@@ -453,7 +511,7 @@ class BlockingRule(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-enabled", "-created_at"]
+        ordering = ["ruleset__order", "order", "id"]
 
     def __str__(self):
         return self.name

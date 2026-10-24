@@ -22,8 +22,8 @@ from .crypto_utils import (
 )
 from .models import (
     AgentChannel, BannedIP, BlockingRule, BotState, DecoyPage, DeliveryLink, HitEvent,
-    IPIntel, Submission, SubmissionImage, seed_blocking_rule_presets, seed_builtin_decoys,
-    validate_auto_rules,
+    IPIntel, RuleSet, Submission, SubmissionImage, seed_blocking_rule_presets,
+    seed_builtin_decoys, validate_auto_rules,
 )
 from .selftest import is_healthy, run_selftest
 from . import services, telegram
@@ -1301,7 +1301,7 @@ class BlockingRuleFlowTests(TestCase):
         self.public = Client()
 
     def test_presets_seeded_disabled(self):
-        self.assertEqual(BlockingRule.objects.filter(preset=True).count(), 8)
+        self.assertEqual(BlockingRule.objects.filter(preset=True).count(), 11)
         self.assertFalse(BlockingRule.objects.filter(enabled=True).exists())
 
     def test_enabled_rule_blocks_and_records(self):
@@ -1376,6 +1376,98 @@ class BlockingRuleFlowTests(TestCase):
         response = self.client.get("/panel/events/")
         self.assertContains(response, "expand-all")
         self.assertContains(response, "condense-all")
+
+
+@tag("unit")
+class RuleChainSemanticsTests(TestCase):
+    def setUp(self):
+        self.ruleset = RuleSet.objects.create(name="test set", scope="all")
+        self.intel = IPIntel(ip="34.30.115.30", asn="396982", org="Google LLC",
+                             country_code="US", city="Council Bluffs")
+
+    def test_cidr_condition(self):
+        rule = BlockingRule(name="cidr", logic="any", ruleset=self.ruleset, conditions=[
+            {"type": "cidr", "pattern": "34.30.115.0/24"}])
+        matched, _ = services.rule_matches(rule, ip="34.30.115.30", user_agent="", intel=None)
+        self.assertTrue(matched)
+        matched, _ = services.rule_matches(rule, ip="34.30.116.1", user_agent="", intel=None)
+        self.assertFalse(matched)
+        with self.assertRaises(ValidationError):
+            services.validate = None
+            from gates.models import validate_blocking_conditions
+            validate_blocking_conditions([{"type": "cidr", "pattern": "999.0.0.0/8"}])
+
+    def test_allow_overrides_later_block(self):
+        BlockingRule.objects.create(
+            name="allow operator", ruleset=self.ruleset, order=0, action="allow",
+            conditions=[{"type": "ip", "pattern": r"^203\.0\.113\.10$"}])
+        BlockingRule.objects.create(
+            name="block all", ruleset=self.ruleset, order=1,
+            conditions=[{"type": "ua", "pattern": r"(?i)^curl"}])
+        class FakeRequest: META = {"HTTP_USER_AGENT": "curl/8.0"}
+        decision = services.evaluate_blocking_rules(
+            FakeRequest(), "203.0.113.10", is_404=True)
+        self.assertIsNotNone(decision)
+        rule, _ = decision
+        self.assertEqual(rule.action, "allow")
+        self.assertIsNone(services.apply_blocking_rule(FakeRequest(), "203.0.113.10", rule, ["ip"]))
+
+    def test_block_decision_when_no_allow_matches(self):
+        BlockingRule.objects.create(
+            name="allow other", ruleset=self.ruleset, order=0, action="allow",
+            conditions=[{"type": "ip", "pattern": r"^198\.51\.100\.1$"}])
+        BlockingRule.objects.create(
+            name="block curl", ruleset=self.ruleset, order=1,
+            conditions=[{"type": "ua", "pattern": r"(?i)^curl"}])
+        class FakeRequest: META = {"HTTP_USER_AGENT": "curl/8.0"}
+        rule, _ = services.evaluate_blocking_rules(FakeRequest(), "203.0.113.10", is_404=True)
+        self.assertEqual(rule.action, "block")
+
+    def test_ruleset_scope_filters(self):
+        link = DeliveryLink.objects.create(path="/g/scope/1", kind="key", key_text="K")
+        s404 = RuleSet.objects.create(name="404s", scope="not_found")
+        slink = RuleSet.objects.create(name="link", scope="link", link=link)
+        BlockingRule.objects.create(name="r404", ruleset=s404,
+                                    conditions=[{"type": "ua", "pattern": r"(?i)^curl"}])
+        BlockingRule.objects.create(name="rlink", ruleset=slink,
+                                    conditions=[{"type": "ua", "pattern": r"(?i)^curl"}])
+        class FakeRequest: META = {"HTTP_USER_AGENT": "curl/8.0"}
+        rule, _ = services.evaluate_blocking_rules(FakeRequest(), "1.1.1.1", is_404=True)
+        self.assertEqual(rule.name, "r404")
+        rule, _ = services.evaluate_blocking_rules(FakeRequest(), "1.1.1.1", is_404=False, link=link)
+        self.assertEqual(rule.name, "rlink")
+        self.assertIsNone(services.evaluate_blocking_rules(FakeRequest(), "1.1.1.1", is_404=False))
+
+    def test_export_import_roundtrip(self):
+        BlockingRule.objects.create(name="keep me", ruleset=self.ruleset, order=3,
+                                    conditions=[{"type": "ua", "pattern": "(?i)curl"}])
+        payload = services.export_blocking_rules()
+        self.assertEqual(payload["format"], "rof-blocking-rules")
+        BlockingRule.objects.all().delete()
+        RuleSet.objects.all().delete()
+        sets_created, rules_created, errors = services.import_blocking_rules(payload)
+        self.assertEqual(errors, [])
+        self.assertEqual(sets_created, 1)
+        self.assertEqual(rules_created, 1)
+        imported = BlockingRule.objects.get()
+        self.assertFalse(imported.enabled)
+        # importing again renames the colliding set
+        sets_created, _, errors = services.import_blocking_rules(payload)
+        self.assertTrue(RuleSet.objects.filter(name__contains="(imported)").exists())
+
+    def test_reorder_endpoint(self):
+        r1 = BlockingRule.objects.create(name="a", ruleset=self.ruleset, order=0,
+                                         conditions=[{"type": "ua", "pattern": "x"}])
+        r2 = BlockingRule.objects.create(name="b", ruleset=self.ruleset, order=1,
+                                         conditions=[{"type": "ua", "pattern": "y"}])
+        operator = Operator.objects.create_user(username="reorder", password="long-enough-password-123")
+        client = Client()
+        client.force_login(operator)
+        response = client.post("/api/v1/block-rules/reorder/", data={
+            "kind": "rule", "ids": [r2.pk, r1.pk]}, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(BlockingRule.objects.get(pk=r1.pk).order, 1)
+        self.assertEqual(BlockingRule.objects.get(pk=r2.pk).order, 0)
 
 
 @tag("functional")

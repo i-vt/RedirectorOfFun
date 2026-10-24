@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.http import FileResponse, HttpResponseForbidden
+from django.http import FileResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -15,7 +15,7 @@ from notifications.services import notify
 
 from .models import (
     AgentChannel, BannedIP, BlockingRule, BUILTIN_DECOYS, DecoyPage, DeliveryLink,
-    HitEvent, seed_blocking_rule_presets, Submission, SubmissionImage,
+    HitEvent, RuleSet, seed_blocking_rule_presets, Submission, SubmissionImage,
     validate_auto_rules,
 )
 from .link_templates import LINK_TEMPLATES
@@ -470,9 +470,48 @@ def block_rules_view(request):
             seed_blocking_rule_presets()
             messages.info(request, "Preset rules ensured (new ones are created disabled).")
             return redirect("gate-block-rules")
+        if action == "create_set":
+            ruleset = RuleSet(
+                name=request.POST.get("set_name", "").strip()[:120] or "unnamed set",
+                scope=request.POST.get("set_scope", "all"),
+            )
+            link_id = request.POST.get("set_link", "").strip()
+            if ruleset.scope == "link" and link_id:
+                ruleset.link = get_object_or_404(DeliveryLink, pk=link_id)
+            try:
+                ruleset.full_clean()
+                ruleset.save()
+            except ValidationError as exc:
+                messages.error(request, "; ".join(
+                    f"{field}: {', '.join(errors)}" for field, errors in exc.message_dict.items()))
+                return redirect("gate-block-rules")
+            record_event(action="gate.rule_set_created", actor=request.user, target=ruleset, request=request)
+            messages.success(request, f"Ruleset '{ruleset.name}' created.")
+            return redirect("gate-block-rules")
+        if action == "import":
+            raw = request.POST.get("import_payload", "")
+            if request.FILES.get("import_file"):
+                raw = request.FILES["import_file"].read().decode("utf-8", errors="replace")
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                messages.error(request, f"Invalid JSON: {exc}")
+                return redirect("gate-block-rules")
+            sets_created, rules_created, errors = services.import_blocking_rules(payload, actor=request.user)
+            for error in errors[:5]:
+                messages.warning(request, error)
+            messages.success(request, f"Imported {sets_created} ruleset(s), {rules_created} rule(s) (disabled on import).")
+            return redirect("gate-block-rules")
+        # create rule
+        ruleset = None
+        ruleset_id = request.POST.get("ruleset", "").strip()
+        if ruleset_id:
+            ruleset = get_object_or_404(RuleSet, pk=ruleset_id)
         rule = BlockingRule(
+            ruleset=ruleset,
             name=request.POST.get("name", "").strip()[:120] or "unnamed rule",
             logic=request.POST.get("logic", "all"),
+            action=request.POST.get("action", "block"),
             auto_ban=request.POST.get("auto_ban") == "on",
             created_by=request.user,
         )
@@ -487,19 +526,87 @@ def block_rules_view(request):
             messages.error(request, "; ".join(
                 f"{field}: {', '.join(errors)}" for field, errors in exc.message_dict.items()))
             return redirect("gate-block-rules")
+        if rule.ruleset is not None:
+            last = rule.ruleset.rules.order_by("-order").first()
+            rule.order = (last.order + 1) if last else 0
         rule.save()
         record_event(action="gate.block_rule_created", actor=request.user, target=rule, request=request)
         messages.success(request, f"Rule '{rule.name}' created.")
         return redirect("gate-block-rules")
-    rules = BlockingRule.objects.all()
+    sets = list(RuleSet.objects.prefetch_related("rules"))
+    loose_rules = list(BlockingRule.objects.filter(ruleset__isnull=True))
     return render(request, "panel/block_rules.html", {
-        "title": "Blocking Rules", "rules": rules,
+        "title": "Blocking Rules",
+        "rule_sets": sets, "loose_rules": loose_rules,
+        "links": DeliveryLink.objects.filter(active=True)[:50],
         "logics": BlockingRule.LOGIC_CHOICES,
-        "condition_types": ["ip", "ua", "asn", "isp", "country", "city"],
-        "presets_json": json.dumps([
-            {"name": r.name, "logic": r.logic, "conditions": r.conditions}
-            for r in rules.filter(preset=True)]),
+        "actions": BlockingRule.ACTION_CHOICES,
+        "condition_types": ["ip", "cidr", "ua", "asn", "isp", "country", "city"],
     })
+
+
+@login_required
+@transaction.atomic
+def rule_set_toggle(request, pk):
+    ruleset = get_object_or_404(RuleSet, pk=pk)
+    if request.method == "POST":
+        ruleset.enabled = not ruleset.enabled
+        ruleset.save(update_fields=["enabled"])
+        record_event(action="gate.rule_set_toggled", actor=request.user, target=ruleset,
+                     metadata={"enabled": ruleset.enabled}, request=request)
+    return redirect("gate-block-rules")
+
+
+@login_required
+@transaction.atomic
+def rule_set_delete(request, pk):
+    ruleset = get_object_or_404(RuleSet, pk=pk)
+    if request.method == "POST":
+        name = ruleset.name
+        rules = list(ruleset.rules.all())
+        ruleset.delete()  # cascades rules
+        for rule in rules:
+            rule.ruleset = None
+            rule.save(update_fields=["ruleset"])  # orphan back into the loose chain
+        record_event(action="gate.rule_set_deleted", actor=request.user,
+                     metadata={"name": name}, request=request)
+        messages.success(request, f"Ruleset '{name}' deleted; its rules moved to the ungrouped chain.")
+    return redirect("gate-block-rules")
+
+
+@login_required
+@transaction.atomic
+def block_rules_reorder(request):
+    if request.method != "POST":
+        return redirect("gate-block-rules")
+    try:
+        payload = json.loads(request.body)
+    except json.JSONDecodeError:
+        payload = request.POST
+    kind = payload.get("kind")
+    ids = payload.get("ids", [])
+    if kind == "rule":
+        for index, rule_id in enumerate(ids):
+            BlockingRule.objects.filter(pk=rule_id).update(order=index)
+        record_event(action="gate.block_rules_reordered", actor=request.user,
+                     metadata={"rules": len(ids)}, request=request)
+    elif kind == "set":
+        for index, set_id in enumerate(ids):
+            RuleSet.objects.filter(pk=set_id).update(order=index)
+        record_event(action="gate.rule_sets_reordered", actor=request.user,
+                     metadata={"sets": len(ids)}, request=request)
+    if request.headers.get("HX-Request") or request.content_type == "application/json":
+        return JsonResponse({"ok": True})
+    return redirect("gate-block-rules")
+
+
+@login_required
+def block_rules_export(request):
+    payload = services.export_blocking_rules()
+    record_event(action="gate.block_rules_exported", actor=request.user, request=request)
+    response = JsonResponse(payload)
+    response["Content-Disposition"] = 'attachment; filename="rof-blocking-rules.json"'
+    return response
 
 
 @login_required

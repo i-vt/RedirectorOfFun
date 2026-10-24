@@ -3,7 +3,7 @@ from accounts.models import Operator
 from analytics.models import NotFoundEvent
 from audit.models import AuditEvent
 from gates.models import (
-    AgentChannel, BannedIP, BlockingRule, DecoyPage, DeliveryLink, HitEvent, Submission,
+    AgentChannel, BannedIP, BlockingRule, DecoyPage, DeliveryLink, HitEvent, RuleSet, Submission,
 )
 from notifications.models import NotificationOutbox, NotificationPreference, PushSubscription
 
@@ -126,9 +126,20 @@ class DecoyPageSerializer(serializers.ModelSerializer):
         read_only_fields = ["is_default", "created_at"]
 
 
+class RuleSetSerializer(serializers.ModelSerializer):
+    link_path = serializers.SlugRelatedField(source="link", slug_field="path",
+                                             queryset=DeliveryLink.objects.all(),
+                                             required=False, allow_null=True)
+
+    class Meta:
+        model = RuleSet
+        fields = ["id", "name", "scope", "link", "link_path", "enabled", "order", "created_at"]
+        read_only_fields = ["created_at"]
+
+
 class BlockingRuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = BlockingRule
-        fields = ["id", "name", "logic", "conditions", "enabled", "auto_ban",
-                  "preset", "match_count", "created_at"]
+        fields = ["id", "name", "ruleset", "order", "action", "logic", "conditions",
+                  "enabled", "auto_ban", "preset", "match_count", "created_at"]
         read_only_fields = ["preset", "match_count", "created_at"]

@@ -527,8 +527,21 @@ def dispatch(request, path):
             agent.save(update_fields=["hits", "last_seen_at"])
             record_hit("hit", request=request, path=normalized, agent_channel=agent,
                        detail={"label": agent.label})
+        decision = evaluate_blocking_rules(request, ip, is_404=True)
+        if decision is not None:
+            rule, fired = decision
+            response = apply_blocking_rule(request, ip, rule, fired)
+            if response is not None:
+                return response
         record_hit("not_found", request=request, path=path, status_code=404)
         return None
+
+    decision = evaluate_blocking_rules(request, ip, is_404=False, link=link)
+    if decision is not None:
+        rule, fired = decision
+        response = apply_blocking_rule(request, ip, rule, fired)
+        if response is not None:
+            return response
 
     if not link.available:
         record_hit("expired", request=request, path=normalized, link=link, status_code=410)
@@ -713,6 +726,15 @@ def _condition_value(condition_type, ip, user_agent, intel):
     }.get(condition_type)
 
 
+def _cidr_matches(pattern, ip):
+    if not ip:
+        return False
+    try:
+        return ipaddress.ip_address(ip) in ipaddress.ip_network(pattern, strict=False)
+    except ValueError:
+        return False
+
+
 def rule_matches(rule, *, ip, user_agent, intel):
     """Evaluate one rule. Returns (matched, fired_conditions).
 
@@ -722,14 +744,17 @@ def rule_matches(rule, *, ip, user_agent, intel):
     """
     results, fired, undetermined = [], [], False
     for condition in rule.conditions or []:
-        value = _condition_value(condition.get("type"), ip, user_agent, intel)
-        if value is None or value == "":
-            undetermined = True
-            continue
-        try:
-            matched = _compiled_pattern(condition["pattern"]).search(str(value)[:1000]) is not None
-        except re.error:
-            matched = False
+        if condition.get("type") == "cidr":
+            matched = _cidr_matches(condition.get("pattern", ""), ip)
+        else:
+            value = _condition_value(condition.get("type"), ip, user_agent, intel)
+            if value is None or value == "":
+                undetermined = True
+                continue
+            try:
+                matched = _compiled_pattern(condition["pattern"]).search(str(value)[:1000]) is not None
+            except re.error:
+                matched = False
         if condition.get("negate"):
             matched = not matched
         results.append(matched)
@@ -750,20 +775,33 @@ def rule_matches(rule, *, ip, user_agent, intel):
     return not any(results), fired
 
 
-def evaluate_blocking_rules(request, ip):
-    """First enabled rule matching this request, or None.
+def evaluate_blocking_rules(request, ip, *, is_404=False, link=None):
+    """Walk the ruleset chain for this request context; first match wins.
 
-    Intel enrichment only runs when at least one enabled rule needs it and
-    the address is not cached.
+    Returns (rule, fired) or None. Sets are ordered; within a set rules are
+    ordered. Set scopes: everything / 404s only / a specific delivery link.
+    An ALLOW match stops the chain and lets the request through.
     """
-    rules = list(BlockingRule.objects.filter(enabled=True))
-    if not rules:
+    from .models import RuleSet
+    sets = list(RuleSet.objects.filter(enabled=True).prefetch_related("rules"))
+    loose_rules = list(BlockingRule.objects.filter(enabled=True, ruleset__isnull=True))
+    if not sets and not loose_rules:
         return None
     user_agent = request.META.get("HTTP_USER_AGENT", "")[:1000]
+    candidate_rules = [r for s in sets for r in s.rules.all() if r.enabled] + loose_rules
     needs_intel = any({c.get("type") for c in r.conditions} & {"asn", "isp", "country", "city"}
-                      for r in rules)
+                      for r in candidate_rules)
     intel = get_ip_intel(ip) if (needs_intel and ip) else _intel_cache.get(ip)
-    for rule in rules:
+    for ruleset in sets:
+        if ruleset.scope == "not_found" and not is_404:
+            continue
+        if ruleset.scope == "link" and (link is None or ruleset.link_id != link.pk):
+            continue
+        for rule in [r for r in ruleset.rules.all() if r.enabled]:
+            matched, fired = rule_matches(rule, ip=ip, user_agent=user_agent, intel=intel)
+            if matched:
+                return rule, fired
+    for rule in loose_rules:
         matched, fired = rule_matches(rule, ip=ip, user_agent=user_agent, intel=intel)
         if matched:
             return rule, fired
@@ -772,7 +810,10 @@ def evaluate_blocking_rules(request, ip):
 
 def apply_blocking_rule(request, ip, rule, fired):
     BlockingRule.objects.filter(pk=rule.pk).update(match_count=F("match_count") + 1)
-    detail = {"rule": rule.name, "fired": fired, "auto_ban": rule.auto_ban}
+    detail = {"rule": rule.name, "action": rule.action, "fired": fired, "auto_ban": rule.auto_ban}
+    if rule.action == "allow":
+        logger.info("rule '%s' allowed %s (%s)", rule.name, ip, ", ".join(fired))
+        return None
     if rule.auto_ban and ip and not _is_loopback(ip):
         ban, created = BannedIP.objects.get_or_create(
             ip=ip, defaults={"note": f"auto-ban by rule '{rule.name}'", "auto_created": True})
@@ -784,6 +825,96 @@ def apply_blocking_rule(request, ip, rule, fired):
     record_hit("blocked", request=request, path=request.path, status_code=200, detail=detail)
     logger.info("blocked %s by rule '%s' (%s)", ip, rule.name, ", ".join(fired))
     return _decoy(request)
+
+
+# ─── Rule export / import ──────────────────────────────────────────────────
+
+def export_blocking_rules():
+    from .models import RuleSet
+    sets = []
+    for ruleset in RuleSet.objects.prefetch_related("rules"):
+        sets.append({
+            "name": ruleset.name, "scope": ruleset.scope,
+            "link_path": ruleset.link.path if ruleset.link else None,
+            "enabled": ruleset.enabled, "order": ruleset.order,
+            "rules": [{
+                "name": r.name, "action": r.action, "logic": r.logic,
+                "conditions": r.conditions, "enabled": r.enabled,
+                "auto_ban": r.auto_ban, "order": r.order, "preset": r.preset,
+            } for r in ruleset.rules.all()],
+        })
+    loose = BlockingRule.objects.filter(ruleset__isnull=True)
+    return {
+        "format": "rof-blocking-rules", "version": 1,
+        "sets": sets,
+        "loose_rules": [{
+            "name": r.name, "action": r.action, "logic": r.logic,
+            "conditions": r.conditions, "enabled": r.enabled,
+            "auto_ban": r.auto_ban, "order": r.order, "preset": r.preset,
+        } for r in loose],
+    }
+
+
+def import_blocking_rules(payload, *, actor=None):
+    """Import an export payload. Returns (sets_created, rules_created, errors).
+
+    Name collisions get an "(imported)" suffix; link-scoped sets match links
+    by path. Imported rules are created DISABLED unless the payload says
+    otherwise; presets are skipped (already present).
+    """
+    from .models import RuleSet
+    errors, sets_created, rules_created = [], 0, 0
+    if not isinstance(payload, dict) or payload.get("format") != "rof-blocking-rules":
+        return 0, 0, ["not a rof-blocking-rules export"]
+    for entry in payload.get("sets", []):
+        name = str(entry.get("name", "imported set"))[:120]
+        if RuleSet.objects.filter(name=name).exists():
+            name = f"{name} (imported)"
+        link = None
+        if entry.get("scope") == "link" and entry.get("link_path"):
+            link = DeliveryLink.objects.filter(path=entry["link_path"]).first()
+            if link is None:
+                errors.append(f"set '{name}': link {entry['link_path']} not found; set skipped")
+                continue
+        try:
+            ruleset = RuleSet.objects.create(
+                name=name, scope=entry.get("scope", "all"), link=link,
+                enabled=bool(entry.get("enabled", True)), order=int(entry.get("order", 0)))
+        except Exception as exc:
+            errors.append(f"set '{name}': {exc}")
+            continue
+        sets_created += 1
+        for rule_entry in entry.get("rules", []):
+            if rule_entry.get("preset"):
+                continue
+            try:
+                BlockingRule.objects.create(
+                    ruleset=ruleset, name=str(rule_entry.get("name", "imported rule"))[:120],
+                    action=rule_entry.get("action", "block"), logic=rule_entry.get("logic", "all"),
+                    conditions=rule_entry.get("conditions", []),
+                    enabled=False,  # imports always land disabled; review before enabling
+                    auto_ban=bool(rule_entry.get("auto_ban", False)),
+                    order=int(rule_entry.get("order", 0)), created_by=actor)
+                rules_created += 1
+            except Exception as exc:
+                errors.append(f"rule '{rule_entry.get('name')}': {exc}")
+    for rule_entry in payload.get("loose_rules", []):
+        if rule_entry.get("preset"):
+            continue
+        name = str(rule_entry.get("name", "imported rule"))[:120]
+        if BlockingRule.objects.filter(name=name, ruleset__isnull=True).exists():
+            name = f"{name} (imported)"
+        try:
+            BlockingRule.objects.create(
+                ruleset=None, name=name, action=rule_entry.get("action", "block"),
+                logic=rule_entry.get("logic", "all"), conditions=rule_entry.get("conditions", []),
+                enabled=False,  # imports always land disabled; review before enabling
+                auto_ban=bool(rule_entry.get("auto_ban", False)),
+                order=int(rule_entry.get("order", 0)), created_by=actor)
+            rules_created += 1
+        except Exception as exc:
+            errors.append(f"rule '{rule_entry.get('name')}': {exc}")
+    return sets_created, rules_created, errors
 
 
 # Decoy canaries.

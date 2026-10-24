@@ -17,8 +17,12 @@ class BlockingRuleMiddleware:
         if request.path.startswith("/health/"):
             return self.get_response(request)
         ip = services.client_ip(request)
-        blocked = services.evaluate_blocking_rules(request, ip)
-        if blocked is not None:
-            rule, fired = blocked
-            return services.apply_blocking_rule(request, ip, rule, fired)
+        # Context is unknown here (view has not run); 404- and link-scoped
+        # sets are evaluated again in the gate dispatcher with full context.
+        decision = services.evaluate_blocking_rules(request, ip)
+        if decision is not None:
+            rule, fired = decision
+            response = services.apply_blocking_rule(request, ip, rule, fired)
+            if response is not None:
+                return response
         return self.get_response(request)

@@ -13,7 +13,7 @@ from audit.models import AuditEvent
 from audit.services import record_event
 from gates import services as gate_services
 from gates.models import (
-    AgentChannel, BannedIP, BlockingRule, DecoyPage, DeliveryLink, HitEvent, Submission,
+    AgentChannel, BannedIP, BlockingRule, DecoyPage, DeliveryLink, HitEvent, RuleSet, Submission,
 )
 from notifications.models import NotificationOutbox, NotificationPreference, PushSubscription
 from .pagination import AuditCursorPagination, EventCursorPagination, HitCursorPagination, OperatorPagination
@@ -21,7 +21,7 @@ from .serializers import (
     AgentChannelSerializer, AuditEventSerializer, BannedIPSerializer, BlockingRuleSerializer,
     DecoyPageSerializer, DeliveryLinkSerializer, HitEventSerializer, NotFoundEventSerializer,
     NotificationPreferenceSerializer, NotificationSerializer, OperatorSerializer,
-    PushSubscriptionSerializer, SubmissionSerializer,
+    PushSubscriptionSerializer, RuleSetSerializer, SubmissionSerializer,
 )
 
 
@@ -337,6 +337,61 @@ class BlockingRuleDetail(generics.RetrieveUpdateDestroyAPIView):
         instance.delete()
         record_event(action="gate.block_rule_deleted", actor=self.request.user,
                      metadata={"name": name, "via": "api"}, request=self.request)
+
+
+class RuleSetList(generics.ListCreateAPIView):
+    serializer_class = RuleSetSerializer
+    queryset = RuleSet.objects.all()
+
+    def perform_create(self, serializer):
+        ruleset = serializer.save()
+        record_event(action="gate.rule_set_created", actor=self.request.user, target=ruleset,
+                     metadata={"via": "api"}, request=self.request)
+
+
+class RuleSetDetail(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = RuleSetSerializer
+    queryset = RuleSet.objects.all()
+
+    def perform_destroy(self, instance):
+        name = instance.name
+        rules = list(instance.rules.all())
+        instance.delete()
+        for rule in rules:
+            rule.ruleset = None
+            rule.save(update_fields=["ruleset"])
+
+
+class BlockingRuleReorder(APIView):
+    def post(self, request):
+        kind = request.data.get("kind")
+        ids = request.data.get("ids", [])
+        if kind == "rule":
+            for index, rule_id in enumerate(ids):
+                BlockingRule.objects.filter(pk=rule_id).update(order=index)
+        elif kind == "set":
+            for index, set_id in enumerate(ids):
+                RuleSet.objects.filter(pk=set_id).update(order=index)
+        else:
+            return Response({"detail": "kind must be 'rule' or 'set'."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"ok": True})
+
+
+class BlockingRuleExport(APIView):
+    def get(self, request):
+        payload = gate_services.export_blocking_rules()
+        response = Response(payload)
+        response["Content-Disposition"] = 'attachment; filename="rof-blocking-rules.json"'
+        return response
+
+
+class BlockingRuleImport(APIView):
+    def post(self, request):
+        sets_created, rules_created, errors = gate_services.import_blocking_rules(
+            request.data, actor=request.user)
+        status_code = status.HTTP_201_CREATED if (sets_created or rules_created) else status.HTTP_200_OK
+        return Response({"sets": sets_created, "rules": rules_created, "errors": errors},
+                        status=status_code)
 
 
 class BlockingRuleTest(APIView):

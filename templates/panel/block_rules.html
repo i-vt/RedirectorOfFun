@@ -3,40 +3,180 @@
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">
-    <div><span class="section-label">EDGE DEFENSE</span><h2>Blocking rules</h2><p>Combine regex conditions over the visitor's IP, user agent, and enriched identity (ASN / ISP / country / city) with AND / OR / NONE logic. Matching visitors get the decoy; optional auto-ban adds them to the IP bans.</p></div>
+    <div><span class="section-label">EDGE DEFENSE</span><h2>Blocking rules</h2><p>Rulesets are evaluated top to bottom; the first matching rule wins. An ALLOW rule stops the chain, so place allow rules (trusted operators) before block rules to override them. Drag rows to reorder; drag set headers to reorder sets.</p></div>
     <div>
       <a class="button secondary" href="{% url 'gate-block-rule-test' %}">Test rules</a>
+      <a class="button secondary" href="{% url 'gate-block-rules-export' %}">Export JSON</a>
       <form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="seed_presets"><button class="button secondary" type="submit">Ensure presets</button></form>
     </div>
   </div>
+
   <form method="post" class="stacked-form">
     {% csrf_token %}
     <fieldset>
       <legend>ADD A RULE</legend>
       <div class="grid-3">
-        <label><span>NAME</span><input class="field-input" name="name" maxlength="120" placeholder="Block VT + AWS scanners"></label>
+        <label><span>NAME</span><input class="field-input" name="name" maxlength="120" placeholder="Allow SOC, block the rest"></label>
+        <label><span>RULESET</span><select class="field-input" name="ruleset"><option value="">Ungrouped (after all sets)</option>{% for s in rule_sets %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select></label>
+        <label><span>ACTION</span><select class="field-input" name="action">{% for value, label in actions %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+      </div>
+      <div class="grid-2">
         <label><span>LOGIC</span><select class="field-input" name="logic">{% for value, label in logics %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
-        <label class="check"><input type="checkbox" name="auto_ban"> <span>AUTO-BAN MATCHED IPs</span></label>
+        <label class="check"><input type="checkbox" name="auto_ban"> <span>AUTO-BAN MATCHED IPs (block only)</span></label>
       </div>
       <label><span>CONDITIONS (JSON list of {"type", "pattern", "negate"?}; types: {% for t in condition_types %}{{ t }}{% if not forloop.last %}, {% endif %}{% endfor %})</span>
-        <textarea class="field-input mono" name="conditions" rows="4" placeholder='[{"type": "ua", "pattern": "(?i)virustotal"}, {"type": "asn", "pattern": "^(16509)$"}]'>[]</textarea></label>
+        <textarea class="field-input mono" name="conditions" rows="3" placeholder='[{"type": "cidr", "pattern": "203.0.113.0/24"}]'>[]</textarea></label>
       <button class="button" type="submit">Create rule</button>
     </fieldset>
   </form>
-  <div class="table-wrap" style="margin-top:18px"><table><thead><tr><th>NAME</th><th>LOGIC</th><th>CONDITIONS</th><th>MATCHES</th><th>STATUS</th><th></th></tr></thead><tbody>
-    {% for rule in rules %}
-    <tr>
-      <td><strong>{{ rule.name }}</strong>{% if rule.preset %}<br><span class="status-badge">PRESET</span>{% endif %}{% if rule.auto_ban %}<br><span class="status-badge warn">AUTO-BAN</span>{% endif %}</td>
-      <td class="mono">{{ rule.get_logic_display|upper }}</td>
-      <td class="mono muted" style="max-width:380px;overflow-wrap:anywhere">{{ rule.conditions|json_compact }}</td>
-      <td class="mono">{{ rule.match_count }}</td>
-      <td>{% if rule.enabled %}<span class="status-badge good">ENABLED</span>{% else %}<span class="status-badge">DISABLED</span>{% endif %}</td>
-      <td>
-        <form method="post" action="{% url 'gate-block-rule-toggle' rule.pk %}" style="display:inline">{% csrf_token %}<button class="text-button" type="submit">{{ rule.enabled|yesno:"DISABLE,ENABLE" }}</button></form>
-        {% if not rule.preset %}<form method="post" action="{% url 'gate-block-rule-delete' rule.pk %}" style="display:inline" data-confirm="Delete rule '{{ rule.name }}'?">{% csrf_token %}<button class="text-button" type="submit">DELETE</button></form>{% endif %}
-      </td>
-    </tr>
+
+  <form method="post" class="stacked-form" style="margin-top:14px">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create_set">
+    <fieldset>
+      <legend>ADD A RULESET</legend>
+      <div class="grid-3">
+        <label><span>NAME</span><input class="field-input" name="set_name" maxlength="120" placeholder="404 probes only"></label>
+        <label><span>SCOPE</span><select class="field-input" name="set_scope"><option value="all">Everything</option><option value="not_found">404s only</option><option value="link">Specific link</option></select></label>
+        <label><span>LINK (scope = link)</span><select class="field-input" name="set_link"><option value="">—</option>{% for link in links %}<option value="{{ link.pk }}">{{ link.path }}</option>{% endfor %}</select></label>
+      </div>
+      <button class="button" type="submit">Create ruleset</button>
+    </fieldset>
+  </form>
+
+  <form method="post" enctype="multipart/form-data" class="stacked-form" style="margin-top:14px">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="import">
+    <fieldset>
+      <legend>IMPORT RULES</legend>
+      <label><span>PASTE EXPORT JSON (OR UPLOAD)</span><textarea class="field-input mono" name="import_payload" rows="3"></textarea></label>
+      <label><span>FILE</span><input class="field-input" type="file" name="import_file" accept=".json"></label>
+      <button class="button secondary" type="submit">Import (created disabled)</button>
+    </fieldset>
+  </form>
+
+  <div id="sets-container" style="margin-top:20px;display:flex;flex-direction:column;gap:16px">
+    {% for ruleset in rule_sets %}
+    <div class="panel ruleset-card" draggable="true" data-set-id="{{ ruleset.pk }}">
+      <div class="panel-heading" style="cursor:grab">
+        <div><span class="section-label">RULESET · {{ ruleset.get_scope_display|upper }}{% if ruleset.link %} · {{ ruleset.link.path }}{% endif %}</span><h3>{{ ruleset.name }}</h3></div>
+        <div>
+          {% if ruleset.enabled %}<span class="status-badge good">ENABLED</span>{% else %}<span class="status-badge">DISABLED</span>{% endif %}
+          <form method="post" action="{% url 'gate-rule-set-toggle' ruleset.pk %}" style="display:inline">{% csrf_token %}<button class="text-button" type="submit">{{ ruleset.enabled|yesno:"DISABLE,ENABLE" }}</button></form>
+          <form method="post" action="{% url 'gate-rule-set-delete' ruleset.pk %}" style="display:inline" data-confirm="Delete ruleset '{{ ruleset.name }}'? Its rules move to the ungrouped chain.">{% csrf_token %}<button class="text-button" type="submit">DELETE</button></form>
+        </div>
+      </div>
+      <div class="table-wrap"><table class="rules-table" data-set="{{ ruleset.pk }}"><thead><tr><th></th><th>NAME</th><th>ACTION</th><th>LOGIC</th><th>CONDITIONS</th><th>MATCHES</th><th>STATUS</th><th></th></tr></thead><tbody>
+        {% for rule in ruleset.rules.all %}
+        <tr draggable="true" data-rule-id="{{ rule.pk }}">
+          <td class="mono muted" style="cursor:grab">⠿</td>
+          <td><strong>{{ rule.name }}</strong>{% if rule.preset %}<br><span class="status-badge">PRESET</span>{% endif %}{% if rule.auto_ban %}<br><span class="status-badge warn">AUTO-BAN</span>{% endif %}</td>
+          <td>{% if rule.action == 'allow' %}<span class="status-badge good">ALLOW</span>{% else %}<span class="status-badge warn">BLOCK</span>{% endif %}</td>
+          <td class="mono">{{ rule.get_logic_display|upper }}</td>
+          <td class="mono muted" style="max-width:340px;overflow-wrap:anywhere">{{ rule.conditions|json_compact }}</td>
+          <td class="mono">{{ rule.match_count }}</td>
+          <td>{% if rule.enabled %}<span class="status-badge good">ON</span>{% else %}<span class="status-badge">OFF</span>{% endif %}</td>
+          <td>
+            <form method="post" action="{% url 'gate-block-rule-toggle' rule.pk %}" style="display:inline">{% csrf_token %}<button class="text-button" type="submit">{{ rule.enabled|yesno:"DISABLE,ENABLE" }}</button></form>
+            {% if not rule.preset %}<form method="post" action="{% url 'gate-block-rule-delete' rule.pk %}" style="display:inline" data-confirm="Delete rule '{{ rule.name }}'?">{% csrf_token %}<button class="text-button" type="submit">DELETE</button></form>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody></table></div>
+    </div>
     {% endfor %}
-  </tbody></table></div>
+
+    <div class="panel ruleset-card" data-set-id="">
+      <div class="panel-heading"><div><span class="section-label">CHAIN TAIL</span><h3>Ungrouped rules</h3><p>Evaluated after every ruleset, in the order below.</p></div></div>
+      <div class="table-wrap"><table class="rules-table" data-set=""><thead><tr><th></th><th>NAME</th><th>ACTION</th><th>LOGIC</th><th>CONDITIONS</th><th>MATCHES</th><th>STATUS</th><th></th></tr></thead><tbody>
+        {% for rule in loose_rules %}
+        <tr draggable="true" data-rule-id="{{ rule.pk }}">
+          <td class="mono muted" style="cursor:grab">⠿</td>
+          <td><strong>{{ rule.name }}</strong>{% if rule.preset %}<br><span class="status-badge">PRESET</span>{% endif %}{% if rule.auto_ban %}<br><span class="status-badge warn">AUTO-BAN</span>{% endif %}</td>
+          <td>{% if rule.action == 'allow' %}<span class="status-badge good">ALLOW</span>{% else %}<span class="status-badge warn">BLOCK</span>{% endif %}</td>
+          <td class="mono">{{ rule.get_logic_display|upper }}</td>
+          <td class="mono muted" style="max-width:340px;overflow-wrap:anywhere">{{ rule.conditions|json_compact }}</td>
+          <td class="mono">{{ rule.match_count }}</td>
+          <td>{% if rule.enabled %}<span class="status-badge good">ON</span>{% else %}<span class="status-badge">OFF</span>{% endif %}</td>
+          <td>
+            <form method="post" action="{% url 'gate-block-rule-toggle' rule.pk %}" style="display:inline">{% csrf_token %}<button class="text-button" type="submit">{{ rule.enabled|yesno:"DISABLE,ENABLE" }}</button></form>
+            {% if not rule.preset %}<form method="post" action="{% url 'gate-block-rule-delete' rule.pk %}" style="display:inline" data-confirm="Delete rule '{{ rule.name }}'?">{% csrf_token %}<button class="text-button" type="submit">DELETE</button></form>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody></table></div>
+    </div>
+  </div>
 </section>
+<style>
+  .dragging { opacity: .4; }
+  .drag-over { outline: 2px dashed var(--s-accent); outline-offset: -2px; }
+  tr.drag-over td { border-top: 2px solid var(--s-accent); }
+</style>
+<script>
+(() => {
+  const csrf = document.querySelector('meta[name="csrf-token"]').content;
+  const postOrder = (kind, ids) => fetch("{% url 'gate-block-rules-reorder' %}", {
+    method: "POST",
+    headers: { "X-CSRFToken": csrf, "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, ids }),
+  });
+
+  // Rules within one table
+  document.querySelectorAll("table.rules-table").forEach(table => {
+    const tbody = table.querySelector("tbody");
+    let dragged = null;
+    tbody.addEventListener("dragstart", (e) => {
+      dragged = e.target.closest("tr");
+      dragged.classList.add("dragging");
+    });
+    tbody.addEventListener("dragend", () => {
+      if (dragged) dragged.classList.remove("dragging");
+      tbody.querySelectorAll("tr").forEach(r => r.classList.remove("drag-over"));
+      const ids = [...tbody.querySelectorAll("tr[data-rule-id]")].map(r => r.dataset.ruleId);
+      postOrder("rule", ids);
+    });
+    tbody.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      const row = e.target.closest("tr");
+      if (!row || row === dragged) return;
+      tbody.querySelectorAll("tr").forEach(r => r.classList.remove("drag-over"));
+      row.classList.add("drag-over");
+      const rect = row.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height / 2;
+      tbody.insertBefore(dragged, before ? row : row.nextSibling);
+    });
+  });
+
+  // Rulesets
+  const container = document.getElementById("sets-container");
+  let draggedSet = null;
+  container.addEventListener("dragstart", (e) => {
+    const card = e.target.closest(".ruleset-card");
+    if (card && !e.target.closest("tr")) {
+      draggedSet = card;
+      card.classList.add("dragging");
+    }
+  });
+  container.addEventListener("dragend", () => {
+    if (!draggedSet) return;
+    draggedSet.classList.remove("dragging");
+    container.querySelectorAll(".ruleset-card").forEach(c => c.classList.remove("drag-over"));
+    const ids = [...container.querySelectorAll(".ruleset-card[data-set-id]")].map(c => c.dataset.setId).filter(Boolean);
+    postOrder("set", ids);
+    draggedSet = null;
+  });
+  container.addEventListener("dragover", (e) => {
+    if (!draggedSet) return;
+    const card = e.target.closest(".ruleset-card");
+    if (!card || card === draggedSet || card.contains(e.target.closest("tr"))) return;
+    e.preventDefault();
+    container.querySelectorAll(".ruleset-card").forEach(c => c.classList.remove("drag-over"));
+    card.classList.add("drag-over");
+    const rect = card.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    container.insertBefore(draggedSet, before ? card : card.nextSibling);
+  });
+})();
+</script>
 {% endblock %}

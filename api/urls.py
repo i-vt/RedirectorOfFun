@@ -31,6 +31,11 @@ urlpatterns = [
     path("decoys/<int:pk>/", views.DecoyPageDetail.as_view(), name="api-decoy-detail"),
     path("decoys/<int:pk>/default/", views.DecoyPageSetDefault.as_view(), name="api-decoy-default"),
     path("block-rules/", views.BlockingRuleList.as_view(), name="api-block-rules"),
+    path("block-rules/export/", views.BlockingRuleExport.as_view(), name="api-block-rules-export"),
+    path("block-rules/import/", views.BlockingRuleImport.as_view(), name="api-block-rules-import"),
+    path("block-rules/reorder/", views.BlockingRuleReorder.as_view(), name="api-block-rules-reorder"),
+    path("block-rules/sets/", views.RuleSetList.as_view(), name="api-rule-sets"),
+    path("block-rules/sets/<int:pk>/", views.RuleSetDetail.as_view(), name="api-rule-set-detail"),
     path("block-rules/<int:pk>/", views.BlockingRuleDetail.as_view(), name="api-block-rule-detail"),
     path("block-rules/test/", views.BlockingRuleTest.as_view(), name="api-block-rule-test"),
 ]
