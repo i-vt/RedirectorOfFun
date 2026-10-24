@@ -202,7 +202,7 @@ fi
 
 printf '\nControl plane (http on 80, https on 443 self-signed):\n'
 print_access_urls "/${OP_SEGMENT}panel/"
-SETUP_TOKEN=$("${COMPOSE[@]}" logs panel 2>&1 | grep -oE '/setup/[A-Za-z0-9_-]+/' | head -1 | cut -d/ -f2)
+SETUP_TOKEN=$("${COMPOSE[@]}" logs panel 2>&1 | grep -oE '/setup/[A-Za-z0-9_-]+/' | head -1 | cut -d/ -f3)
 if [[ -n "$SETUP_TOKEN" ]]; then
   printf 'Initial administrator setup (anyone with this URL can claim it):\n'
   print_access_urls "/${OP_SEGMENT}setup/${SETUP_TOKEN}/"
