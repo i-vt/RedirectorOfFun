@@ -151,9 +151,34 @@ for attempt in $(seq 1 60); do
 done
 
 "${COMPOSE[@]}" ps
-printf '\nControl plane: http://localhost (https://localhost works too, self-signed)\n'
-printf 'Initial setup URL (printed only for an unclaimed instance):\n'
-"${COMPOSE[@]}" logs panel 2>&1 | grep -E 'Initial administrator setup|/setup/' || true
+
+# Every address the box answers on, not just localhost, so the operator can
+# grab the setup URL from wherever they are standing.
+host_addresses() {
+  hostname -I 2>/dev/null | tr ' ' '\n' \
+    | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$|^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$' \
+    | grep -v '^127\.' | grep -v '^::1$' | grep -v '^fe80' | sort -u
+}
+
+print_access_urls() {
+  local path="$1" ip
+  printf '  http://localhost%s\n' "$path"
+  while read -r ip; do
+    [[ -z "$ip" ]] && continue
+    case "$ip" in
+      *:*) printf '  http://[%s]%s\n' "$ip" "$path" ;;
+      *)   printf '  http://%s%s\n' "$ip" "$path" ;;
+    esac
+  done <<<"$(host_addresses)"
+}
+
+printf '\nControl plane (http on 80, https on 443 self-signed):\n'
+print_access_urls ""
+SETUP_TOKEN=$("${COMPOSE[@]}" logs panel 2>&1 | grep -oE '/setup/[A-Za-z0-9_-]+/' | head -1 | cut -d/ -f2)
+if [[ -n "$SETUP_TOKEN" ]]; then
+  printf 'Initial administrator setup (anyone with this URL can claim it):\n'
+  print_access_urls "/setup/${SETUP_TOKEN}/"
+fi
 printf '\nUseful commands:\n'
 printf '  Logs:      docker compose logs -f panel collector notification-worker\n'
 printf '  Stop:      docker compose down\n'
