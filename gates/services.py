@@ -9,6 +9,7 @@ import urllib.request
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.http import FileResponse, HttpResponse
+from django.shortcuts import redirect
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -19,7 +20,10 @@ from .crypto_utils import (
     GateCryptoError, client_presented_token, decrypt_blob, extract_images,
     parse_submission_json, validate_expected_fields, verify_totp,
 )
-from .models import AgentChannel, BannedIP, DeliveryLink, HitEvent, Submission, SubmissionImage
+from .models import (
+    AgentChannel, BannedIP, BUILTIN_DECOYS, DecoyPage, DeliveryLink, HitEvent,
+    Submission, SubmissionImage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -124,11 +128,76 @@ def _placeholder(link=None):
     return HttpResponse(render_to_string("gates/placeholder.html", {"link": link}), status=200)
 
 
-def _decoy(request=None, status=200):
-    context = {}
+def _canary_url(request):
     if request is not None and getattr(settings, "DECOY_CANARIES", True):
-        context["canary"] = f"{getattr(settings, 'GATE_BASE_PATH', '/g/')}canary/{canary_token(client_ip(request))}.gif"
-    return HttpResponse(render_to_string("gates/decoy.html", context), status=status)
+        return f"{getattr(settings, 'GATE_BASE_PATH', '/g/')}canary/{canary_token(client_ip(request))}.gif"
+    return ""
+
+
+def _inject_canary(html, request):
+    url = _canary_url(request)
+    if not url:
+        return html
+    tag = f'<img src="{url}" width="1" height="1" alt="" aria-hidden="true" style="position:absolute;left:-9999px">'
+    index = html.lower().rfind("</body>")
+    if index != -1:
+        return html[:index] + tag + html[index:]
+    return html + tag
+
+
+def get_default_decoy():
+    """The operator-selected decoy page, falling back to the historical default."""
+    page = DecoyPage.objects.filter(active=True, is_default=True).first()
+    if page is None:
+        page = DecoyPage.objects.filter(
+            active=True, kind="template", template_key="update-service").first()
+    return page
+
+
+def render_decoy(page, request):
+    """HTML for the decoy page, or None when the page is an external redirect."""
+    if page is None or page.kind == "redirect":
+        return None
+    if page.kind == "upload":
+        if not page.html_file:
+            return None
+        return _inject_canary(page.html_file.read().decode("utf-8", errors="replace"), request)
+    meta = BUILTIN_DECOYS.get(page.template_key)
+    if meta is None:
+        return None
+    if meta.get("django_template"):
+        context = {}
+        url = _canary_url(request)
+        if url:
+            context["canary"] = url
+        return render_to_string(meta["template_name"], context)
+    path = settings.BASE_DIR / meta["path"]
+    try:
+        html = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    return _inject_canary(html, request)
+
+
+def decoy_response(request=None, status=200):
+    """Serve (or redirect to) the operator-selected default decoy page."""
+    page = get_default_decoy()
+    if page is not None and page.kind == "redirect" and page.redirect_url:
+        return redirect(page.redirect_url)
+    html = render_decoy(page, request)
+    if html is None:
+        # Fallback keeps the public surface alive even if the default row
+        # was deleted or its template file went missing.
+        context = {}
+        url = _canary_url(request)
+        if url:
+            context["canary"] = url
+        html = render_to_string("gates/decoy.html", context)
+    return HttpResponse(html, status=status)
+
+
+def _decoy(request=None, status=200):
+    return decoy_response(request, status=status)
 
 
 def gate_denied_response(link, request=None):
@@ -142,11 +211,6 @@ def gate_denied_response(link, request=None):
             return FileResponse(link.benevolent_file.open("rb"), as_attachment=False)
         return HttpResponse(link.benevolent_text or "", content_type="text/plain", status=200)
     return HttpResponse(status=404)
-
-
-def decoy_response(request=None, status=200):
-    """The public decoy page, as served by the edge for non-gate traffic."""
-    return _decoy(request, status=status)
 
 
 def hold_response(link, request=None):

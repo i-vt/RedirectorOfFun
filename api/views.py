@@ -12,13 +12,14 @@ from analytics.views import filtered_events
 from audit.models import AuditEvent
 from audit.services import record_event
 from gates import services as gate_services
-from gates.models import AgentChannel, BannedIP, DeliveryLink, HitEvent, Submission
+from gates.models import AgentChannel, BannedIP, DecoyPage, DeliveryLink, HitEvent, Submission
 from notifications.models import NotificationOutbox, NotificationPreference, PushSubscription
 from .pagination import AuditCursorPagination, EventCursorPagination, HitCursorPagination, OperatorPagination
 from .serializers import (
-    AgentChannelSerializer, AuditEventSerializer, BannedIPSerializer, DeliveryLinkSerializer,
-    HitEventSerializer, NotFoundEventSerializer, NotificationPreferenceSerializer,
-    NotificationSerializer, OperatorSerializer, PushSubscriptionSerializer, SubmissionSerializer,
+    AgentChannelSerializer, AuditEventSerializer, BannedIPSerializer, DecoyPageSerializer,
+    DeliveryLinkSerializer, HitEventSerializer, NotFoundEventSerializer,
+    NotificationPreferenceSerializer, NotificationSerializer, OperatorSerializer,
+    PushSubscriptionSerializer, SubmissionSerializer,
 )
 
 
@@ -267,6 +268,56 @@ class PushKey(APIView):
         from django.conf import settings as dj_settings
         return Response({"public_key": dj_settings.VAPID_PUBLIC_KEY,
                          "configured": bool(dj_settings.VAPID_PRIVATE_KEY)})
+
+
+class DecoyPageList(generics.ListCreateAPIView):
+    serializer_class = DecoyPageSerializer
+
+    def get_queryset(self):
+        return DecoyPage.objects.all()
+
+    def perform_create(self, serializer):
+        page = serializer.save(created_by=self.request.user)
+        record_event(action="gate.decoy_created", actor=self.request.user, target=page,
+                     metadata={"via": "api"}, request=self.request)
+
+
+class DecoyPageDetail(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = DecoyPageSerializer
+    queryset = DecoyPage.objects.all()
+
+    def perform_update(self, serializer):
+        page = serializer.save()
+        if not page.active and page.is_default:
+            DecoyPage.objects.filter(pk=page.pk).update(is_default=False)
+        record_event(action="gate.decoy_updated", actor=self.request.user, target=page,
+                     request=self.request)
+
+    def perform_destroy(self, instance):
+        if instance.kind == "template":
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError("Built-in pages cannot be deleted, only deactivated.")
+        was_default = instance.is_default
+        instance.delete()
+        if was_default:
+            fallback = DecoyPage.objects.filter(active=True, kind="template",
+                                                template_key="update-service").first()
+            if fallback is not None:
+                DecoyPage.objects.filter(pk=fallback.pk).update(is_default=True)
+
+
+class DecoyPageSetDefault(APIView):
+    def post(self, request, pk):
+        page = get_object_or_404(DecoyPage, pk=pk)
+        if not page.active:
+            return Response({"detail": "Activate the page before making it the default."},
+                            status=status.HTTP_409_CONFLICT)
+        DecoyPage.objects.exclude(pk=page.pk).update(is_default=False)
+        DecoyPage.objects.filter(pk=page.pk).update(is_default=True)
+        page.refresh_from_db()
+        record_event(action="gate.decoy_defaulted", actor=request.user, target=page,
+                     metadata={"via": "api"}, request=request)
+        return Response(DecoyPageSerializer(page).data)
 
 
 class PushSubscribe(APIView):

@@ -21,8 +21,8 @@ from .crypto_utils import (
     parse_submission_json, totp_code, verify_totp, xor_apply,
 )
 from .models import (
-    AgentChannel, BannedIP, BotState, DeliveryLink, HitEvent, Submission, SubmissionImage,
-    validate_auto_rules,
+    AgentChannel, BannedIP, BotState, DecoyPage, DeliveryLink, HitEvent, Submission,
+    SubmissionImage, seed_builtin_decoys, validate_auto_rules,
 )
 from .selftest import is_healthy, run_selftest
 from . import services, telegram
@@ -229,7 +229,6 @@ class PublicDispatchTests(TestCase):
 
         # Held until approved.
         self.assertEqual(self.client.get(link.path).status_code, 204)
-
     def test_submission_flow_xor_with_image(self):
         png = b"\x89PNG\r\n\x1a\n" + b"\x01" * 100
         link = DeliveryLink.objects.create(
@@ -245,7 +244,6 @@ class PublicDispatchTests(TestCase):
         image = submission.images.first()
         with image.image.open("rb") as handle:
             self.assertEqual(handle.read(), png)
-
     def test_undecryptable_submission_flagged_suspicious(self):
         link = DeliveryLink.objects.create(
             path="/g/drop/bad", kind="key", key_text="x",
@@ -254,7 +252,6 @@ class PublicDispatchTests(TestCase):
         self.client.post(link.path, data="!!not-base64!!", content_type="text/plain")
         self.assertFalse(Submission.objects.exists())
         self.assertTrue(HitEvent.objects.filter(category="suspicious").exists())
-
     def test_missing_expected_fields_flagged(self):
         link = DeliveryLink.objects.create(
             path="/g/drop/missing", kind="key", key_text="x",
@@ -265,7 +262,6 @@ class PublicDispatchTests(TestCase):
         self.assertFalse(Submission.objects.exists())
         hit = HitEvent.objects.get(category="suspicious")
         self.assertIn("hostname", hit.detail["missing"])
-
     def test_proxy_link_fetches_pwndrop_server_side(self):
         link = self.make_link(kind="proxy", pwndrop_url="http://10.255.255.1/files/p.exe", path="/g/proxy/1")
         with mock.patch("gates.services._fetch_pwndrop", return_value=(b"MZ-fake", "application/octet-stream")) as fetch:
@@ -273,7 +269,6 @@ class PublicDispatchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"MZ-fake")
         fetch.assert_called_once_with(link.pwndrop_url)
-
     def test_denied_link_serves_benevolent_text(self):
         link = self.make_link(requires_approval=True, approval_status="denied",
                               on_deny="benevolent", benevolent_text="exit-clean", path="/g/deny/1")
@@ -281,7 +276,6 @@ class PublicDispatchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content.decode(), "exit-clean")
         self.assertTrue(HitEvent.objects.filter(category="disapproved").exists())
-
     def test_agent_channel_hit_tracked(self):
         agent = AgentChannel.objects.create(label="agent-7")
         response = self.client.get(agent.path, HTTP_USER_AGENT="Beacon/1.0")
@@ -1077,3 +1071,108 @@ class TemplateAndDomainTests(TestCase):
             "on_deny": "not_found", "totp_window": "30", "max_uses": "0",
         })
         self.assertTrue(DeliveryLink.objects.filter(path="/g/dom/2", domain="updates.example.com").exists())
+
+
+@tag("functional")
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class DecoyPageTests(TestCase):
+    def setUp(self):
+        seed_builtin_decoys()
+        self.operator = Operator.objects.create_user(username="dop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def test_builtin_pages_seeded_with_default(self):
+        self.assertEqual(DecoyPage.objects.filter(kind="template").count(), 4)
+        default = DecoyPage.objects.get(is_default=True)
+        self.assertEqual(default.template_key, "update-service")
+
+    def test_default_repo_decoy_is_served(self):
+        response = self.public.get("/no-such-page")
+        self.assertContains(response, "Update Service", status_code=404)
+
+    def test_operator_can_switch_default_to_repo_page(self):
+        crestfield = DecoyPage.objects.get(template_key="crestfield")
+        self.client.post(reverse("gate-decoy-default", args=[crestfield.pk]))
+        response = self.public.get("/no-such-page")
+        self.assertContains(response, "CrestDesk", status_code=404)
+        self.assertNotContains(response, "All systems operational", status_code=404)
+        self.assertContains(response, "/g/canary/", status_code=404)
+        # nysm-landing is also selectable and distinct from the update-service page title
+        landing = DecoyPage.objects.get(template_key="nysm-landing")
+        self.client.post(reverse("gate-decoy-default", args=[landing.pk]))
+        response = self.public.get("/no-such-page")
+        self.assertContains(response, "Service Portal", status_code=404)
+
+    def test_uploaded_html_page_with_canary_injection(self):
+        html = b"<html><body><h1>Customer Portal</h1></body></html>"
+        page = DecoyPage.objects.create(kind="upload", name="portal", is_default=True)
+        DecoyPage.objects.exclude(pk=page.pk).update(is_default=False)
+        page.html_file.save("portal.html", ContentFile(html), save=True)
+        response = self.public.get("/no-such-page")
+        self.assertContains(response, "Customer Portal", status_code=404)
+        self.assertContains(response, "/g/canary/", status_code=404)
+
+    def test_redirect_decoy_sends_visitor_away(self):
+        page = DecoyPage.objects.create(kind="redirect", name="ms",
+                                        redirect_url="https://www.microsoft.com/", is_default=True)
+        DecoyPage.objects.exclude(pk=page.pk).update(is_default=False)
+        response = self.public.get("/no-such-page")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "https://www.microsoft.com/")
+        # banned visitors follow the same default page
+        BannedIP.objects.create(ip="203.0.113.99")
+        denied = self.public.get("/anything", REMOTE_ADDR="203.0.113.99")
+        self.assertEqual(denied.status_code, 302)
+
+    def test_deactivating_default_falls_back(self):
+        default = DecoyPage.objects.get(is_default=True)
+        self.client.post(reverse("gate-decoy-toggle", args=[default.pk]))
+        new_default = DecoyPage.objects.get(is_default=True)
+        self.assertNotEqual(new_default.pk, default.pk)
+        self.assertTrue(new_default.active)
+        response = self.public.get("/no-such-page")
+        self.assertContains(response, "/g/canary/", status_code=404)
+
+    def test_builtin_pages_cannot_be_deleted(self):
+        builtin = DecoyPage.objects.get(template_key="crestfield")
+        self.client.post(reverse("gate-decoy-delete", args=[builtin.pk]))
+        self.assertTrue(DecoyPage.objects.filter(pk=builtin.pk).exists())
+
+    def test_uploaded_page_can_be_deleted_and_default_resets(self):
+        page = DecoyPage.objects.create(kind="upload", name="tmp", is_default=True)
+        DecoyPage.objects.exclude(pk=page.pk).update(is_default=False)
+        page.html_file.save("tmp.html", ContentFile(b"<html></html>"), save=True)
+        self.client.post(reverse("gate-decoy-delete", args=[page.pk]))
+        self.assertFalse(DecoyPage.objects.filter(pk=page.pk).exists())
+        self.assertTrue(DecoyPage.objects.get(template_key="update-service").is_default)
+
+    def test_panel_page_renders(self):
+        response = self.client.get(reverse("gate-decoys"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Decoy pages")
+
+    def test_api_crud_and_default(self):
+        response = self.client.get("/api/v1/decoys/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["results"] if "results" in response.json() else response.json()), 4)
+        response = self.client.post("/api/v1/decoys/", data={
+            "name": "api-upload", "kind": "redirect", "redirect_url": "https://example.com/",
+        }, content_type="application/json")
+        self.assertEqual(response.status_code, 201)
+        page_id = response.json()["id"]
+        response = self.client.post(f"/api/v1/decoys/{page_id}/default/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["is_default"])
+        self.assertEqual(DecoyPage.objects.filter(is_default=True).count(), 1)
+        response = self.client.delete(f"/api/v1/decoys/{page_id}/")
+        self.assertEqual(response.status_code, 204)
+        self.assertTrue(DecoyPage.objects.get(template_key="update-service").is_default)
+
+
+
+
+
+
+

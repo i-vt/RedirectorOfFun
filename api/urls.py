@@ -27,4 +27,7 @@ urlpatterns = [
     path("push/key/", views.PushKey.as_view(), name="api-push-key"),
     path("push/subscribe/", views.PushSubscribe.as_view(), name="api-push-subscribe"),
     path("push/unsubscribe/", views.PushUnsubscribe.as_view(), name="api-push-unsubscribe"),
+    path("decoys/", views.DecoyPageList.as_view(), name="api-decoys"),
+    path("decoys/<int:pk>/", views.DecoyPageDetail.as_view(), name="api-decoy-detail"),
+    path("decoys/<int:pk>/default/", views.DecoyPageSetDefault.as_view(), name="api-decoy-default"),
 ]

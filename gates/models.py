@@ -296,6 +296,84 @@ class BotState(models.Model):
         return f"{self.key}@{self.offset}"
 
 
+# Decoy pages shipped with the repository. Operators pick one as the default
+# shown for unmatched paths, rejected browsing, and gate denials; `path` is
+# relative to the repository root, never built from user input.
+BUILTIN_DECOYS = {
+    "update-service": {
+        "label": "Update Service",
+        "path": "templates/gates/decoy.html",
+        "template_name": "gates/decoy.html",
+        "django_template": True,
+    },
+    "nysm-landing": {
+        "label": "NYSM landing page",
+        "path": "decoy/index.html",
+        "django_template": False,
+    },
+    "maintenance": {
+        "label": "Maintenance page",
+        "path": "decoy/maintenance.html",
+        "django_template": False,
+    },
+    "crestfield": {
+        "label": "Crestfield status page (example)",
+        "path": "decoy_examples/Crestfield.html",
+        "django_template": False,
+    },
+}
+
+
+def seed_builtin_decoys():
+    """Create rows for the built-in decoy pages; select the historical default."""
+    from django.apps import apps
+    DecoyPage = apps.get_model("gates", "DecoyPage")
+    for key, meta in BUILTIN_DECOYS.items():
+        _, created = DecoyPage.objects.get_or_create(
+            kind="template", template_key=key,
+            defaults={"name": meta["label"], "active": True})
+    if not DecoyPage.objects.filter(is_default=True).exists():
+        default = DecoyPage.objects.filter(template_key="update-service").first()
+        if default is not None:
+            DecoyPage.objects.filter(pk=default.pk).update(is_default=True)
+
+
+class DecoyPage(models.Model):
+    """A page served to rejected or lost visitors; one is the default."""
+
+    KIND_CHOICES = [
+        ("template", "Built-in page"),
+        ("upload", "Uploaded HTML"),
+        ("redirect", "Redirect to URL"),
+    ]
+
+    name = models.CharField(max_length=120)
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    template_key = models.CharField(max_length=40, blank=True)
+    html_file = models.FileField(upload_to="decoys/", blank=True, null=True)
+    redirect_url = models.URLField(blank=True)
+    active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="decoy_pages")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-is_default", "-created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_kind_display()})"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.kind == "template" and self.template_key not in BUILTIN_DECOYS:
+            raise ValidationError({"template_key": "unknown built-in decoy page"})
+        if self.kind == "upload" and not self.html_file:
+            raise ValidationError({"html_file": "upload an HTML file"})
+        if self.kind == "redirect" and not self.redirect_url:
+            raise ValidationError({"redirect_url": "set the redirect URL"})
+
+
 class HitEvent(models.Model):
     """Unified tracking for everything that touches the public surface."""
 

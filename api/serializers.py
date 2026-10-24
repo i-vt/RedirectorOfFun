@@ -2,7 +2,7 @@ from rest_framework import serializers
 from accounts.models import Operator
 from analytics.models import NotFoundEvent
 from audit.models import AuditEvent
-from gates.models import AgentChannel, BannedIP, DeliveryLink, HitEvent, Submission
+from gates.models import AgentChannel, BannedIP, DecoyPage, DeliveryLink, HitEvent, Submission
 from notifications.models import NotificationOutbox, NotificationPreference, PushSubscription
 
 
@@ -113,3 +113,11 @@ class PushSubscriptionSerializer(serializers.ModelSerializer):
         model = PushSubscription
         fields = ["endpoint", "keys"]
         extra_kwargs = {"endpoint": {"validators": []}}
+
+
+class DecoyPageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DecoyPage
+        fields = ["id", "name", "kind", "template_key", "redirect_url", "active",
+                  "is_default", "created_at"]
+        read_only_fields = ["is_default", "created_at"]

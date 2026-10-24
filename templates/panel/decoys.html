@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">PUBLIC SURFACE</span><h2>Decoy pages</h2><p>The default page is served to anyone who hits an unknown path, is denied, or is banned. Redirect pages send the visitor elsewhere instead of showing content.</p></div>
+  </div>
+  <form method="post" enctype="multipart/form-data" class="stacked-form">
+    {% csrf_token %}
+    <fieldset>
+      <legend>ADD A DECOY PAGE</legend>
+      <div class="grid-2">
+        <label><span>NAME</span><input class="field-input" name="name" maxlength="120" placeholder="Customer portal clone"></label>
+        <label><span>KIND</span><select class="field-input" name="kind">
+          <option value="template">Built-in page from the repo</option>
+          <option value="upload">Upload HTML</option>
+          <option value="redirect">Redirect to URL</option>
+        </select></label>
+      </div>
+      <div class="grid-2">
+        <label><span>BUILT-IN PAGE</span><select class="field-input" name="template_key">
+          {% for key, meta in builtin.items %}<option value="{{ key }}">{{ meta.label }}</option>{% endfor %}
+        </select></label>
+        <label><span>UPLOADED HTML FILE (kind = upload)</span><input class="field-input" type="file" name="html_file" accept=".html,.htm"></label>
+      </div>
+      <label><span>REDIRECT URL (kind = redirect)</span><input class="field-input mono" name="redirect_url" placeholder="https://www.microsoft.com/"></label>
+      <button class="button" type="submit">Add decoy page</button>
+    </fieldset>
+  </form>
+  <div class="table-wrap" style="margin-top:18px"><table><thead><tr><th>NAME</th><th>KIND</th><th>DETAIL</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>
+    {% for page in pages %}
+    <tr>
+      <td><strong>{{ page.name }}</strong>{% if page.is_default %}<br><span class="status-badge good">DEFAULT</span>{% endif %}</td>
+      <td><span class="method">{{ page.get_kind_display }}</span></td>
+      <td class="mono muted">{% if page.kind == "template" %}{{ page.template_key }}{% elif page.kind == "upload" %}{{ page.html_file.name|default:"(no file)" }}{% else %}{{ page.redirect_url }}{% endif %}</td>
+      <td>{% if page.active %}<span class="status-badge good">ACTIVE</span>{% else %}<span class="status-badge">INACTIVE</span>{% endif %}</td>
+      <td>
+        {% if not page.is_default %}
+        <form method="post" action="{% url 'gate-decoy-default' page.pk %}" style="display:inline">{% csrf_token %}<button class="text-button" type="submit">MAKE DEFAULT</button></form>
+        {% endif %}
+        <form method="post" action="{% url 'gate-decoy-toggle' page.pk %}" style="display:inline">{% csrf_token %}<button class="text-button" type="submit">{{ page.active|yesno:"DEACTIVATE,ACTIVATE" }}</button></form>
+        {% if page.kind != "template" %}
+        <form method="post" action="{% url 'gate-decoy-delete' page.pk %}" style="display:inline" data-confirm="Delete decoy page '{{ page.name }}'?">{% csrf_token %}<button class="text-button" type="submit">DELETE</button></form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AgentChannel, BannedIP, DeliveryLink, HitEvent, Submission, SubmissionImage
+from .models import AgentChannel, BannedIP, DecoyPage, DeliveryLink, HitEvent, Submission, SubmissionImage
 
 
 @admin.register(DeliveryLink)
@@ -16,4 +16,4 @@ class SubmissionAdmin(admin.ModelAdmin):
     list_filter = ["status"]
 
 
-admin.site.register([SubmissionImage, BannedIP, AgentChannel, HitEvent])
+admin.site.register([SubmissionImage, BannedIP, AgentChannel, HitEvent, DecoyPage])

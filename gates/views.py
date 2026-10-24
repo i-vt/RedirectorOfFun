@@ -14,8 +14,8 @@ from audit.services import record_event
 from notifications.services import notify
 
 from .models import (
-    AgentChannel, BannedIP, DeliveryLink, HitEvent, Submission, SubmissionImage,
-    validate_auto_rules,
+    AgentChannel, BannedIP, BUILTIN_DECOYS, DecoyPage, DeliveryLink, HitEvent,
+    Submission, SubmissionImage, validate_auto_rules,
 )
 from .link_templates import LINK_TEMPLATES
 from . import services
@@ -380,6 +380,104 @@ def selftest_view(request):
     if request.method == "POST" or request.GET.get("run") == "1":
         results = run_selftest()
     return render(request, "panel/selftest.html", {"title": "Self-Test", "results": results})
+
+
+@login_required
+def decoys_view(request):
+    if request.method == "POST":
+        kind = request.POST.get("kind", "template")
+        page = DecoyPage(kind=kind, created_by=request.user)
+        page.name = request.POST.get("name", "").strip()[:120] or "unnamed decoy"
+        if kind == "template":
+            page.template_key = request.POST.get("template_key", "").strip()
+            meta = BUILTIN_DECOYS.get(page.template_key)
+            if meta:
+                page.name = request.POST.get("name", "").strip()[:120] or meta["label"]
+        elif kind == "upload":
+            if request.FILES.get("html_file"):
+                page.html_file = request.FILES["html_file"]
+        elif kind == "redirect":
+            page.redirect_url = request.POST.get("redirect_url", "").strip()
+        try:
+            page.full_clean()
+        except ValidationError as exc:
+            messages.error(request, "; ".join(
+                f"{field}: {', '.join(errors)}" for field, errors in exc.message_dict.items()))
+            return redirect("gate-decoys")
+        page.save()
+        record_event(action="gate.decoy_created", actor=request.user, target=page, request=request)
+        messages.success(request, f"Decoy page '{page.name}' created.")
+        return redirect("gate-decoys")
+    pages = DecoyPage.objects.all()
+    return render(request, "panel/decoys.html", {
+        "title": "Decoy Pages", "pages": pages,
+        "builtin": BUILTIN_DECOYS, "kinds": DecoyPage.KIND_CHOICES,
+        "current_default": services.get_default_decoy(),
+    })
+
+
+@login_required
+@transaction.atomic
+def decoy_set_default(request, pk):
+    page = get_object_or_404(DecoyPage, pk=pk)
+    if request.method == "POST":
+        if not page.active:
+            messages.error(request, "Activate the page before making it the default.")
+            return redirect("gate-decoys")
+        DecoyPage.objects.exclude(pk=page.pk).update(is_default=False)
+        DecoyPage.objects.filter(pk=page.pk).update(is_default=True)
+        record_event(action="gate.decoy_defaulted", actor=request.user, target=page, request=request)
+        messages.success(request, f"'{page.name}' is now the default decoy.")
+    return redirect("gate-decoys")
+
+
+def _promote_fallback_decoy(exclude_pk=None):
+    """Pick a new default: the update-service page, else any active page."""
+    queryset = DecoyPage.objects.filter(active=True)
+    if exclude_pk is not None:
+        queryset = queryset.exclude(pk=exclude_pk)
+    fallback = queryset.filter(kind="template", template_key="update-service").first() \
+        or queryset.first()
+    if fallback is not None:
+        DecoyPage.objects.filter(pk=fallback.pk).update(is_default=True)
+        return fallback
+    return None
+
+
+@login_required
+@transaction.atomic
+def decoy_toggle(request, pk):
+    page = get_object_or_404(DecoyPage, pk=pk)
+    if request.method == "POST":
+        page.active = not page.active
+        if not page.active and page.is_default:
+            page.is_default = False
+            page.save(update_fields=["active", "is_default"])
+            _promote_fallback_decoy(exclude_pk=page.pk)
+        else:
+            page.save(update_fields=["active"])
+        record_event(action="gate.decoy_toggled", actor=request.user, target=page,
+                     metadata={"active": page.active}, request=request)
+    return redirect("gate-decoys")
+
+
+@login_required
+@transaction.atomic
+def decoy_delete(request, pk):
+    page = get_object_or_404(DecoyPage, pk=pk)
+    if request.method == "POST":
+        if page.kind == "template":
+            messages.error(request, "Built-in pages cannot be deleted, only deactivated.")
+            return redirect("gate-decoys")
+        was_default = page.is_default
+        name = page.name
+        page.delete()
+        if was_default:
+            _promote_fallback_decoy()
+        record_event(action="gate.decoy_deleted", actor=request.user,
+                     metadata={"name": name}, request=request)
+        messages.success(request, f"Decoy page '{name}' deleted.")
+    return redirect("gate-decoys")
 
 
 @login_required

@@ -22,4 +22,8 @@ urlpatterns = [
     path("agents/<int:pk>/rotate/", views.agent_rotate, name="gate-agent-rotate"),
     path("gate-events/", views.gate_events_view, name="gate-events"),
     path("selftest/", views.selftest_view, name="gate-selftest"),
+    path("decoys/", views.decoys_view, name="gate-decoys"),
+    path("decoys/<int:pk>/default/", views.decoy_set_default, name="gate-decoy-default"),
+    path("decoys/<int:pk>/toggle/", views.decoy_toggle, name="gate-decoy-toggle"),
+    path("decoys/<int:pk>/delete/", views.decoy_delete, name="gate-decoy-delete"),
 ]
