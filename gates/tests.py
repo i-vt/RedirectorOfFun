@@ -1223,7 +1223,7 @@ class EventIdentifierTests(TestCase):
 
 
 @tag("functional")
-@override_settings(ROOT_URLCONF="config.test_urls")
+@override_settings(ROOT_URLCONF="config.test_urls", OPERATOR_PREFIX="testprefix")
 class OperatorPrefixTests(TestCase):
     def test_operator_paths_live_under_the_prefix(self):
         self.assertEqual(reverse("login"), "/testprefix/login/")
@@ -1238,12 +1238,24 @@ class OperatorPrefixTests(TestCase):
         self.assertEqual(self.client.get("/health/live/").status_code, 200)
 
     def test_unprefixed_operator_paths_are_gone(self):
-        for path in ("/panel/", "/login/", "/api/v1/links/", "/m/"):
+        for path in ("/panel/", "/login/", "/api/v1/links/", "/api", "/m/"):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 404, path)
         # and unknown paths present the decoy to anonymous visitors
         response = self.client.get("/panel/")
         self.assertContains(response, "Update Service", status_code=404)
+
+    def test_outside_prefix_is_decoy_even_for_authenticated_operators(self):
+        from accounts.models import Operator
+        operator = Operator.objects.create_user(username="prefop", password="long-enough-password-123")
+        self.client.force_login(operator)
+        for path in ("/api", "/api/v1/links/", "/panel/", "/login/"):
+            response = self.client.get(path)
+            self.assertContains(response, "Update Service", status_code=404, msg_prefix=path)
+        # inside the prefix, operators still get the helpful panel 404
+        response = self.client.get("/testprefix/panel/no-such-page/")
+        self.assertContains(response, "Nothing lives at this address", status_code=404)
+        self.assertNotContains(response, "Update Service", status_code=404)
 
 
 
