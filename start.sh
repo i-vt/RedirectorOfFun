@@ -49,8 +49,10 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+ENV_FRESH=0
 if [[ ! -f .env ]]; then
   echo "Creating .env with generated secrets…"
+  ENV_FRESH=1
   DJANGO_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
   ANALYTICS_SALT=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
   POSTGRES_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')
@@ -71,6 +73,34 @@ else
     echo "Hint: if you rebuilt .env from scratch, old database volumes hold the"
     echo "old password. Use ./start.sh --reset to wipe them, or docker compose"
     echo "down -v before restarting."
+  fi
+fi
+
+# Catch the classic footgun before compose reports a cryptic "unhealthy":
+# POSTGRES_PASSWORD only applies on first init, so a regenerated .env against
+# a surviving database volume means the panel can never authenticate.
+if [[ $RESET -eq 0 && -f .env ]]; then
+  if "${COMPOSE[@]}" ps -q --status running db 2>/dev/null | grep -q .; then
+    DB_USER=$(grep -E '^POSTGRES_USER=' .env | tail -1 | cut -d= -f2-)
+    DB_NAME=$(grep -E '^POSTGRES_DB=' .env | tail -1 | cut -d= -f2-)
+    DB_PASS=$(grep -E '^POSTGRES_PASSWORD=' .env | tail -1 | cut -d= -f2-)
+    auth_result=$(PGPASSWORD="$DB_PASS" timeout 10 "${COMPOSE[@]}" exec -T db \
+      psql -U "${DB_USER:-redirector}" -d "${DB_NAME:-redirector_panel}" -c 'SELECT 1' 2>&1) || true
+    if grep -qi "password authentication failed" <<<"$auth_result"; then
+      echo "Error: the running database rejects the password from .env." >&2
+      echo "The database volume outlived a regenerated .env. Run ./start.sh --reset" >&2
+      echo "to wipe the volume, or restore the previous .env." >&2
+      exit 1
+    fi
+  else
+    STACK_DIR_NAME=$(basename "$PWD" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_-' '_')
+    if [[ $ENV_FRESH -eq 1 ]] && docker volume ls --format '{{.Name}}' 2>/dev/null \
+        | grep -qi "^${STACK_DIR_NAME}_postgres-data$"; then
+      echo "Error: a database volume from a previous run exists, but .env was just regenerated." >&2
+      echo "The old database keeps the old password; the panel would fail to authenticate." >&2
+      echo "Run ./start.sh --reset to start clean, or restore the previous .env." >&2
+      exit 1
+    fi
   fi
 fi
 
