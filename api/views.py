@@ -1,10 +1,10 @@
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, reverse
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from accounts.models import Operator
-from accounts.permissions import IsAdministrator
+from accounts.models import APIKey, Operator
+from accounts.permissions import IsAdministrator, is_administrator
 from accounts.services import deactivate_operator
 from analytics.models import NotFoundEvent
 from analytics.services import dashboard_statistics
@@ -18,10 +18,10 @@ from gates.models import (
 from notifications.models import NotificationOutbox, NotificationPreference, PushSubscription
 from .pagination import AuditCursorPagination, EventCursorPagination, HitCursorPagination, OperatorPagination
 from .serializers import (
-    AgentChannelSerializer, AuditEventSerializer, BannedIPSerializer, BlockingRuleSerializer,
-    DecoyPageSerializer, DeliveryLinkSerializer, HitEventSerializer, NotFoundEventSerializer,
-    NotificationPreferenceSerializer, NotificationSerializer, OperatorSerializer,
-    PushSubscriptionSerializer, RuleSetSerializer, SubmissionSerializer,
+    AgentChannelSerializer, APIKeySerializer, AuditEventSerializer, BannedIPSerializer,
+    BlockingRuleSerializer, DecoyPageSerializer, DeliveryLinkSerializer, HitEventSerializer,
+    NotFoundEventSerializer, NotificationPreferenceSerializer, NotificationSerializer,
+    OperatorSerializer, PushSubscriptionSerializer, RuleSetSerializer, SubmissionSerializer,
 )
 
 
@@ -337,6 +337,88 @@ class BlockingRuleDetail(generics.RetrieveUpdateDestroyAPIView):
         instance.delete()
         record_event(action="gate.block_rule_deleted", actor=self.request.user,
                      metadata={"name": name, "via": "api"}, request=self.request)
+
+
+class APIKeyList(APIView):
+    """List your API keys, or provision a new one (full key returned once)."""
+
+    def get(self, request):
+        queryset = APIKey.objects.filter(operator=request.user)
+        if request.query_params.get("all") == "1" and is_administrator(request.user):
+            queryset = APIKey.objects.all()
+        return Response(APIKeySerializer(queryset, many=True).data)
+
+    def post(self, request):
+        name = str(request.data.get("name", "api key")).strip()[:120] or "api key"
+        expires_at = None
+        raw_expiry = str(request.data.get("expires_at", "")).strip()
+        if raw_expiry:
+            from django.utils.dateparse import parse_datetime
+            expires_at = parse_datetime(raw_expiry)
+        api_key, raw = APIKey.create(operator=request.user, name=name,
+                                     created_by=request.user, expires_at=expires_at)
+        record_event(action="apikey.created", actor=request.user, target=api_key, request=request)
+        return Response({**APIKeySerializer(api_key).data, "key": raw}, status=status.HTTP_201_CREATED)
+
+
+class APIKeyRevoke(APIView):
+    def post(self, request, pk):
+        api_key = get_object_or_404(APIKey.objects.select_related("operator"), pk=pk)
+        if api_key.operator != request.user and not is_administrator(request.user):
+            return Response({"detail": "Not allowed."}, status=status.HTTP_403_FORBIDDEN)
+        api_key.is_active = False
+        api_key.save(update_fields=["is_active"])
+        record_event(action="apikey.revoked", actor=request.user, target=api_key, request=request)
+        return Response(APIKeySerializer(api_key).data)
+
+
+class LinkTotpCodes(APIView):
+    def get(self, request, pk):
+        import time
+        from gates.crypto_utils import totp_code
+        link = get_object_or_404(DeliveryLink, pk=pk, gate_type="totp")
+        window = int(time.time()) // max(link.totp_window, 1)
+        return Response({"path": link.path, "window_seconds": link.totp_window,
+                         "codes": {str(w): totp_code(link.totp_secret, w)
+                                   for w in (window - 1, window)}})
+
+
+class SelftestRun(APIView):
+    def post(self, request):
+        from gates.selftest import run_selftest
+        results = run_selftest()
+        return Response({"healthy": all(not (r["status"] == "fail" and r["blocking"]) for r in results),
+                         "checks": results})
+
+
+class InvitationCreate(APIView):
+    permission_classes = [IsAdministrator]
+
+    def post(self, request):
+        from accounts.services import create_invitation
+        from django.conf import settings as dj_settings
+        try:
+            invitation, raw_token = create_invitation(
+                invited_by=request.user, request=request,
+                username=str(request.data.get("username", "")).strip(),
+                email=str(request.data.get("email", "")).strip(),
+                role=str(request.data.get("role", "Operator")),
+            )
+        except (ValueError, TypeError) as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        url = dj_settings.BOOTSTRAP_BASE_URL + reverse("invitation-accept", args=[raw_token])
+        return Response({"url": url, "username": invitation.username, "role": invitation.role,
+                         "expires_at": invitation.expires_at}, status=status.HTTP_201_CREATED)
+
+
+class OperatorReset2FA(APIView):
+    permission_classes = [IsAdministrator]
+
+    def post(self, request, pk):
+        from accounts.services import reset_operator_2fa
+        target = get_object_or_404(Operator, pk=pk)
+        reset_operator_2fa(actor=request.user, target=target, request=request)
+        return Response({"detail": f"2FA reset for {target.username}."})
 
 
 class RuleSetList(generics.ListCreateAPIView):

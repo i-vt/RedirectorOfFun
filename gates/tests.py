@@ -27,6 +27,7 @@ from .models import (
 )
 from .selftest import is_healthy, run_selftest
 from . import services, telegram
+from accounts.models import APIKey
 
 
 def aes_encrypt(plaintext: bytes, passphrase: str, iv: bytes) -> bytes:
@@ -1468,6 +1469,124 @@ class RuleChainSemanticsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(BlockingRule.objects.get(pk=r1.pk).order, 1)
         self.assertEqual(BlockingRule.objects.get(pk=r2.pk).order, 0)
+
+
+@tag("functional")
+class APIKeyAuthTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="keyop", password="long-enough-password-123")
+        self.api_key, self.raw = APIKey.create(operator=self.operator, name="ci")
+        self.other = Operator.objects.create_user(username="keyop2", password="long-enough-password-123")
+
+    def _auth(self, key=None):
+        return {"HTTP_AUTHORIZATION": f"ApiKey {key or self.raw}"}
+
+    def test_key_authenticates_against_api(self):
+        response = self.client.get("/api/v1/gate-stats/", **self._auth())
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.json())
+
+    def test_key_can_write(self):
+        response = self.client.post("/api/v1/links/", data={
+            "path": "/g/key/1", "kind": "key", "key_text": "k",
+            "gate_type": "none", "cipher": "none", "placeholder": "blank",
+            "on_deny": "not_found",
+        }, content_type="application/json", **self._auth())
+        self.assertEqual(response.status_code, 201)
+
+    def test_wrong_and_revoked_keys_rejected(self):
+        response = self.client.get("/api/v1/gate-stats/", **self._auth("rofk_wrongwrongwrongwrongwrong"))
+        self.assertEqual(response.status_code, 403)
+        self.api_key.is_active = False
+        self.api_key.save(update_fields=["is_active"])
+        response = self.client.get("/api/v1/gate-stats/", **self._auth())
+        self.assertEqual(response.status_code, 403)
+
+    def test_expired_key_rejected(self):
+        self.api_key.expires_at = timezone.now() - timezone.timedelta(minutes=1)
+        self.api_key.save(update_fields=["expires_at"])
+        response = self.client.get("/api/v1/gate-stats/", **self._auth())
+        self.assertEqual(response.status_code, 403)
+
+    def test_key_does_not_use_session_and_ignores_csrf(self):
+        # No session cookie: key-only request, POST without CSRF token works.
+        response = self.client.post("/api/v1/bans/", data={"ip": "192.0.2.77", "note": "n"},
+                                    content_type="application/json", **self._auth())
+        self.assertEqual(response.status_code, 201)
+
+    def test_last_used_recorded(self):
+        self.client.get("/api/v1/gate-stats/", **self._auth())
+        self.api_key.refresh_from_db()
+        self.assertIsNotNone(self.api_key.last_used_at)
+
+    def test_provision_and_revoke_via_api(self):
+        response = self.client.post("/api/v1/apikeys/", data={"name": "second"},
+                                    content_type="application/json", **self._auth())
+        self.assertEqual(response.status_code, 201)
+        key_id = response.json()["id"]
+        new_raw = response.json()["key"]
+        self.assertTrue(new_raw.startswith("rofk_"))
+        # list does not expose secrets
+        response = self.client.get("/api/v1/apikeys/", **self._auth())
+        self.assertNotIn("key", response.json()[0])
+        # other operator cannot revoke
+        other_key = APIKey.create(operator=self.other, name="x")[0]
+        response = self.client.post(f"/api/v1/apikeys/{other_key.pk}/revoke/",
+                                    **self._auth())
+        self.assertEqual(response.status_code, 403)
+        # owner revokes
+        response = self.client.post(f"/api/v1/apikeys/{key_id}/revoke/", **self._auth())
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get("/api/v1/gate-stats/",
+                                   **{"HTTP_AUTHORIZATION": f"ApiKey {new_raw}"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_endpoints_via_key(self):
+        admin = Operator.objects.create_user(username="keyadmin", password="long-enough-password-123",
+                                             is_superuser=True)
+        admin_key, admin_raw = APIKey.create(operator=admin, name="a")
+        auth = {"HTTP_AUTHORIZATION": f"ApiKey {admin_raw}"}
+        response = self.client.post("/api/v1/operators/invitations/", data={
+            "username": "invited-op", "role": "Operator"}, content_type="application/json", **auth)
+        self.assertEqual(response.status_code, 201)
+        self.assertIn("invite/", response.json()["url"])
+        # non-admin cannot invite
+        response = self.client.post("/api/v1/operators/invitations/", data={
+            "username": "nope"}, content_type="application/json", **self._auth())
+        self.assertEqual(response.status_code, 403)
+        # admin resets 2fa
+        target = Operator.objects.create_user(username="locked2", password="long-enough-password-123")
+        target.totp_enabled = True
+        target.save(update_fields=["totp_enabled"])
+        response = self.client.post(f"/api/v1/operators/{target.pk}/reset-2fa/", **auth)
+        self.assertEqual(response.status_code, 200)
+        target.refresh_from_db()
+        self.assertFalse(target.totp_enabled)
+
+    def test_parity_endpoints(self):
+        link = DeliveryLink.objects.create(path="/g/ktotp/1", kind="key", key_text="K",
+                                           gate_type="totp", totp_secret="s")
+        response = self.client.get(f"/api/v1/links/{link.pk}/totp/", **self._auth())
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("codes", response.json())
+        response = self.client.post("/api/v1/selftest/", **self._auth())
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("checks", response.json())
+
+    def test_manage_command(self):
+        from io import StringIO
+        from django.core.management import call_command
+        out = StringIO()
+        call_command("create_apikey", "keyop", "--name", "from-cli", stdout=out)
+        self.assertIn("rofk_", out.getvalue())
+        self.assertTrue(APIKey.objects.filter(operator=self.operator, name="from-cli").exists())
+
+    def test_security_page_shows_key_management(self):
+        self.client.force_login(self.operator)
+        response = self.client.get(reverse("security"))
+        self.assertContains(response, "API keys")
+        response = self.client.post(reverse("security"), {"action": "apikey_create", "name": "ui key"})
+        self.assertContains(response, "rofk_")
 
 
 @tag("functional")

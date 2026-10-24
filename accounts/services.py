@@ -106,6 +106,18 @@ def revoke_invitation(*, actor, invitation, request=None):
 
 
 @transaction.atomic
+def reset_operator_2fa(*, actor, target, request=None):
+    """Administrator lockout recovery: clear another operator's 2FA."""
+    target.totp_enabled = False
+    target.totp_secret = ""
+    target.backup_code_hashes = []
+    target.session_version += 1
+    target.save(update_fields=["totp_enabled", "totp_secret", "backup_code_hashes", "session_version"])
+    record_event(action="operator.2fa_reset", actor=actor, target=target, request=request)
+    return target
+
+
+@transaction.atomic
 def deactivate_operator(*, actor, target, request=None):
     target = Operator.objects.select_for_update().get(pk=target.pk)
     if actor.pk == target.pk:

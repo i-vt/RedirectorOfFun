@@ -13,7 +13,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from .decorators import rate_limit
 from .forms import ClaimForm, InvitationAcceptForm, InvitationForm, OperatorAuthenticationForm
-from .models import BootstrapState, Invitation, Operator
+from .models import APIKey, BootstrapState, Invitation, Operator
 from .permissions import AdministratorRequiredMixin, is_administrator
 from .services import BootstrapError, accept_invitation, claim_bootstrap, create_invitation, deactivate_operator, digest_token, revoke_invitation
 from .totp import (
@@ -77,6 +77,32 @@ def security_view(request):
     user = request.user
     if request.method == "POST":
         action = request.POST.get("action", "")
+        if action == "apikey_create":
+            from audit.services import record_event
+            api_key, raw = APIKey.create(
+                operator=user, name=request.POST.get("name", "").strip()[:120] or "api key",
+                created_by=user)
+            record_event(action="apikey.created", actor=user, target=api_key, request=request)
+            pending = request.session.get("pending_totp_secret", "")
+            return render(request, "panel/security.html", {
+                "title": "Security", "enabled": user.totp_enabled, "new_key": raw,
+                "api_keys": user.api_keys.all(),
+                "all_api_keys": APIKey.objects.select_related("operator")[:20] if is_administrator(user) else [],
+                "pending_secret": pending,
+                "pending_uri": provisioning_uri(pending, user.username) if pending else "",
+                "backup_code_count": len(user.backup_code_hashes or []),
+            })
+        if action == "apikey_revoke":
+            from audit.services import record_event
+            api_key = get_object_or_404(APIKey, pk=request.POST.get("key_id", ""))
+            if api_key.operator != user and not is_administrator(user):
+                messages.error(request, "Not allowed.")
+                return redirect("security")
+            api_key.is_active = False
+            api_key.save(update_fields=["is_active"])
+            record_event(action="apikey.revoked", actor=user, target=api_key, request=request)
+            messages.success(request, f"API key '{api_key.name}' revoked.")
+            return redirect("security")
         if action == "enroll":
             secret = generate_secret()
             request.session["pending_totp_secret"] = secret
@@ -115,6 +141,8 @@ def security_view(request):
         "pending_secret": pending_secret,
         "pending_uri": provisioning_uri(pending_secret, user.username) if pending_secret else "",
         "backup_code_count": len(user.backup_code_hashes or []),
+        "api_keys": user.api_keys.all(),
+        "all_api_keys": APIKey.objects.select_related("operator")[:20] if is_administrator(user) else [],
     })
 
 
@@ -126,13 +154,8 @@ def reset_operator_2fa(request, pk):
         return render(request, "403.html", status=403)
     target = get_object_or_404(Operator, pk=pk)
     if request.method == "POST":
-        target.totp_enabled = False
-        target.totp_secret = ""
-        target.backup_code_hashes = []
-        target.session_version += 1
-        target.save(update_fields=["totp_enabled", "totp_secret", "backup_code_hashes", "session_version"])
-        from audit.services import record_event
-        record_event(action="operator.2fa_reset", actor=request.user, target=target, request=request)
+        from .services import reset_operator_2fa as reset_2fa_service
+        reset_2fa_service(actor=request.user, target=target, request=request)
         messages.success(request, f"2FA reset for {target.username}; their sessions were invalidated.")
     return redirect("operators")
 

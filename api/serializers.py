@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from accounts.models import Operator
+from accounts.models import APIKey, Operator
 from analytics.models import NotFoundEvent
 from audit.models import AuditEvent
 from gates.models import (
@@ -124,6 +124,14 @@ class DecoyPageSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "kind", "template_key", "redirect_url", "active",
                   "is_default", "created_at"]
         read_only_fields = ["is_default", "created_at"]
+
+
+class APIKeySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = APIKey
+        fields = ["id", "name", "prefix", "is_active", "expires_at", "last_used_at",
+                  "last_used_ip", "created_at"]
+        read_only_fields = fields
 
 
 class RuleSetSerializer(serializers.ModelSerializer):

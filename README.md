@@ -246,7 +246,7 @@ Each operator can enable TOTP under `/panel/security/` (enrollment shows the sec
 
 ### API and health
 
-The session-authenticated API is under `/api/v1/` and includes `404-events/`, `404-stats/`, `audit-events/`, `operators/`, `notification-preferences/`, `notifications/recent/`, plus the gate surface:
+The API is under `/api/v1/` and accepts two credentials: the operator session (browser) and **API keys** — `Authorization: ApiKey rofk_<secret>`. Keys act as their owner with the owner's roles (admin keys can do admin things), are shown once at creation and hashed at rest, can expire, and are revocable from the Security page, `POST /api/v1/apikeys/<id>/revoke/`, or `manage.py create_apikey <username>`. A key is its own credential and does not use TOTP. Everything the web UI can do is exposed: `404-events/`, `404-stats/`, `audit-events/`, `operators/` (+ `invitations/`, `<id>/reset-2fa/`, `<id>/revoke/`), `notification-preferences/`, `notifications/recent/`, `apikeys/`, `selftest/`, plus the gate surface:
 
 | Endpoint | Purpose |
 |---|---|
@@ -255,6 +255,8 @@ The session-authenticated API is under `/api/v1/` and includes `404-events/`, `4
 | `bans/`, `bans/<id>/` | List/create/update bans |
 | `agents/`, `agents/<id>/`, `agents/<id>/rotate/` | Per-agent channels and rotation |
 | `hit-events/`, `gate-stats/` | Surface telemetry and 24h aggregates |
+| `links/<id>/totp/` | Current TOTP codes for a time-gated link |
+| `selftest/` | Run the startup check suite |
 
 Event and audit list endpoints use cursor pagination. Operator administration requires the Administrator role.
 
