@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.db import transaction
@@ -10,6 +11,15 @@ from .models import NotificationOutbox, NotificationPreference
 def settings_view(request):
     preferences = { (p.event_type, p.channel): p for p in NotificationPreference.objects.filter(operator=request.user) }
     if request.method == "POST":
+        if request.POST.get("action") == "theme":
+            theme = request.POST.get("theme", "default")
+            if theme in dict(request.user.THEME_CHOICES):
+                request.user.theme = theme
+                request.user.save(update_fields=["theme"])
+                record_event(action="operator.theme_changed", actor=request.user, target=request.user,
+                             metadata={"theme": theme}, request=request)
+                messages.success(request, "Interface theme updated.")
+            return redirect("settings")
         for event_type, _ in NotificationPreference.EVENT_CHOICES:
             for channel, _ in NotificationPreference.CHANNEL_CHOICES:
                 key = f"pref-{event_type}-{channel}"
@@ -33,6 +43,8 @@ def settings_view(request):
         "channel_choices": NotificationPreference.CHANNEL_CHOICES,
         "preference_matrix": preference_matrix,
         "recent_notifications": NotificationOutbox.objects.filter(recipient=request.user)[:8],
+        "theme": request.user.theme,
+        "theme_choices": request.user.THEME_CHOICES,
     })
 
 

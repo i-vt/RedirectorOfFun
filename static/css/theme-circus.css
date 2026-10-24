@@ -1,0 +1,94 @@
+/* Nightmare Circus theme: harlequin palette, jester geometry, unsettling
+   motion. Applied when the operator's account theme is "circus" (body gets
+   .theme-circus); everything is a CSS-only override of the base skin. */
+
+.theme-circus {
+  --p-abyss: oklch(.1 .02 340);
+  --p-panel: oklch(.145 .045 347);
+  --p-raised: oklch(.185 .055 350);
+  --p-line: oklch(.27 .07 352);
+  --p-cyan: oklch(.62 .21 22);          /* blood crimson where cyan used to be */
+  --p-mint: oklch(.78 .2 145);          /* toxic green */
+  --p-amber: oklch(.82 .17 65);         /* sickly yellow */
+  --p-red: oklch(.68 .24 18);
+  --p-text: oklch(.91 .02 330);
+  --p-muted: oklch(.72 .05 340);
+  --p-dim: oklch(.58 .06 345);
+  --c-focus: 0 0 0 3px oklch(.62 .21 22/.35);
+}
+
+.theme-circus .sidebar {
+  background:
+    repeating-linear-gradient(45deg,
+      oklch(.62 .21 22/.035) 0 12px, transparent 12px 24px),
+    var(--s-bg);
+}
+
+/* Harlequin diamonds whispering at the edges of every panel. */
+.theme-circus .panel,
+.theme-circus .rail-section,
+.theme-circus .form-panel,
+.theme-circus .compact-panel,
+.theme-circus .stat-card,
+.theme-circus .metric,
+.theme-circus .card {
+  position: relative;
+  border-radius: 3px 18px 3px 18px;   /* warped jester corners */
+  background-image:
+    repeating-linear-gradient(135deg,
+      oklch(.62 .21 22/.028) 0 6px, transparent 6px 18px);
+}
+
+.theme-circus .brand-mark { transform: rotate(45deg); transform-origin: center; }
+.theme-circus .brand-dot { fill: oklch(.78 .2 145); }
+.theme-circus .brand strong { letter-spacing: .06em; }
+
+.theme-circus .status-badge {
+  border-radius: 14px 3px 14px 3px;
+  letter-spacing: .1em;
+}
+
+.theme-circus .button { border-radius: 16px 4px 16px 4px; }
+.theme-circus .field-input { border-radius: 4px 14px 4px 14px; }
+.theme-circus .status-orbit { border-color: oklch(.62 .21 22/.5); }
+.theme-circus .status-orbit::after { border-color: oklch(.78 .2 145/.4); animation-duration: 3.2s; }
+
+::selection { background: oklch(.62 .21 22/.4); }
+
+/* Mobile UI variable names (templates/mobile/base.html has its own palette). */
+.theme-circus {
+  --bg: oklch(.1 .02 340);
+  --surface: oklch(.145 .045 347);
+  --border: oklch(.27 .07 352);
+  --accent: oklch(.78 .2 145);
+  --warn: oklch(.82 .17 65);
+  --danger: oklch(.68 .24 18);
+  --text: oklch(.91 .02 330);
+  --muted: oklch(.72 .05 340);
+}
+
+/* Motions that should feel slightly wrong. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes circus-flicker {
+    0%, 100% { opacity: 1; }
+    92% { opacity: 1; }
+    93% { opacity: .55; }
+    94% { opacity: 1; }
+    97% { opacity: .7; }
+    98% { opacity: 1; }
+  }
+  @keyframes circus-breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.25); }
+  }
+  @keyframes circus-sway {
+    0%, 100% { transform: rotate(-.35deg); }
+    50% { transform: rotate(.35deg); }
+  }
+  .theme-circus .status-dot { animation: circus-breathe 2.8s ease-in-out infinite; }
+  .theme-circus .environment { animation: circus-flicker 9s linear infinite; }
+  .theme-circus .mission-strip h2 { animation: circus-sway 12s ease-in-out infinite; }
+  .theme-circus .brand-mark { animation: circus-sway 6s ease-in-out infinite; }
+  .theme-circus .button:hover { transform: translateY(-2px) rotate(-.6deg); }
+  .theme-circus .status-orbit { animation: spin 3.5s linear infinite; }
+}

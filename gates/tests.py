@@ -193,7 +193,7 @@ class PublicDispatchTests(TestCase):
         response = self.client.get("/definitely-not-real")
         self.assertEqual(response.status_code, 404)
         self.assertNotContains(response, "Update Service", status_code=404)
-        self.assertContains(response, "RDR", status_code=404)
+        self.assertContains(response, "Nothing lives at this address", status_code=404)
 
     def test_root_serves_decoy_to_anonymous_and_dashboard_to_operator(self):
         anonymous = Client()
@@ -1587,6 +1587,60 @@ class APIKeyAuthTests(TestCase):
         self.assertContains(response, "API keys")
         response = self.client.post(reverse("security"), {"action": "apikey_create", "name": "ui key"})
         self.assertContains(response, "rofk_")
+
+
+@tag("functional")
+class ThemeTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="themeop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+
+    def test_default_theme_has_no_circus_class(self):
+        response = self.client.get(reverse("overview"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "theme-circus")
+        self.assertNotContains(response, "theme-circus.css")
+
+    def test_settings_apply_theme(self):
+        response = self.client.post(reverse("settings"), {"action": "theme", "theme": "circus"})
+        self.assertEqual(response.status_code, 302)
+        self.operator.refresh_from_db()
+        self.assertEqual(self.operator.theme, "circus")
+        response = self.client.get(reverse("overview"))
+        self.assertContains(response, "theme-circus")
+        self.assertContains(response, "theme-circus.css")
+
+    def test_theme_is_per_account(self):
+        other = Operator.objects.create_user(username="themeop2", password="long-enough-password-123")
+        other_client = Client()
+        other_client.force_login(other)
+        self.client.post(reverse("settings"), {"action": "theme", "theme": "circus"})
+        response = other_client.get(reverse("overview"))
+        self.assertNotContains(response, "theme-circus")
+
+    def test_invalid_theme_rejected(self):
+        self.client.post(reverse("settings"), {"action": "theme", "theme": "deep-blue-sea"})
+        self.operator.refresh_from_db()
+        self.assertEqual(self.operator.theme, "default")
+
+    def test_mobile_ui_uses_theme(self):
+        self.operator.theme = "circus"
+        self.operator.save(update_fields=["theme"])
+        DeliveryLink.objects.create(path="/g/t/1", kind="key", key_text="K",
+                                    gate_type="submission", cipher="base64", requires_approval=True)
+        import base64
+        blob = base64.b64encode(b'{"hostname":"h"}').decode()
+        Client().post("/g/t/1", data=blob, content_type="text/plain")
+        response = self.client.get("/m/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="theme-circus"')
+        self.assertContains(response, "theme-circus.css")
+
+    def test_brand_renamed(self):
+        response = self.client.get(reverse("overview"))
+        self.assertContains(response, "RoF//OPS")
+        self.assertNotContains(response, "RDR//OPS")
 
 
 @tag("functional")

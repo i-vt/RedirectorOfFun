@@ -5,10 +5,13 @@ from django.utils import timezone
 
 
 class Operator(AbstractUser):
+    THEME_CHOICES = [("default", "Default"), ("circus", "Nightmare Circus")]
+
     session_version = models.PositiveIntegerField(default=1)
     totp_secret = models.CharField(max_length=64, blank=True)
     totp_enabled = models.BooleanField(default=False)
     backup_code_hashes = models.JSONField(default=list, blank=True)
+    theme = models.CharField(max_length=16, choices=THEME_CHOICES, default="default")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

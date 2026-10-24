@@ -5,19 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="same-origin">
   <meta name="csrf-token" content="{{ csrf_token }}">
-  <title>{{ title|default:"Control Plane" }} · RDR//OPS</title>
+  <title>{{ title|default:"Control Plane" }} · RoF//OPS</title>
   <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
   <link rel="stylesheet" href="{% static 'css/panel.css' %}">
+  {% if theme == "circus" %}<link rel="stylesheet" href="{% static 'css/theme-circus.css' %}">{% endif %}
   <script defer src="{% static 'js/htmx.min.js' %}"></script>
   <script defer src="{% static 'js/app.js' %}"></script>
   {% block head %}{% endblock %}
 </head>
-<body class="panel-shell" data-authenticated="{% if user.is_authenticated %}true{% else %}false{% endif %}">
+<body class="panel-shell{% if theme == "circus" %} theme-circus{% endif %}" data-authenticated="{% if user.is_authenticated %}true{% else %}false{% endif %}">
   <a class="skip-link" href="#main-content">Skip to content</a>
   <aside class="sidebar">
-    <a class="brand" href="{% url 'overview' %}" aria-label="RDR OPS overview">
+    <a class="brand" href="{% url 'overview' %}" aria-label="RoF OPS overview">
       <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="15"/><circle cx="20" cy="20" r="8"/><path d="M20 20 32 12M20 3v4M3 20h4M20 33v4M33 20h4"/><circle class="brand-dot" cx="29" cy="14" r="2"/></svg>
-      <span><strong>RDR//OPS</strong><small>CONTROL PLANE</small></span>
+      <span><strong>RoF//OPS</strong><small>CONTROL PLANE</small></span>
     </a>
     <div class="environment"><span class="status-dot"></span> SYSTEM ONLINE <span class="env-code">V1.0</span></div>
     <nav class="primary-nav" aria-label="Primary navigation">
@@ -47,7 +48,7 @@
   </aside>
   <div class="workspace">
     <header class="topbar">
-      <div><span class="topbar-path">RDR / {% if request.resolver_match.namespace %}{{ request.resolver_match.namespace }} / {% endif %}CONTROL</span><h1>{{ title }}</h1></div>
+      <div><span class="topbar-path">RoF / {% if request.resolver_match.namespace %}{{ request.resolver_match.namespace }} / {% endif %}CONTROL</span><h1>{{ title }}</h1></div>
       <div class="topbar-status"><button id="sound-toggle" class="text-button" type="button">SOUND: ON</button><span class="status-dot"></span><span>LIVE MONITOR</span><time id="utc-clock">UTC</time></div>
     </header>
     {% if messages %}<div class="message-stack" aria-live="polite">{% for message in messages %}<div class="toast {{ message.tags }}"><span>{{ message }}</span><button type="button" class="toast-close" aria-label="Dismiss notification">×</button></div>{% endfor %}</div>{% endif %}
