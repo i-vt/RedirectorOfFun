@@ -120,7 +120,11 @@ The stack starts PostgreSQL, the panel, the 404 collector, and the notification 
 docker compose --profile edge up -d --build
 ```
 
-The panel is served on the standard ports through the web tier: **http://localhost** and **https://localhost** (the latter uses an auto-generated self-signed certificate on first start; mount real certificates into `docker/certs` to replace it). Port 3000 is internal to the compose network. There is no operator IP allowlist by default — the service listens on 0.0.0.0 like a regular web service; to whitelist, use the commented `allow`/`deny` rules in `docker/panel-web.conf` or bind the published ports to a specific interface in `docker-compose.yml`. With `--edge`, the redirector owns 80/443 instead; reach the panel via the commented `127.0.0.1:3000:3000` bind in `docker-compose.yml` or an SSH tunnel. Run migrations as a release step; the provided panel entrypoint does this before starting web workers.
+The panel is served on the standard ports through the web tier: **http://localhost** and **https://localhost** (the latter uses an auto-generated self-signed certificate on first start; mount real certificates into `docker/certs` to replace it). Port 3000 is internal to the compose network.
+
+Out of the box the panel accepts **any** host and any client IP: `ALLOWED_HOSTS=*`, no `CSRF_TRUSTED_ORIGINS` entries (normal same-origin form posts pass CSRF checks), no `allow`/`deny` rules, and cookies not marked Secure (so plain-http browsing works from anywhere). Verified behavior: same-origin posts from arbitrary hosts/IPs succeed; cross-origin posts are still refused. Locking down is an explicit operator choice: list hostnames/IPs in `ALLOWED_HOSTS` in `.env`, uncomment the `allow`/`deny` rules in `docker/panel-web.conf`, or bind the published ports to a specific interface in `docker-compose.yml` — each has commented examples. When serving proper https, set `SESSION_COOKIE_SECURE=true` and `CSRF_COOKIE_SECURE=true`.
+
+With `--edge`, the redirector owns 80/443 instead; reach the panel via the commented `127.0.0.1:3000:3000` bind in `docker-compose.yml` or an SSH tunnel. Run migrations as a release step; the provided panel entrypoint does this before starting web workers.
 
 ### nginx 404 integration
 
