@@ -179,6 +179,32 @@ class PublicDispatchTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertTrue(HitEvent.objects.filter(category="not_found").exists())
 
+    def test_anonymous_untracked_path_gets_decoy(self):
+        response = self.client.get("/definitely-not-real")
+        self.assertEqual(response.status_code, 404)
+        self.assertContains(response, "Update Service", status_code=404)
+        self.assertContains(response, "/g/canary/", status_code=404)
+
+    def test_operator_untracked_path_gets_panel_404(self):
+        operator = Operator.objects.create_user(username="op404", password="long-enough-password-123")
+        self.client.force_login(operator)
+        response = self.client.get("/definitely-not-real")
+        self.assertEqual(response.status_code, 404)
+        self.assertNotContains(response, "Update Service", status_code=404)
+        self.assertContains(response, "RDR", status_code=404)
+
+    def test_root_serves_decoy_to_anonymous_and_dashboard_to_operator(self):
+        anonymous = Client()
+        response = anonymous.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Update Service")
+        self.assertContains(response, "/g/canary/")
+        operator = Operator.objects.create_user(username="oproot", password="long-enough-password-123")
+        self.client.force_login(operator)
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/panel/", response.url)
+
     def test_submission_flow_aes256(self):
         iv = os.urandom(16)
         key = hashlib.sha256(b"ops-key").digest()

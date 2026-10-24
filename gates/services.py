@@ -144,6 +144,11 @@ def gate_denied_response(link, request=None):
     return HttpResponse(status=404)
 
 
+def decoy_response(request=None, status=200):
+    """The public decoy page, as served by the edge for non-gate traffic."""
+    return _decoy(request, status=status)
+
+
 def hold_response(link, request=None):
     """What a not-yet-approved link returns until an operator releases it."""
     if link.placeholder == "placeholder":

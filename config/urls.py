@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.urls import include, path
-from django.views.generic import RedirectView
+
+from . import views
 
 urlpatterns = [
     path("django-admin/", admin.site.urls),
@@ -12,7 +13,7 @@ urlpatterns = [
     path("m/", include("gates.murls")),
     path("api/v1/", include("api.urls")),
     path("health/", include("config.health_urls")),
-    path("", RedirectView.as_view(pattern_name="overview", permanent=False)),
+    path("", views.root, name="root"),
 ]
 
 # The 404 handler doubles as the public entry point for operator-controlled
