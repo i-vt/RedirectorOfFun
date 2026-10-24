@@ -6,13 +6,15 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 RESET=0
 ASSUME_YES=0
 EDGE=0
+NO_CACHE=0
 for arg in "$@"; do
   case "$arg" in
     --reset) RESET=1 ;;
     --edge) EDGE=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
+    --no-cache) NO_CACHE=1 ;;
     *)
-      echo "Usage: ./start.sh [--edge] [--reset] [--yes]" >&2
+      echo "Usage: ./start.sh [--edge] [--reset] [--yes] [--no-cache]" >&2
       exit 2
       ;;
   esac
@@ -128,6 +130,11 @@ else
   echo "Starting the control plane, PostgreSQL, collector, notification worker, and web tier…"
 fi
 
+# A reset means fresh data against fresh code; cached layers from older
+# checkouts would silently carry stale code, so reset builds without cache.
+if [[ $RESET -eq 1 || $NO_CACHE -eq 1 ]]; then
+  "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" build --no-cache
+fi
 "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" up -d --build
 
 echo "Waiting for the panel to become ready…"
