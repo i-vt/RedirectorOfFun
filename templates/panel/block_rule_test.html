@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading"><div><span class="section-label">EDGE DEFENSE</span><h2>Test blocking rules</h2><p>Dry-run an IP and user agent against every rule (enabled and disabled) before you commit to a configuration. Intel is cached after the first lookup.</p></div></div>
+  <form method="post" class="filter-bar" style="margin-top:14px">
+    {% csrf_token %}
+    <label><span>IP ADDRESS</span><input class="field-input mono" name="ip" value="{{ request.POST.ip }}" placeholder="34.30.115.30"></label>
+    <label><span>USER AGENT</span><input class="field-input mono" name="ua" value="{{ request.POST.ua }}" placeholder="Go-http-client/1.1" style="min-width:280px"></label>
+    <button class="button" type="submit">Run test</button>
+  </form>
+  {% if result %}
+  <div class="stat-grid">
+    <div class="stat-card"><span class="section-label">INTEL</span><strong class="mono" style="font-size:.8rem">{{ result.intel|default:"no enrichment (yet)" }}</strong></div>
+    <div class="stat-card"><span class="section-label">MATCHED RULES</span><strong class="mono">{{ result.matched|length }}</strong></div>
+  </div>
+  {% if result.matched %}
+  <div class="table-wrap"><table><thead><tr><th>RULE</th><th>STATE</th><th>FIRED CONDITIONS</th></tr></thead><tbody>
+    {% for m in result.matched %}
+    <tr><td class="mono">{{ m.name }}</td><td>{% if m.enabled %}<span class="status-badge warn">WOULD BLOCK</span>{% else %}<span class="status-badge">disabled</span>{% endif %}</td><td class="mono muted">{{ m.fired|join:", " }}</td></tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% else %}
+  <div class="empty-state"><strong>No rules matched</strong><p>This visitor would pass through to the normal gate/decoy handling.</p></div>
+  {% endif %}
+  {% endif %}
+</section>
+{% endblock %}

@@ -14,8 +14,9 @@ from audit.services import record_event
 from notifications.services import notify
 
 from .models import (
-    AgentChannel, BannedIP, BUILTIN_DECOYS, DecoyPage, DeliveryLink, HitEvent,
-    Submission, SubmissionImage, validate_auto_rules,
+    AgentChannel, BannedIP, BlockingRule, BUILTIN_DECOYS, DecoyPage, DeliveryLink,
+    HitEvent, seed_blocking_rule_presets, Submission, SubmissionImage,
+    validate_auto_rules,
 )
 from .link_templates import LINK_TEMPLATES
 from . import services
@@ -459,6 +460,92 @@ def decoy_toggle(request, pk):
         record_event(action="gate.decoy_toggled", actor=request.user, target=page,
                      metadata={"active": page.active}, request=request)
     return redirect("gate-decoys")
+
+
+@login_required
+def block_rules_view(request):
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        if action == "seed_presets":
+            seed_blocking_rule_presets()
+            messages.info(request, "Preset rules ensured (new ones are created disabled).")
+            return redirect("gate-block-rules")
+        rule = BlockingRule(
+            name=request.POST.get("name", "").strip()[:120] or "unnamed rule",
+            logic=request.POST.get("logic", "all"),
+            auto_ban=request.POST.get("auto_ban") == "on",
+            created_by=request.user,
+        )
+        try:
+            rule.conditions = json.loads(request.POST.get("conditions", "[]"))
+        except json.JSONDecodeError as exc:
+            messages.error(request, f"Conditions must be valid JSON: {exc}")
+            return redirect("gate-block-rules")
+        try:
+            rule.full_clean()
+        except ValidationError as exc:
+            messages.error(request, "; ".join(
+                f"{field}: {', '.join(errors)}" for field, errors in exc.message_dict.items()))
+            return redirect("gate-block-rules")
+        rule.save()
+        record_event(action="gate.block_rule_created", actor=request.user, target=rule, request=request)
+        messages.success(request, f"Rule '{rule.name}' created.")
+        return redirect("gate-block-rules")
+    rules = BlockingRule.objects.all()
+    return render(request, "panel/block_rules.html", {
+        "title": "Blocking Rules", "rules": rules,
+        "logics": BlockingRule.LOGIC_CHOICES,
+        "condition_types": ["ip", "ua", "asn", "isp", "country", "city"],
+        "presets_json": json.dumps([
+            {"name": r.name, "logic": r.logic, "conditions": r.conditions}
+            for r in rules.filter(preset=True)]),
+    })
+
+
+@login_required
+@transaction.atomic
+def block_rule_toggle(request, pk):
+    rule = get_object_or_404(BlockingRule, pk=pk)
+    if request.method == "POST":
+        rule.enabled = not rule.enabled
+        rule.save(update_fields=["enabled"])
+        record_event(action="gate.block_rule_toggled", actor=request.user, target=rule,
+                     metadata={"enabled": rule.enabled}, request=request)
+    return redirect("gate-block-rules")
+
+
+@login_required
+@transaction.atomic
+def block_rule_delete(request, pk):
+    rule = get_object_or_404(BlockingRule, pk=pk)
+    if request.method == "POST":
+        if rule.preset:
+            messages.error(request, "Preset rules cannot be deleted, only disabled.")
+            return redirect("gate-block-rules")
+        name = rule.name
+        rule.delete()
+        record_event(action="gate.block_rule_deleted", actor=request.user,
+                     metadata={"name": name}, request=request)
+        messages.success(request, f"Rule '{name}' deleted.")
+    return redirect("gate-block-rules")
+
+
+@login_required
+def block_rule_test(request):
+    result = None
+    if request.method == "POST":
+        ip = request.POST.get("ip", "").strip()[:64]
+        ua = request.POST.get("ua", "").strip()[:1000]
+        intel = services.get_ip_intel(ip)
+        matched = []
+        for rule in BlockingRule.objects.all():
+            hit, fired = services.rule_matches(rule, ip=ip, user_agent=ua, intel=intel)
+            if hit:
+                matched.append({"name": rule.name, "enabled": rule.enabled, "fired": fired})
+        result = {"ip": ip, "ua": ua, "intel": str(intel) if intel else None, "matched": matched}
+    return render(request, "panel/block_rule_test.html", {
+        "title": "Test Blocking Rules", "result": result,
+    })
 
 
 @login_required

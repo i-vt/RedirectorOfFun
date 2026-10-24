@@ -62,9 +62,15 @@ def filtered_events(request):
 def events_view(request):
     paginator = Paginator(filtered_events(request), 40)
     page = paginator.get_page(request.GET.get("page"))
+    intel = {}
+    ips = [e.source_ip for e in page.object_list if e.source_ip]
+    if ips:
+        from gates.models import IPIntel
+        intel = {i.ip: i for i in IPIntel.objects.filter(ip__in=ips)}
     template = "panel/_events_table.html" if request.headers.get("HX-Request") else "panel/events.html"
     return render(request, template, {
         "title": "404 Events", "page": page, "events": page.object_list,
+        "intel": intel,
         "show_identifiers": request.GET.get("identifiers") == "1",
     })
 

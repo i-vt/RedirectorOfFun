@@ -14,8 +14,16 @@
     <button class="button secondary" type="submit">Apply filters</button>
   </form>
   <div id="events-table">{% include "panel/_events_table.html" %}</div>
+  <div style="margin-top:10px"><button class="text-button" type="button" id="expand-all">EXPAND ALL</button> <button class="text-button" type="button" id="condense-all">CONDENSE ALL</button></div>
 </section>
 <script>
+const revealRow = (row) => {
+  row.style.display = "";
+  row.classList.remove("just-shown");
+  void row.offsetWidth;
+  row.classList.add("just-shown");
+  setTimeout(() => row.classList.remove("just-shown"), 300);
+};
 document.addEventListener("click", (event) => {
   const info = event.target.closest(".info-toggle");
   if (info) {
@@ -23,13 +31,14 @@ document.addEventListener("click", (event) => {
     if (row) {
       const showing = row.style.display === "none";
       row.style.display = showing ? "" : "none";
-      if (showing) {
-        row.classList.remove("just-shown");
-        void row.offsetWidth;
-        row.classList.add("just-shown");
-        setTimeout(() => row.classList.remove("just-shown"), 300);
-      }
+      if (showing) revealRow(row);
     }
+  }
+  if (event.target.closest("#expand-all")) {
+    document.querySelectorAll(".event-detail").forEach(revealRow);
+  }
+  if (event.target.closest("#condense-all")) {
+    document.querySelectorAll(".event-detail").forEach(row => { row.style.display = "none"; });
   }
 });
 (function () {

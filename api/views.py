@@ -12,12 +12,14 @@ from analytics.views import filtered_events
 from audit.models import AuditEvent
 from audit.services import record_event
 from gates import services as gate_services
-from gates.models import AgentChannel, BannedIP, DecoyPage, DeliveryLink, HitEvent, Submission
+from gates.models import (
+    AgentChannel, BannedIP, BlockingRule, DecoyPage, DeliveryLink, HitEvent, Submission,
+)
 from notifications.models import NotificationOutbox, NotificationPreference, PushSubscription
 from .pagination import AuditCursorPagination, EventCursorPagination, HitCursorPagination, OperatorPagination
 from .serializers import (
-    AgentChannelSerializer, AuditEventSerializer, BannedIPSerializer, DecoyPageSerializer,
-    DeliveryLinkSerializer, HitEventSerializer, NotFoundEventSerializer,
+    AgentChannelSerializer, AuditEventSerializer, BannedIPSerializer, BlockingRuleSerializer,
+    DecoyPageSerializer, DeliveryLinkSerializer, HitEventSerializer, NotFoundEventSerializer,
     NotificationPreferenceSerializer, NotificationSerializer, OperatorSerializer,
     PushSubscriptionSerializer, SubmissionSerializer,
 )
@@ -304,6 +306,55 @@ class DecoyPageDetail(generics.RetrieveUpdateDestroyAPIView):
                                                 template_key="update-service").first()
             if fallback is not None:
                 DecoyPage.objects.filter(pk=fallback.pk).update(is_default=True)
+
+
+class BlockingRuleList(generics.ListCreateAPIView):
+    serializer_class = BlockingRuleSerializer
+
+    def get_queryset(self):
+        return BlockingRule.objects.all()
+
+    def perform_create(self, serializer):
+        rule = serializer.save(created_by=self.request.user)
+        record_event(action="gate.block_rule_created", actor=self.request.user, target=rule,
+                     metadata={"via": "api"}, request=self.request)
+
+
+class BlockingRuleDetail(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = BlockingRuleSerializer
+    queryset = BlockingRule.objects.all()
+
+    def perform_update(self, serializer):
+        rule = serializer.save()
+        record_event(action="gate.block_rule_updated", actor=self.request.user, target=rule,
+                     request=self.request)
+
+    def perform_destroy(self, instance):
+        if instance.preset:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError("Preset rules cannot be deleted, only disabled.")
+        name = instance.name
+        instance.delete()
+        record_event(action="gate.block_rule_deleted", actor=self.request.user,
+                     metadata={"name": name, "via": "api"}, request=self.request)
+
+
+class BlockingRuleTest(APIView):
+    def post(self, request):
+        ip = str(request.data.get("ip", "")).strip()[:64]
+        ua = str(request.data.get("ua", "")).strip()[:1000]
+        intel = gate_services.get_ip_intel(ip)
+        matched = []
+        for rule in BlockingRule.objects.all():
+            hit, fired = gate_services.rule_matches(rule, ip=ip, user_agent=ua, intel=intel)
+            if hit:
+                matched.append({"name": rule.name, "enabled": rule.enabled, "fired": fired})
+        return Response({
+            "ip": ip, "user_agent": ua,
+            "intel": {"asn": intel.asn, "org": intel.org, "country_code": intel.country_code,
+                      "city": intel.city} if intel else None,
+            "matched": matched,
+        })
 
 
 class DecoyPageSetDefault(APIView):

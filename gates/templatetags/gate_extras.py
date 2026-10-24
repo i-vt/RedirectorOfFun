@@ -22,3 +22,20 @@ def as_json(value):
         return json.dumps(value, indent=2)
     except (TypeError, ValueError):
         return ""
+
+
+@register.filter
+def get_item(mapping, key):
+    try:
+        return mapping.get(key)
+    except AttributeError:
+        return None
+
+
+@register.filter
+def json_compact(value):
+    """One-line JSON for table cells."""
+    try:
+        return json.dumps(value, separators=(", ", ": "))
+    except (TypeError, ValueError):
+        return str(value)

@@ -10,7 +10,8 @@ class GatesConfig(AppConfig):
         from django.db.models.signals import post_migrate
 
         def _seed(sender, **kwargs):
-            from .models import seed_builtin_decoys
+            from .models import seed_builtin_decoys, seed_blocking_rule_presets
             seed_builtin_decoys()
+            seed_blocking_rule_presets()
 
         post_migrate.connect(_seed, sender=self)

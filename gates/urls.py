@@ -26,4 +26,8 @@ urlpatterns = [
     path("decoys/<int:pk>/default/", views.decoy_set_default, name="gate-decoy-default"),
     path("decoys/<int:pk>/toggle/", views.decoy_toggle, name="gate-decoy-toggle"),
     path("decoys/<int:pk>/delete/", views.decoy_delete, name="gate-decoy-delete"),
+    path("block-rules/", views.block_rules_view, name="gate-block-rules"),
+    path("block-rules/<int:pk>/toggle/", views.block_rule_toggle, name="gate-block-rule-toggle"),
+    path("block-rules/<int:pk>/delete/", views.block_rule_delete, name="gate-block-rule-delete"),
+    path("block-rules/test/", views.block_rule_test, name="gate-block-rule-test"),
 ]

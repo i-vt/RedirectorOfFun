@@ -1,3 +1,4 @@
+{% load gate_extras %}
 {% if events %}<div class="table-wrap"><table><thead><tr><th>OCCURRED / UTC</th><th>METHOD</th><th>REQUESTED PATH</th><th>CLIENT</th><th>STATUS</th><th></th></tr></thead><tbody>{% for event in events %}
 <tr>
   <td class="mono muted nowrap">{{ event.occurred_at|date:"Y-m-d H:i:s" }}</td>
@@ -15,6 +16,12 @@
     <div><dt>RAW IP</dt><dd class="mono">{{ event.source_ip|default:"—" }}</dd></div>
     <div><dt>IP HASH</dt><dd class="mono">{{ event.source_ip_hash|default:"—" }}</dd></div>
     <div><dt>USER AGENT</dt><dd class="mono" style="max-width:520px;overflow-wrap:anywhere">{{ event.user_agent|default:"—" }}</dd></div>
+    {% with info=intel|get_item:event.source_ip %}
+    {% if info %}
+    <div><dt>ASN / ISP</dt><dd class="mono">AS{{ info.asn }} {{ info.org }}</dd></div>
+    <div><dt>GEO (INTEL)</dt><dd>{{ info.city }}{% if info.city and info.country_code %}, {% endif %}{{ info.country_code|default:"—" }}</dd></div>
+    {% endif %}
+    {% endwith %}
     <div><dt>GEO</dt><dd>{{ event.city }}{% if event.city and event.country_code %}, {% endif %}{{ event.country_code|default:"—" }}</dd></div>
     <div><dt>REQUEST ID</dt><dd class="mono">{{ event.request_id }}</dd></div>
     <div><dt>INGESTED / UTC</dt><dd class="mono">{{ event.created_at|date:"Y-m-d H:i:s" }}</dd></div>

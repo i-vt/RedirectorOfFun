@@ -1,4 +1,5 @@
 """Core logic for the release-gate system: evaluation, serving, banning, sync."""
+import functools
 import hashlib
 import ipaddress
 import json
@@ -8,6 +9,7 @@ import urllib.request
 
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.db.models import F
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import redirect
 from django.template.loader import render_to_string
@@ -21,8 +23,8 @@ from .crypto_utils import (
     parse_submission_json, validate_expected_fields, verify_totp,
 )
 from .models import (
-    AgentChannel, BannedIP, BUILTIN_DECOYS, DecoyPage, DeliveryLink, HitEvent,
-    Submission, SubmissionImage,
+    AgentChannel, BannedIP, BlockingRule, BUILTIN_DECOYS, DecoyPage, DeliveryLink,
+    HitEvent, IPIntel, Submission, SubmissionImage,
 )
 
 logger = logging.getLogger(__name__)
@@ -644,6 +646,144 @@ def fingerprint_passed(link, request) -> bool:
     if ok and link.ja4_fingerprint:
         ok = request.headers.get("X-JA4-Fingerprint", "") == link.ja4_fingerprint
     return ok
+
+
+# ─── Blocking rules ───────────────────────────────────────────────────────────
+
+_intel_cache = {}
+
+
+def get_ip_intel(ip):
+    """Cached ASN/ISP/geo lookup for an address (best-effort).
+
+    Successful responses are stored in the database; failures are not, so a
+    later request retries. Rules with intel conditions only fire when data
+    exists - treat them as opportunistic.
+    """
+    if not ip:
+        return None
+    if ip in _intel_cache:
+        return _intel_cache[ip]
+    intel = IPIntel.objects.filter(ip=ip).first()
+    if intel is None and getattr(settings, "IP_INTEL_ENABLED", True):
+        intel = _fetch_ip_intel(ip)
+    _intel_cache[ip] = intel
+    return intel
+
+
+def _fetch_ip_intel(ip):
+    fields = "status,message,countryCode,city,isp,org,as,query"
+    url = f"http://ip-api.com/json/{ip}?fields={fields}"
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "redirector-control-plane/1.0"})
+        with urllib.request.urlopen(request, timeout=getattr(settings, "IP_INTEL_TIMEOUT", 2.5)) as response:
+            payload = json.loads(response.read().decode())
+    except (OSError, ValueError):
+        return None
+    if payload.get("status") != "success" or payload.get("query") != ip:
+        return None
+    asn, _, org = str(payload.get("as", "")).partition(" ")
+    return IPIntel.objects.create(
+        ip=ip,
+        asn=asn.upper().removeprefix("AS").strip(),
+        org=(org or payload.get("isp", ""))[:200],
+        country_code=str(payload.get("countryCode", ""))[:2].upper(),
+        city=str(payload.get("city", ""))[:120],
+        source="ip-api.com",
+    )
+
+
+@functools.lru_cache(maxsize=256)
+def _compiled_pattern(pattern):
+    return re.compile(pattern)
+
+
+def _condition_value(condition_type, ip, user_agent, intel):
+    if condition_type == "ip":
+        return ip
+    if condition_type == "ua":
+        return user_agent
+    if intel is None:
+        return None
+    return {
+        "asn": intel.asn,
+        "isp": intel.org,
+        "country": intel.country_code.upper(),
+        "city": intel.city,
+    }.get(condition_type)
+
+
+def rule_matches(rule, *, ip, user_agent, intel):
+    """Evaluate one rule. Returns (matched, fired_conditions).
+
+    A condition whose value is unavailable (missing intel enrichment) makes
+    the whole rule indeterminate: it never fires under ANY logic, because
+    "NOT unknown" must not mean "match everything".
+    """
+    results, fired, undetermined = [], [], False
+    for condition in rule.conditions or []:
+        value = _condition_value(condition.get("type"), ip, user_agent, intel)
+        if value is None or value == "":
+            undetermined = True
+            continue
+        try:
+            matched = _compiled_pattern(condition["pattern"]).search(str(value)[:1000]) is not None
+        except re.error:
+            matched = False
+        if condition.get("negate"):
+            matched = not matched
+        results.append(matched)
+        if matched:
+            fired.append(condition.get("type"))
+    if not results:
+        return False, fired
+    if rule.logic == "any":
+        # A determined match decides the rule; unknowns cannot confirm a
+        # non-match.
+        return any(results), fired
+    # all / not need every condition evaluable: "all matched" and "none
+    # matched" are both unprovable while any input is unknown.
+    if undetermined:
+        return False, fired
+    if rule.logic == "all":
+        return all(results), fired
+    return not any(results), fired
+
+
+def evaluate_blocking_rules(request, ip):
+    """First enabled rule matching this request, or None.
+
+    Intel enrichment only runs when at least one enabled rule needs it and
+    the address is not cached.
+    """
+    rules = list(BlockingRule.objects.filter(enabled=True))
+    if not rules:
+        return None
+    user_agent = request.META.get("HTTP_USER_AGENT", "")[:1000]
+    needs_intel = any({c.get("type") for c in r.conditions} & {"asn", "isp", "country", "city"}
+                      for r in rules)
+    intel = get_ip_intel(ip) if (needs_intel and ip) else _intel_cache.get(ip)
+    for rule in rules:
+        matched, fired = rule_matches(rule, ip=ip, user_agent=user_agent, intel=intel)
+        if matched:
+            return rule, fired
+    return None
+
+
+def apply_blocking_rule(request, ip, rule, fired):
+    BlockingRule.objects.filter(pk=rule.pk).update(match_count=F("match_count") + 1)
+    detail = {"rule": rule.name, "fired": fired, "auto_ban": rule.auto_ban}
+    if rule.auto_ban and ip and not _is_loopback(ip):
+        ban, created = BannedIP.objects.get_or_create(
+            ip=ip, defaults={"note": f"auto-ban by rule '{rule.name}'", "auto_created": True})
+        detail["banned"] = created or ban.active
+        try:
+            sync_nginx_files()
+        except OSError as exc:
+            logger.warning("nginx ban sync failed after rule auto-ban of %s: %s", ip, exc)
+    record_hit("blocked", request=request, path=request.path, status_code=200, detail=detail)
+    logger.info("blocked %s by rule '%s' (%s)", ip, rule.name, ", ".join(fired))
+    return _decoy(request)
 
 
 # Decoy canaries.

@@ -21,8 +21,9 @@ from .crypto_utils import (
     parse_submission_json, totp_code, verify_totp, xor_apply,
 )
 from .models import (
-    AgentChannel, BannedIP, BotState, DecoyPage, DeliveryLink, HitEvent, Submission,
-    SubmissionImage, seed_builtin_decoys, validate_auto_rules,
+    AgentChannel, BannedIP, BlockingRule, BotState, DecoyPage, DeliveryLink, HitEvent,
+    IPIntel, Submission, SubmissionImage, seed_blocking_rule_presets, seed_builtin_decoys,
+    validate_auto_rules,
 )
 from .selftest import is_healthy, run_selftest
 from . import services, telegram
@@ -1220,6 +1221,161 @@ class EventIdentifierTests(TestCase):
         self.assertEqual(event.source_ip, "203.0.113.55")
         self.assertEqual(event.user_agent, "Mozilla/5.0")
         self.assertEqual(event.method, "GET")
+
+
+@tag("unit")
+class BlockingRuleEngineTests(TestCase):
+    def setUp(self):
+        self.intel = IPIntel(ip="34.30.115.30", asn="396982", org="Google LLC",
+                             country_code="US", city="Council Bluffs")
+
+    def test_and_logic(self):
+        rule = BlockingRule(name="aws", logic="all", conditions=[
+            {"type": "asn", "pattern": r"^396982$"},
+            {"type": "ua", "pattern": r"(?i)go-http-client"},
+        ])
+        matched, fired = services.rule_matches(rule, ip="34.30.115.30",
+                                               user_agent="Go-http-client/1.1", intel=self.intel)
+        self.assertTrue(matched)
+        self.assertEqual(set(fired), {"asn", "ua"})
+        matched, _ = services.rule_matches(rule, ip="34.30.115.30",
+                                           user_agent="Mozilla/5.0", intel=self.intel)
+        self.assertFalse(matched)
+
+    def test_or_logic(self):
+        rule = BlockingRule(name="either", logic="any", conditions=[
+            {"type": "ua", "pattern": r"(?i)virustotal"},
+            {"type": "asn", "pattern": r"^16509$"},
+        ])
+        matched, _ = services.rule_matches(rule, ip="1.1.1.1",
+                                           user_agent="AppEngine-Google; virustotalcloud", intel=None)
+        self.assertTrue(matched)
+
+    def test_not_logic_and_negation(self):
+        rule = BlockingRule(name="outside-us", logic="not", conditions=[
+            {"type": "country", "pattern": r"^US$"},
+        ])
+        matched, _ = services.rule_matches(rule, ip="103.108.94.174",
+                                           user_agent="Mozilla/5.0",
+                                           intel=IPIntel(ip="103.108.94.174", asn="133480",
+                                                         org="5G Network Operations", country_code="NZ"))
+        self.assertTrue(matched)
+        matched, _ = services.rule_matches(rule, ip="34.30.115.30",
+                                           user_agent="Mozilla/5.0", intel=self.intel)
+        self.assertFalse(matched)
+        negated = BlockingRule(name="not-curl", logic="all", conditions=[
+            {"type": "ua", "pattern": r"(?i)^curl", "negate": True},
+        ])
+        matched, _ = services.rule_matches(negated, ip="1.1.1.1", user_agent="Mozilla/5.0", intel=None)
+        self.assertTrue(matched)
+        matched, _ = services.rule_matches(negated, ip="1.1.1.1", user_agent="curl/8.0", intel=None)
+        self.assertFalse(matched)
+
+    def test_missing_intel_never_matches_intel_conditions(self):
+        rule = BlockingRule(name="asn-only", logic="any", conditions=[
+            {"type": "asn", "pattern": r"^.*$"},
+        ])
+        matched, _ = services.rule_matches(rule, ip="9.9.9.9", user_agent="", intel=None)
+        self.assertFalse(matched)
+
+    def test_condition_validator(self):
+        from django.core.exceptions import ValidationError
+        from gates.models import validate_blocking_conditions
+        validate_blocking_conditions([{"type": "ip", "pattern": r"^10\."}])
+        with self.assertRaises(ValidationError):
+            validate_blocking_conditions([{"type": "asn"}])
+        with self.assertRaises(ValidationError):
+            validate_blocking_conditions([{"type": "foo", "pattern": "x"}])
+        with self.assertRaises(ValidationError):
+            validate_blocking_conditions([{"type": "ip", "pattern": "([bad"}])
+
+
+@tag("functional")
+@override_settings(AUTO_BAN_THRESHOLD=0, IP_INTEL_ENABLED=False)
+class BlockingRuleFlowTests(TestCase):
+    def setUp(self):
+        seed_blocking_rule_presets()
+        self.operator = Operator.objects.create_user(username="brlop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def test_presets_seeded_disabled(self):
+        self.assertEqual(BlockingRule.objects.filter(preset=True).count(), 8)
+        self.assertFalse(BlockingRule.objects.filter(enabled=True).exists())
+
+    def test_enabled_rule_blocks_and_records(self):
+        rule = BlockingRule.objects.create(
+            name="block curl", logic="any", conditions=[{"type": "ua", "pattern": r"(?i)^curl"}],
+            enabled=True)
+        response = self.public.get("/probe-path", HTTP_USER_AGENT="curl/8.0")
+        self.assertContains(response, "Update Service")  # decoy, 200 like a ban
+        hit = HitEvent.objects.get(category="blocked")
+        self.assertEqual(hit.detail["rule"], "block curl")
+        rule.refresh_from_db()
+        self.assertEqual(rule.match_count, 1)
+
+    def test_auto_ban_adds_ip(self):
+        BlockingRule.objects.create(
+            name="block wget", logic="any", conditions=[{"type": "ua", "pattern": r"(?i)^wget"}],
+            enabled=True, auto_ban=True)
+        self.public.get("/probe-path", HTTP_USER_AGENT="wget/1.21", REMOTE_ADDR="203.0.113.44")
+        self.assertTrue(BannedIP.is_banned("203.0.113.44"))
+        followup = self.public.get("/probe-path", REMOTE_ADDR="203.0.113.44")
+        self.assertContains(followup, "Update Service")
+        self.assertTrue(HitEvent.objects.filter(category="banned").exists())
+
+    def test_disabled_rule_does_nothing(self):
+        BlockingRule.objects.create(
+            name="off", logic="any", conditions=[{"type": "ua", "pattern": r"(?i)^curl"}], enabled=False)
+        response = self.public.get("/probe-path", HTTP_USER_AGENT="curl/8.0")
+        self.assertContains(response, "Update Service", status_code=404)  # plain 404 decoy
+        self.assertFalse(HitEvent.objects.filter(category="blocked").exists())
+
+    def test_panel_pages_render(self):
+        for url in [reverse("gate-block-rules"), reverse("gate-block-rule-test")]:
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        response = self.client.post(reverse("gate-block-rule-test"),
+                                    {"ip": "1.1.1.1", "ua": "Mozilla/5.0 (operator browser)"})
+        self.assertContains(response, "No rules matched")
+
+    def test_rule_create_via_panel_and_api(self):
+        response = self.client.post(reverse("gate-block-rules"), {
+            "name": "ua rule", "logic": "any", "auto_ban": "on",
+            "conditions": '[{"type": "ua", "pattern": "(?i)python"}]',
+        })
+        self.assertEqual(response.status_code, 302)
+        rule = BlockingRule.objects.get(name="ua rule")
+        self.assertTrue(rule.auto_ban)
+        response = self.client.post("/api/v1/block-rules/", data={
+            "name": "api rule", "logic": "all", "conditions": [{"type": "ip", "pattern": "^10\\."}],
+        }, content_type="application/json")
+        self.assertEqual(response.status_code, 201)
+        # invalid regex rejected
+        response = self.client.post("/api/v1/block-rules/", data={
+            "name": "bad", "logic": "all", "conditions": [{"type": "ip", "pattern": "([x"}],
+        }, content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_api_dry_run_endpoint(self):
+        BlockingRule.objects.create(
+            name="vt-custom", logic="any", conditions=[{"type": "ua", "pattern": "(?i)virustotal"}],
+            enabled=False)
+        response = self.client.post("/api/v1/block-rules/test/", data={
+            "ip": "35.187.132.69", "ua": "AppEngine-Google; virustotalcloud"}, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        names = {m["name"] for m in body["matched"]}
+        self.assertEqual(names, {"vt-custom", "preset: VirusTotal egress"})
+        self.assertTrue(all(m["enabled"] is False for m in body["matched"]))
+
+    def test_events_page_has_bulk_controls(self):
+        from analytics.models import NotFoundEvent
+        NotFoundEvent.objects.create(request_id="bulk-1", occurred_at=timezone.now(), method="GET",
+                                     path="/x", source_ip="203.0.113.7", user_agent="curl/8")
+        response = self.client.get("/panel/events/")
+        self.assertContains(response, "expand-all")
+        self.assertContains(response, "condense-all")
 
 
 @tag("functional")

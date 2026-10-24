@@ -2,7 +2,9 @@ from rest_framework import serializers
 from accounts.models import Operator
 from analytics.models import NotFoundEvent
 from audit.models import AuditEvent
-from gates.models import AgentChannel, BannedIP, DecoyPage, DeliveryLink, HitEvent, Submission
+from gates.models import (
+    AgentChannel, BannedIP, BlockingRule, DecoyPage, DeliveryLink, HitEvent, Submission,
+)
 from notifications.models import NotificationOutbox, NotificationPreference, PushSubscription
 
 
@@ -122,3 +124,11 @@ class DecoyPageSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "kind", "template_key", "redirect_url", "active",
                   "is_default", "created_at"]
         read_only_fields = ["is_default", "created_at"]
+
+
+class BlockingRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BlockingRule
+        fields = ["id", "name", "logic", "conditions", "enabled", "auto_ban",
+                  "preset", "match_count", "created_at"]
+        read_only_fields = ["preset", "match_count", "created_at"]

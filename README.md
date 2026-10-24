@@ -34,6 +34,7 @@
 | Key distribution | One-time and time-limited URLs that plainly display a key |
 | pwndrop proxying | Server-side fetch so the pwndrop location is never exposed |
 | Operator IP bans | Manual bans plus auto-ban on suspicious-activity threshold; banned IPs get the decoy |
+| Blocking rules | Regex rules over IP / user agent / ASN / ISP / country / city with AND / OR / NONE logic, presets (VirusTotal, AWS/GCP/Azure ASNs, scanner UAs), dry-run testing, optional auto-ban |
 | Per-agent C2 URLs | Unique `/a/<token>` beacon paths with per-agent UA validation, rotation, hit tracking |
 | Notifications | Panel toast + bing, browser notifications, Telegram for downloads, approvals, suspicious events |
 | Telegram approvals | Reply `approve <id>` / `deny <id>` to the bot to decide submissions from your phone |
@@ -238,6 +239,8 @@ With `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` set, run the poller (`manage.py p
 Each operator can enable TOTP under `/panel/security/` (enrollment shows the secret + `otpauth://` URI; confirming a generated code activates it and reveals eight single-use backup codes, stored only as SHA-256 hashes). Login becomes two-step: password, then code. Backup codes burn on use. Administrators can reset another operator's 2FA from the operators page (lockout recovery), which also invalidates that operator's sessions. Verified against RFC 6238 test vectors.
 
 **Auto-ban**: an IP that triggers `AUTO_BAN_THRESHOLD` (default 5) suspicious events within an hour is banned automatically and the nginx deny include is rewritten. Set `NGINX_BAN_INCLUDE` and `NGINX_AGENT_ROUTES_INCLUDE` to enable file sync; then reload nginx (`manage.py sync_nginx` reminds you). Banned IPs receive the default decoy page.
+
+**Blocking rules** (Blocking Rules in the panel, `/api/v1/block-rules/`): each rule is a set of regex conditions over `ip`, `ua`, `asn`, `isp`, `country`, `city`, combined with ALL (AND) / ANY (OR) / NONE (NOT) logic plus per-condition `negate`. Example: `{"type": "ua", "pattern": "(?i)virustotal"}` with ANY, or AWS scanners via `asn ^(16509|14618)$` AND a scripting-UA pattern. ASN/ISP/geo come from best-effort enrichment (ip-api.com, cached per address in the panel database; `IP_INTEL_ENABLED=false` keeps the panel offline) — when enrichment is missing, intel conditions are indeterminate and the rule will not fire. Matching visitors get the decoy and a `blocked` Gate Event; `auto_ban` also adds them to the IP bans. Eight presets (disabled) seed on first start: VirusTotal egress, AWS/GCP/Azure ASNs, known scanner UAs, scripting UAs, hosting providers, and an "everything outside the US" example. Use the panel's Test page (or `POST /api/v1/block-rules/test/`) to dry-run an IP + UA against every rule before enabling — operators are not exempt from enabled rules.
 
 **Agent channels**: each channel gets a unique `/a/<token>` path with its own UA regex. The panel writes exact-match nginx location blocks (proxied to `c2_backend`, non-matching UA → bare 404). Rotate a token to burn a deployed agent; unknown tokens get a bare 404.
 

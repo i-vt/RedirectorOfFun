@@ -30,4 +30,7 @@ urlpatterns = [
     path("decoys/", views.DecoyPageList.as_view(), name="api-decoys"),
     path("decoys/<int:pk>/", views.DecoyPageDetail.as_view(), name="api-decoy-detail"),
     path("decoys/<int:pk>/default/", views.DecoyPageSetDefault.as_view(), name="api-decoy-default"),
+    path("block-rules/", views.BlockingRuleList.as_view(), name="api-block-rules"),
+    path("block-rules/<int:pk>/", views.BlockingRuleDetail.as_view(), name="api-block-rule-detail"),
+    path("block-rules/test/", views.BlockingRuleTest.as_view(), name="api-block-rule-test"),
 ]

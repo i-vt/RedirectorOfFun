@@ -44,6 +44,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "config.middleware.RequestIDMiddleware",
+    "gates.middleware.BlockingRuleMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -144,6 +145,10 @@ NGINX_BAN_INCLUDE = os.getenv("NGINX_BAN_INCLUDE", "")
 NGINX_AGENT_ROUTES_INCLUDE = os.getenv("NGINX_AGENT_ROUTES_INCLUDE", "")
 PWNDROP_TIMEOUT = int(os.getenv("PWNDROP_TIMEOUT", "10"))
 PWNDROP_MAX_BYTES = int(os.getenv("PWNDROP_MAX_BYTES", str(512 * 1024 * 1024)))
+# Best-effort IP enrichment (ASN/ISP/geo) for blocking rules; lookups are
+# cached in the database. Disable to keep the panel fully offline.
+IP_INTEL_ENABLED = env_bool("IP_INTEL_ENABLED", True)
+IP_INTEL_TIMEOUT = float(os.getenv("IP_INTEL_TIMEOUT", "2.5"))
 DECISION_UNDO_SECONDS = int(os.getenv("DECISION_UNDO_SECONDS", "10"))
 DECOY_CANARIES = env_bool("DECOY_CANARIES", True)
 REDIRECTOR_DOMAINS = [d.strip() for d in os.getenv("REDIRECTOR_DOMAINS", "").split(",") if d.strip()]

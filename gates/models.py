@@ -374,6 +374,107 @@ class DecoyPage(models.Model):
             raise ValidationError({"redirect_url": "set the redirect URL"})
 
 
+def validate_blocking_conditions(value):
+    """Validate the rule conditions DSL: a list of {type, pattern, negate?}."""
+    import re
+    if value in (None, ""):
+        return
+    if not isinstance(value, list):
+        raise ValidationError("Conditions must be a list.")
+    allowed = {"ip", "ua", "asn", "isp", "country", "city"}
+    for index, condition in enumerate(value):
+        if not isinstance(condition, dict):
+            raise ValidationError(f"Condition {index} must be an object.")
+        if condition.get("type") not in allowed:
+            raise ValidationError(f"Condition {index}: type must be one of {sorted(allowed)}.")
+        pattern = condition.get("pattern", "")
+        if not isinstance(pattern, str) or not pattern:
+            raise ValidationError(f"Condition {index}: pattern must be a non-empty string.")
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ValidationError(f"Condition {index}: invalid regex: {exc}")
+        if "negate" in condition and not isinstance(condition["negate"], bool):
+            raise ValidationError(f"Condition {index}: negate must be a boolean.")
+
+
+# Built-in rule presets, seeded disabled. Enable and adjust to taste.
+BLOCK_RULE_PRESETS = [
+    {"name": "preset: VirusTotal egress", "logic": "any", "conditions": [
+        {"type": "ua", "pattern": r"(?i)virustotal"}]},
+    {"name": "preset: AWS scanners", "logic": "all", "conditions": [
+        {"type": "asn", "pattern": r"^(16509|14618)$"},
+        {"type": "ua", "pattern": r"(?i)(bot|scanner|curl|wget|python-requests|go-http-client|scrapy)"}]},
+    {"name": "preset: GCP scanners", "logic": "any", "conditions": [
+        {"type": "asn", "pattern": r"^(15169|396982)$"}]},
+    {"name": "preset: Azure scanners", "logic": "any", "conditions": [
+        {"type": "asn", "pattern": r"^(8075)$"}]},
+    {"name": "preset: known scanner UAs", "logic": "any", "conditions": [
+        {"type": "ua", "pattern": r"(?i)(sqlmap|nmap|nikto|masscan|nuclei|acunetix|nessus|wpscan|dirbuster|hydra|metasploit|openvas)"}]},
+    {"name": "preset: scripting UAs", "logic": "any", "conditions": [
+        {"type": "ua", "pattern": r"(?i)^(curl|wget|python-requests|go-http-client|libwww-perl|java/)"}]},
+    {"name": "preset: hosting providers", "logic": "any", "conditions": [
+        {"type": "isp", "pattern": r"(?i)(hosting|hostroyale|egihosting|datacamp|m247|digitalocean|ovh|hetzner|leaseweb)"}]},
+    {"name": "preset: everything outside the US", "logic": "not", "conditions": [
+        {"type": "country", "pattern": r"^US$"}]},
+]
+
+
+def seed_blocking_rule_presets():
+    from django.apps import apps
+    BlockingRule = apps.get_model("gates", "BlockingRule")
+    for preset in BLOCK_RULE_PRESETS:
+        BlockingRule.objects.get_or_create(name=preset["name"], defaults={
+            "logic": preset["logic"], "conditions": preset["conditions"],
+            "enabled": False, "preset": True,
+        })
+
+
+class BlockingRule(models.Model):
+    """Block visitors by combining regex conditions over IP, user agent, and
+    enriched network identity (ASN / ISP / country / city) with AND/OR/NONE
+    logic and per-condition negation."""
+
+    LOGIC_CHOICES = [
+        ("all", "ALL conditions match (AND)"),
+        ("any", "ANY condition matches (OR)"),
+        ("not", "NONE of the conditions match (NOT)"),
+    ]
+
+    name = models.CharField(max_length=120)
+    logic = models.CharField(max_length=6, choices=LOGIC_CHOICES, default="all")
+    conditions = models.JSONField(default=list, validators=[validate_blocking_conditions])
+    enabled = models.BooleanField(default=True)
+    auto_ban = models.BooleanField(default=False, help_text="Also ban the matched IP address.")
+    preset = models.BooleanField(default=False)
+    match_count = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="blocking_rules")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-enabled", "-created_at"]
+
+    def __str__(self):
+        return self.name
+
+
+class IPIntel(models.Model):
+    """Cached network identity for an address (ASN/ISP/geo). Enrichment is
+    best-effort; rules with intel conditions only match when data exists."""
+
+    ip = models.GenericIPAddressField(unique=True)
+    asn = models.CharField(max_length=12, blank=True)
+    org = models.CharField(max_length=200, blank=True)
+    country_code = models.CharField(max_length=2, blank=True)
+    city = models.CharField(max_length=120, blank=True)
+    source = models.CharField(max_length=40, blank=True)
+    fetched_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.ip} AS{self.asn} {self.org}"
+
+
 class HitEvent(models.Model):
     """Unified tracking for everything that touches the public surface."""
 
@@ -389,6 +490,7 @@ class HitEvent(models.Model):
         ("not_found", "Untracked path"),
         ("suspicious", "Suspicious activity"),
         ("canary", "Decoy canary re-hit"),
+        ("blocked", "Blocked by rule"),
     ]
 
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, db_index=True)
