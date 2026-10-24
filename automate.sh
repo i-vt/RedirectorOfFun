@@ -61,7 +61,7 @@ check_root() {
   fi
 
   # Fix "sudo: unable to resolve host <hostname>" warning.
-  # Occurs when the system hostname is not in /etc/hosts — common on VPS images.
+  # Occurs when the system hostname is not in /etc/hosts - common on VPS images.
   # sudo looks up the hostname on every invocation and warns noisily if it
   # cannot resolve it. Harmless but confusing. Add 127.0.1.1 <hostname> if absent.
   local hn
@@ -119,7 +119,7 @@ nysm_clear_ports() {
     for pid in $pids; do
       local proc_name
       proc_name=$(ps -p "$pid" -o comm= 2>/dev/null | tr -d ' ')
-      nysm_warning "Port $port occupied by '$proc_name' (PID $pid) — stopping..."
+      nysm_warning "Port $port occupied by '$proc_name' (PID $pid) - stopping..."
 
       case "$proc_name" in
         apache2|apache|httpd)
@@ -127,7 +127,7 @@ nysm_clear_ports() {
           systemctl disable apache2 2>/dev/null || true
           ;;
         nginx)
-          # Stop via systemd AND send SIGTERM directly — systemctl stop on a
+          # Stop via systemd AND send SIGTERM directly - systemctl stop on a
           # failed/partially-started nginx may return immediately without
           # actually killing the process.
           systemctl stop nginx 2>/dev/null || true
@@ -155,7 +155,7 @@ nysm_clear_ports() {
       fi
 
       if [ $elapsed -eq 5 ]; then
-        nysm_warning "Port $port still busy after 5s — escalating to SIGKILL..."
+        nysm_warning "Port $port still busy after 5s - escalating to SIGKILL..."
         local stuck_pids
         stuck_pids=$(ss -tlnp "sport = :$port" 2>/dev/null \
                      | grep -oP 'pid=\K[0-9]+' | sort -u)
@@ -163,12 +163,12 @@ nysm_clear_ports() {
           nysm_warning "SIGKILL → PID $spid"
           kill -KILL "$spid" 2>/dev/null || true
         done
-        # systemd may restart nginx automatically — stop that too
+        # systemd may restart nginx automatically - stop that too
         systemctl stop nginx 2>/dev/null || true
       fi
     done
 
-    # Final check — give up if still occupied
+    # Final check - give up if still occupied
     if ! port_is_free "$port"; then
       nysm_error "Port $port still in use after 10s."
       ss -tlnp "sport = :$port"
@@ -192,7 +192,7 @@ verify_dns() {
     sed -i "/${domain}/d" /etc/hosts
   fi
 
-  # Query public DNS via Google DNS-over-HTTPS — bypasses /etc/hosts and the
+  # Query public DNS via Google DNS-over-HTTPS - bypasses /etc/hosts and the
   # system stub resolver entirely, so we always see what the internet sees.
   # socket.gethostbyname() reads /etc/hosts first which causes false mismatches
   # when a previous failed run left a stale 127.0.0.1 entry for the domain.
@@ -230,7 +230,7 @@ except:
     nysm_error "DNS mismatch detected!"
     nysm_error "  $domain resolves to : $dns_ip"
     nysm_error "  This server's IP is  : $my_ip"
-    nysm_error "Let's Encrypt will try to reach $dns_ip on port 80 — the ACME challenge WILL fail."
+    nysm_error "Let's Encrypt will try to reach $dns_ip on port 80 - the ACME challenge WILL fail."
     nysm_error "Update your DNS A record so $domain → $my_ip and wait for propagation (~1 min at TTL 60)."
     if ! nysm_confirm "DNS is correct and I want to continue anyway:"; then
       error_exit "Aborted. Fix DNS and re-run."
@@ -253,7 +253,7 @@ send_webhook() {
 
 # ─── Install ─────────────────────────────────────────────────────────────────
 nysm_install() {
-  # BUG FIX 1: Clear port conflicts BEFORE apt tries to start nginx
+  # Clear any process holding ports 80/443 before apt tries to start nginx
   if [ $DRY_RUN -eq 0 ]; then
     nysm_clear_ports
   fi
@@ -266,8 +266,8 @@ nysm_install() {
   run_cmd apt-get install -y certbot python3-certbot-nginx nginx net-tools curl openssl
   check_errors
 
-  # BUG FIX 4: Certbot's apt package installs its own systemd timer (certbot.timer)
-  # which conflicts with our nysm-cron renewal job. Disable it — we manage renewals.
+  # Certbot's apt package installs its own systemd timer (certbot.timer) that
+  # would double-run renewals alongside nysm-cron. Disable it; nysm-cron owns renewals.
   if systemctl is-enabled certbot.timer &>/dev/null; then
     nysm_action "Disabling certbot systemd timer (using nysm-cron instead)..."
     run_cmd systemctl stop certbot.timer
@@ -284,8 +284,8 @@ nysm_install() {
     bash blocklist-update.sh
   fi
 
-  # BUG FIX 2: /var/www/html may not exist if nginx never started successfully.
-  # Always create it explicitly before copying decoy pages into it.
+  # /var/www/html may not exist if nginx has never started successfully,
+  # so create it explicitly before copying the decoy pages in.
   nysm_action "Creating webroot and deploying decoy pages..."
   run_cmd mkdir -p "$WEBROOT"
   run_cmd cp decoy/index.html       "$WEBROOT/index.html"
@@ -314,32 +314,38 @@ nysm_initialize() {
     c2_server=$2
     ua_pattern=${3:-""}
     use_https_upstream=${4:-"0"}
+    panel_upstream=${5:-"127.0.0.1:3000"}
   else
     read -r -p "Domain name? (ex: updates.example.com) " domain_name
     read -r -p "C2 server address? (IP:Port)             " c2_server
     read -r -p "User-agent filter pattern (blank = allow all): " ua_pattern
     read -r -p "Proxy to C2 over HTTPS? [y/N] " https_answer
     [[ "$https_answer" =~ ^[yY] ]] && use_https_upstream="1" || use_https_upstream="0"
+    read -r -p "Panel upstream for /g/ gates? (host:port, blank = 127.0.0.1:3000) " panel_answer
+    panel_upstream=${panel_answer:-"127.0.0.1:3000"}
   fi
 
   # Validate inputs
   validate_domain "$domain_name" || error_exit "Aborting: invalid domain."
   validate_c2     "$c2_server"   || error_exit "Aborting: invalid C2 address."
 
-  # BUG FIX 5: Verify DNS points HERE before running certbot.
-  # The previous failure was because gooner.cam resolved to the MSF server IP,
-  # not the redirector — Let's Encrypt couldn't reach the ACME challenge endpoint.
+  # Verify the domain resolves to this host before running certbot; if it
+  # points anywhere else the ACME challenge will fail and certbot errors out.
   if [ $DRY_RUN -eq 0 ]; then
     verify_dns "$domain_name"
   fi
 
   # Escape values for safe sed substitution
-  local safe_domain safe_c2
+  local safe_domain safe_c2 safe_panel
   safe_domain=$(printf '%s' "$domain_name" | sed 's/[\/&]/\\&/g')
   safe_c2=$(printf '%s'     "$c2_server"   | sed 's/[\/&]/\\&/g')
+  safe_panel=$(printf '%s'  "$panel_upstream" | sed 's/[\/&]/\\&/g')
 
   local scheme="http"
   [ "$use_https_upstream" = "1" ] && scheme="https"
+
+  # Dynamic include files the new config references; the panel rewrites them.
+  run_cmd touch /etc/nginx/banlist.conf /etc/nginx/agent_routes.conf
 
   # ── Step 1: Deploy the HTTP-only config (serves the ACME webroot challenge)
   nysm_action "Deploying initial HTTP config for ACME challenge..."
@@ -347,6 +353,7 @@ nysm_initialize() {
   run_cmd sed -i "s/<DOMAIN_NAME>/$safe_domain/g" "$CONF_DST"
   run_cmd sed -i "s/<C2_SERVER>/$safe_c2/g"       "$CONF_DST"
   run_cmd sed -i "s/<C2_SCHEME>/$scheme/g"         "$CONF_DST"
+  run_cmd sed -i "s/<PANEL_UPSTREAM>/$safe_panel/g" "$CONF_DST"
 
   if [ -n "$ua_pattern" ]; then
     local safe_ua
@@ -366,10 +373,9 @@ nysm_initialize() {
   check_errors
 
   # ── Step 2: Obtain certificate using webroot authenticator
-  # BUG FIX 3: Use --webroot instead of --nginx.
-  # --nginx modifies the live config inline, which creates a DUPLICATE SSL
-  # server block when we later uncomment the #nysm# block, causing:
-  #   "conflicting server name ... ignored" → nginx restart fails.
+  # Use --webroot rather than --nginx: --nginx edits the live config inline,
+  # which produces a duplicate SSL server block once the #nysm# section is
+  # uncommented, and nginx then fails with "conflicting server name".
   # --webroot drops the challenge token under /var/www/html and leaves the
   # nginx config completely untouched. Our #nysm# mechanism then works cleanly.
   nysm_action "Obtaining SSL certificate via Let's Encrypt (webroot)..."
@@ -456,7 +462,7 @@ nysm_teardown() {
 
 # ─── Profile management ──────────────────────────────────────────────────────
 nysm_save_profile() {
-  local domain=$1 c2=$2 ua=${3:-""} https=${4:-"0"}
+  local domain=$1 c2=$2 ua=${3:-""} https=${4:-"0"} panel=${5:-"127.0.0.1:3000"}
   mkdir -p "$PROFILES_DIR"
   local profile_file="$PROFILES_DIR/${domain}.conf"
   cat > "$profile_file" <<EOF
@@ -464,6 +470,7 @@ domain_name=$domain
 c2_server=$c2
 ua_pattern=$ua
 use_https_upstream=$https
+panel_upstream=$panel
 EOF
   nysm_action "Profile saved → $profile_file"
 }
@@ -491,7 +498,7 @@ nysm_load_profile() {
 
   source "$chosen"
   nysm_action "Loaded profile: $(basename "$chosen")"
-  nysm_initialize "$domain_name" "$c2_server" "$ua_pattern" "$use_https_upstream"
+  nysm_initialize "$domain_name" "$c2_server" "$ua_pattern" "${use_https_upstream:-0}" "${panel_upstream:-127.0.0.1:3000}"
 }
 
 # ─── Blocklist update ────────────────────────────────────────────────────────
@@ -588,7 +595,7 @@ EOF
 # ─── Entry point ─────────────────────────────────────────────────────────────
 while getopts "dvw:h" opt; do
   case $opt in
-    d) DRY_RUN=1; nysm_warning "Dry-run mode — no changes will be applied." ;;
+    d) DRY_RUN=1; nysm_warning "Dry-run mode - no changes will be applied." ;;
     v) VERBOSE=1 ;;
     w) WEBHOOK_URL="$OPTARG" ;;
     h) usage; exit 0 ;;

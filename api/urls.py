@@ -1,0 +1,30 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path("404-events/", views.NotFoundEventList.as_view(), name="api-404-events"),
+    path("404-stats/", views.NotFoundStats.as_view(), name="api-404-stats"),
+    path("audit-events/", views.AuditEventList.as_view(), name="api-audit-events"),
+    path("operators/", views.OperatorList.as_view(), name="api-operators"),
+    path("operators/<int:pk>/revoke/", views.OperatorRevoke.as_view(), name="api-operator-revoke"),
+    path("notification-preferences/", views.NotificationPreferenceList.as_view(), name="api-notification-preferences"),
+    path("notification-preferences/<int:pk>/", views.NotificationPreferenceDetail.as_view(), name="api-notification-preference"),
+    path("notifications/recent/", views.RecentNotifications.as_view(), name="api-notifications-recent"),
+    path("links/", views.DeliveryLinkList.as_view(), name="api-links"),
+    path("links/<int:pk>/", views.DeliveryLinkDetail.as_view(), name="api-link-detail"),
+    path("submissions/", views.SubmissionList.as_view(), name="api-submissions"),
+    path("submissions/<int:pk>/note/", views.SubmissionNote.as_view(), name="api-submission-note"),
+    path("submissions/<int:pk>/undo/", views.SubmissionUndo.as_view(), name="api-submission-undo"),
+    path("submissions/<int:pk>/<str:verdict>/", views.SubmissionDecide.as_view(), name="api-submission-decide"),
+    path("bans/", views.BannedIPList.as_view(), name="api-bans"),
+    path("bans/<int:pk>/", views.BannedIPDetail.as_view(), name="api-ban-detail"),
+    path("agents/", views.AgentChannelList.as_view(), name="api-agents"),
+    path("agents/<int:pk>/", views.AgentChannelDetail.as_view(), name="api-agent-detail"),
+    path("agents/<int:pk>/rotate/", views.AgentChannelRotate.as_view(), name="api-agent-rotate"),
+    path("hit-events/", views.HitEventList.as_view(), name="api-hit-events"),
+    path("gate-stats/", views.GateStats.as_view(), name="api-gate-stats"),
+    path("links/<int:pk>/burn/", views.LinkBurn.as_view(), name="api-link-burn"),
+    path("push/key/", views.PushKey.as_view(), name="api-push-key"),
+    path("push/subscribe/", views.PushSubscribe.as_view(), name="api-push-subscribe"),
+    path("push/unsubscribe/", views.PushUnsubscribe.as_view(), name="api-push-unsubscribe"),
+]

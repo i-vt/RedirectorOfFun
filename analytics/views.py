@@ -1,0 +1,65 @@
+import json
+from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
+from django.shortcuts import render
+from django.utils import timezone
+from audit.models import AuditEvent
+from notifications.models import NotificationOutbox
+from .models import CollectorState, NotFoundEvent
+from .services import dashboard_statistics
+
+
+@login_required
+def overview(request):
+    from gates.models import BannedIP, DeliveryLink, HitEvent, Submission
+    stats = dashboard_statistics(14)
+    return render(request, "panel/overview.html", {
+        "title": "Overview", "stats": stats, "stats_json": stats["series"],
+        "recent_events": NotFoundEvent.objects.all()[:6],
+        "recent_audit": AuditEvent.objects.select_related("actor")[:5],
+        "notifications": NotificationOutbox.objects.filter(recipient=request.user)[:5],
+        "collector_state": CollectorState.objects.order_by("-updated_at").first(),
+        "now": timezone.now(),
+        "gate_summary": {
+            "active_links": DeliveryLink.objects.filter(active=True).count(),
+            "pending_approvals": Submission.objects.filter(status="pending").count(),
+            "releases_24h": HitEvent.objects.filter(
+                category__in=["download", "key_served"],
+                created_at__gte=timezone.now() - timezone.timedelta(hours=24)).count(),
+            "suspicious_24h": HitEvent.objects.filter(
+                category="suspicious",
+                created_at__gte=timezone.now() - timezone.timedelta(hours=24)).count(),
+            "banned_ips": BannedIP.objects.filter(active=True).count(),
+        },
+    })
+
+
+def filtered_events(request):
+    events = NotFoundEvent.objects.all()
+    path = request.GET.get("path", "").strip()
+    method = request.GET.get("method", "").strip().upper()
+    days = request.GET.get("days", "30")
+    if path:
+        events = events.filter(path__icontains=path[:200])
+    if method in {"GET", "POST", "HEAD", "PUT", "DELETE", "OPTIONS", "PATCH"}:
+        events = events.filter(method=method)
+    if days.isdigit() and 1 <= int(days) <= 365:
+        events = events.filter(occurred_at__gte=timezone.now() - timezone.timedelta(days=int(days)))
+    return events
+
+
+@login_required
+def events_view(request):
+    paginator = Paginator(filtered_events(request), 40)
+    page = paginator.get_page(request.GET.get("page"))
+    template = "panel/_events_table.html" if request.headers.get("HX-Request") else "panel/events.html"
+    return render(request, template, {"title": "404 Events", "page": page, "events": page.object_list})
+
+
+@login_required
+def health_view(request):
+    collector = CollectorState.objects.order_by("-updated_at").first()
+    return render(request, "panel/health.html", {
+        "title": "Service health", "collector": collector,
+        "database_ready": True, "event_count": NotFoundEvent.objects.count(),
+    })
