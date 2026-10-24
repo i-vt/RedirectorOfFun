@@ -81,10 +81,31 @@
     let initialized = false;
     const soundEnabled = () => localStorage.getItem("rdr-sound") !== "off";
     let audioContext = null;
+    function musicBoxNote(ctx, frequency, delay) {
+      for (const [partial, level] of [[1, 0.5], [2, 0.18], [4, 0.05]]) {
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency * partial, ctx.currentTime + delay);
+        const at = ctx.currentTime + delay;
+        gain.gain.setValueAtTime(0.1 * level, at);
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.9);
+        oscillator.connect(gain).connect(ctx.destination);
+        oscillator.start(at);
+        oscillator.stop(at + 1);
+      }
+    }
+
     function bing() {
       if (!soundEnabled()) return;
       try {
         audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+        if (document.body.classList.contains("theme-obnoxious")) {
+          // A descending music-box motif: two notes, one step and a half down.
+          musicBoxNote(audioContext, 880, 0);
+          musicBoxNote(audioContext, 587.33, 0.16);
+          return;
+        }
         const oscillator = audioContext.createOscillator();
         const gain = audioContext.createGain();
         oscillator.type = "sine";

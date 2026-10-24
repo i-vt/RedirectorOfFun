@@ -8,16 +8,28 @@
   <title>{{ title|default:"Control Plane" }} · RoF//OPS</title>
   <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
   <link rel="stylesheet" href="{% static 'css/panel.css' %}">
-  {% if theme == "circus" %}<link rel="stylesheet" href="{% static 'css/theme-circus.css' %}">{% endif %}
+  {% if theme == "cozy" %}<link rel="stylesheet" href="{% static 'css/theme-cozy.css' %}">{% endif %}
+  {% if theme == "obnoxious" %}<link rel="stylesheet" href="{% static 'css/theme-obnoxious.css' %}">{% endif %}
   <script defer src="{% static 'js/htmx.min.js' %}"></script>
   <script defer src="{% static 'js/app.js' %}"></script>
+  {% if theme == "obnoxious" %}<script defer src="{% static 'js/theme-obnoxious.js' %}"></script>{% endif %}
   {% block head %}{% endblock %}
 </head>
-<body class="panel-shell{% if theme == "circus" %} theme-circus{% endif %}" data-authenticated="{% if user.is_authenticated %}true{% else %}false{% endif %}">
+<body class="panel-shell{% if theme != "default" %} theme-{{ theme }}{% endif %}" data-authenticated="{% if user.is_authenticated %}true{% else %}false{% endif %}">
   <a class="skip-link" href="#main-content">Skip to content</a>
   <aside class="sidebar">
     <a class="brand" href="{% url 'overview' %}" aria-label="RoF OPS overview">
+      {% if theme == "obnoxious" %}
+      <svg class="brand-mark jester" viewBox="0 0 40 40" aria-hidden="true">
+        <path d="M8 31 C8 25 11 20 14 18 C12 13 14 8 18 8 C20 8 21 10 21 12 C22 10 23 8 25 8 C29 8 31 13 29 18 C32 20 35 25 35 31 Z" fill="none" stroke-width="1.6"/>
+        <circle cx="14" cy="7" r="2.6"/>
+        <circle cx="21" cy="5" r="2.6"/>
+        <circle cx="28" cy="7" r="2.6"/>
+        <path d="M8 31 h27 v4 h-27 z" fill="none" stroke-width="1.6"/>
+      </svg>
+      {% else %}
       <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="15"/><circle cx="20" cy="20" r="8"/><path d="M20 20 32 12M20 3v4M3 20h4M20 33v4M33 20h4"/><circle class="brand-dot" cx="29" cy="14" r="2"/></svg>
+      {% endif %}
       <span><strong>RoF//OPS</strong><small>CONTROL PLANE</small></span>
     </a>
     <div class="environment"><span class="status-dot"></span> SYSTEM ONLINE <span class="env-code">V1.0</span></div>
@@ -42,7 +54,7 @@
       <a class="{% if request.resolver_match.url_name == 'gate-selftest' %}active{% endif %}" href="{% url 'gate-selftest' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'gate-selftest' %}•{% else %}&nbsp;{% endif %}]</span> Self-Test</a>
     </nav>
     <div class="sidebar-foot">
-      <div class="operator-chip"><span class="operator-avatar">{{ user.username|first|upper }}</span><span><strong>{{ user.username }}</strong><small>{% if is_administrator %}ADMINISTRATOR{% else %}OPERATOR{% endif %}</small></span></div>
+      <div class="operator-chip"><span class="operator-avatar">{{ user.username|first|upper }}</span><span><strong>{{ user.username }}</strong><small>{% if is_administrator %}ADMINISTRATOR{% else %}OPERATOR{% endif %}</small></span>{% if theme == "obnoxious" %}<span class="circus-eyes" aria-hidden="true"><i></i><i></i></span>{% endif %}</div>
       <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button" type="submit">[ SIGN OUT ]</button></form>
     </div>
   </aside>

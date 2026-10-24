@@ -7,7 +7,8 @@
   <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{{ title|default:"RoF" }} · RoF//OPS mobile</title>
   <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
-  {% if theme == "circus" %}<link rel="stylesheet" href="{% static 'css/theme-circus.css' %}">{% endif %}
+  {% if theme == "cozy" %}<link rel="stylesheet" href="{% static 'css/theme-cozy.css' %}">{% endif %}
+  {% if theme == "obnoxious" %}<link rel="stylesheet" href="{% static 'css/theme-obnoxious.css' %}">{% endif %}
   <style>
     :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#3fb68b;--warn:#d29922;--danger:#f85149;--mono:ui-monospace,Menlo,Consolas,monospace}
     *{box-sizing:border-box}
@@ -46,7 +47,7 @@
       return fetch(url,{method:"POST",headers:{"X-CSRFToken":token,"Content-Type":"application/json"},body:JSON.stringify(data||{})}).then(r=>location.reload());}
   </script>
 </head>
-<body{% if theme == "circus" %} class="theme-circus"{% endif %}>
+<body{% if theme != "default" %} class="theme-{{ theme }}"{% endif %}>
   <header><strong>RoF//OPS</strong><span>{{ title|upper }}</span></header>
   <main>{% block content %}{% endblock %}</main>
   <nav class="tabbar">

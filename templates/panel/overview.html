@@ -5,7 +5,18 @@
   <div class="dashboard-primary">
     <section class="mission-strip">
       <div><span class="section-label">CONTROL PLANE / LIVE</span><h2>Operational clarity,<br><span>without edge complexity.</span></h2></div>
-      <div class="mission-status"><span class="status-orbit"><i></i></span><strong>READY</strong><small>DATABASE CONNECTED</small></div>
+      <div class="mission-status">
+        {% if theme == "obnoxious" %}
+        <svg class="circus-balloon" viewBox="0 0 60 92" aria-hidden="true">
+          <path d="M30 6 C45 6 54 20 54 34 C54 49 44 60 30 60 C16 60 6 49 6 34 C6 20 15 6 30 6 Z" fill="oklch(.62 .22 22)"/>
+          <path d="M27 60 h6 l-3 6 z" fill="oklch(.62 .22 22)"/>
+          <path d="M30 66 C28 74 32 79 30 88" stroke="oklch(.85 .02 340)" fill="none" stroke-width="1"/>
+        </svg>
+        {% else %}
+        <span class="status-orbit"><i></i></span>
+        {% endif %}
+        <strong>READY</strong><small>DATABASE CONNECTED</small>
+      </div>
     </section>
     <section class="metric-grid" aria-label="404 analytics summary">
       <article class="metric"><span>ALL EVENTS</span><strong data-count="{{ stats.total }}">{{ stats.total }}</strong><small>STORED WITHIN RETENTION</small></article>

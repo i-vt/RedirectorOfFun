@@ -5,7 +5,7 @@ from django.utils import timezone
 
 
 class Operator(AbstractUser):
-    THEME_CHOICES = [("default", "Default"), ("circus", "Nightmare Circus")]
+    THEME_CHOICES = [("default", "Default"), ("cozy", "Cozy Clown"), ("obnoxious", "Obnoxious Clown")]
 
     session_version = models.PositiveIntegerField(default=1)
     totp_secret = models.CharField(max_length=64, blank=True)

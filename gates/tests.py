@@ -1599,25 +1599,25 @@ class ThemeTests(TestCase):
     def test_default_theme_has_no_circus_class(self):
         response = self.client.get(reverse("overview"))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "theme-circus")
-        self.assertNotContains(response, "theme-circus.css")
+        self.assertNotContains(response, "theme-cozy")
+        self.assertNotContains(response, "theme-cozy.css")
 
     def test_settings_apply_theme(self):
-        response = self.client.post(reverse("settings"), {"action": "theme", "theme": "circus"})
+        response = self.client.post(reverse("settings"), {"action": "theme", "theme": "cozy"})
         self.assertEqual(response.status_code, 302)
         self.operator.refresh_from_db()
-        self.assertEqual(self.operator.theme, "circus")
+        self.assertEqual(self.operator.theme, "cozy")
         response = self.client.get(reverse("overview"))
-        self.assertContains(response, "theme-circus")
-        self.assertContains(response, "theme-circus.css")
+        self.assertContains(response, "theme-cozy")
+        self.assertContains(response, "theme-cozy.css")
 
     def test_theme_is_per_account(self):
         other = Operator.objects.create_user(username="themeop2", password="long-enough-password-123")
         other_client = Client()
         other_client.force_login(other)
-        self.client.post(reverse("settings"), {"action": "theme", "theme": "circus"})
+        self.client.post(reverse("settings"), {"action": "theme", "theme": "cozy"})
         response = other_client.get(reverse("overview"))
-        self.assertNotContains(response, "theme-circus")
+        self.assertNotContains(response, "theme-cozy")
 
     def test_invalid_theme_rejected(self):
         self.client.post(reverse("settings"), {"action": "theme", "theme": "deep-blue-sea"})
@@ -1625,7 +1625,7 @@ class ThemeTests(TestCase):
         self.assertEqual(self.operator.theme, "default")
 
     def test_mobile_ui_uses_theme(self):
-        self.operator.theme = "circus"
+        self.operator.theme = "cozy"
         self.operator.save(update_fields=["theme"])
         DeliveryLink.objects.create(path="/g/t/1", kind="key", key_text="K",
                                     gate_type="submission", cipher="base64", requires_approval=True)
@@ -1634,13 +1634,39 @@ class ThemeTests(TestCase):
         Client().post("/g/t/1", data=blob, content_type="text/plain")
         response = self.client.get("/m/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'class="theme-circus"')
-        self.assertContains(response, "theme-circus.css")
+        self.assertContains(response, 'class="theme-cozy"')
+        self.assertContains(response, "theme-cozy.css")
 
     def test_brand_renamed(self):
         response = self.client.get(reverse("overview"))
         self.assertContains(response, "RoF//OPS")
         self.assertNotContains(response, "RDR//OPS")
+
+    def test_obnoxious_theme_loads_full_kit(self):
+        self.operator.theme = "obnoxious"
+        self.operator.save(update_fields=["theme"])
+        response = self.client.get(reverse("overview"))
+        self.assertContains(response, "theme-obnoxious.css")
+        self.assertContains(response, "theme-obnoxious.js")
+        self.assertContains(response, "circus-balloon")
+        self.assertContains(response, "brand-mark jester")
+        self.assertContains(response, "circus-eyes")
+
+    def test_obnoxious_assets_exist(self):
+        import os
+        from django.conf import settings
+        for asset in ["css/theme-obnoxious.css", "js/theme-obnoxious.js", "css/theme-cozy.css"]:
+            path = os.path.join(settings.BASE_DIR, "static", asset)
+            self.assertTrue(os.path.exists(path), asset)
+
+    def test_cozy_keeps_orbit_and_jester_stays_obnoxious(self):
+        self.operator.theme = "cozy"
+        self.operator.save(update_fields=["theme"])
+        response = self.client.get(reverse("overview"))
+        self.assertContains(response, "theme-cozy.css")
+        self.assertNotContains(response, "theme-obnoxious.css")
+        self.assertNotContains(response, "circus-balloon")
+        self.assertContains(response, "status-orbit")
 
 
 @tag("functional")

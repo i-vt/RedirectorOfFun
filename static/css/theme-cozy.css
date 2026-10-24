@@ -1,8 +1,8 @@
-/* Nightmare Circus theme: harlequin palette, jester geometry, unsettling
-   motion. Applied when the operator's account theme is "circus" (body gets
-   .theme-circus); everything is a CSS-only override of the base skin. */
+/* Cozy Clown theme: harlequin palette, jester geometry, gently
+   unsettling motion. Applied when the account theme is "cozy" (body gets
+   .theme-cozy); everything is a CSS-only override of the base skin. */
 
-.theme-circus {
+.theme-cozy {
   --p-abyss: oklch(.1 .02 340);
   --p-panel: oklch(.145 .045 347);
   --p-raised: oklch(.185 .055 350);
@@ -17,7 +17,7 @@
   --c-focus: 0 0 0 3px oklch(.62 .21 22/.35);
 }
 
-.theme-circus .sidebar {
+.theme-cozy .sidebar {
   background:
     repeating-linear-gradient(45deg,
       oklch(.62 .21 22/.035) 0 12px, transparent 12px 24px),
@@ -25,13 +25,13 @@
 }
 
 /* Harlequin diamonds whispering at the edges of every panel. */
-.theme-circus .panel,
-.theme-circus .rail-section,
-.theme-circus .form-panel,
-.theme-circus .compact-panel,
-.theme-circus .stat-card,
-.theme-circus .metric,
-.theme-circus .card {
+.theme-cozy .panel,
+.theme-cozy .rail-section,
+.theme-cozy .form-panel,
+.theme-cozy .compact-panel,
+.theme-cozy .stat-card,
+.theme-cozy .metric,
+.theme-cozy .card {
   position: relative;
   border-radius: 3px 18px 3px 18px;   /* warped jester corners */
   background-image:
@@ -39,24 +39,24 @@
       oklch(.62 .21 22/.028) 0 6px, transparent 6px 18px);
 }
 
-.theme-circus .brand-mark { transform: rotate(45deg); transform-origin: center; }
-.theme-circus .brand-dot { fill: oklch(.78 .2 145); }
-.theme-circus .brand strong { letter-spacing: .06em; }
+.theme-cozy .brand-mark { transform: rotate(45deg); transform-origin: center; }
+.theme-cozy .brand-dot { fill: oklch(.78 .2 145); }
+.theme-cozy .brand strong { letter-spacing: .06em; }
 
-.theme-circus .status-badge {
+.theme-cozy .status-badge {
   border-radius: 14px 3px 14px 3px;
   letter-spacing: .1em;
 }
 
-.theme-circus .button { border-radius: 16px 4px 16px 4px; }
-.theme-circus .field-input { border-radius: 4px 14px 4px 14px; }
-.theme-circus .status-orbit { border-color: oklch(.62 .21 22/.5); }
-.theme-circus .status-orbit::after { border-color: oklch(.78 .2 145/.4); animation-duration: 3.2s; }
+.theme-cozy .button { border-radius: 16px 4px 16px 4px; }
+.theme-cozy .field-input { border-radius: 4px 14px 4px 14px; }
+.theme-cozy .status-orbit { border-color: oklch(.62 .21 22/.5); }
+.theme-cozy .status-orbit::after { border-color: oklch(.78 .2 145/.4); animation-duration: 3.2s; }
 
 ::selection { background: oklch(.62 .21 22/.4); }
 
 /* Mobile UI variable names (templates/mobile/base.html has its own palette). */
-.theme-circus {
+.theme-cozy {
   --bg: oklch(.1 .02 340);
   --surface: oklch(.145 .045 347);
   --border: oklch(.27 .07 352);
@@ -85,10 +85,10 @@
     0%, 100% { transform: rotate(-.35deg); }
     50% { transform: rotate(.35deg); }
   }
-  .theme-circus .status-dot { animation: circus-breathe 2.8s ease-in-out infinite; }
-  .theme-circus .environment { animation: circus-flicker 9s linear infinite; }
-  .theme-circus .mission-strip h2 { animation: circus-sway 12s ease-in-out infinite; }
-  .theme-circus .brand-mark { animation: circus-sway 6s ease-in-out infinite; }
-  .theme-circus .button:hover { transform: translateY(-2px) rotate(-.6deg); }
-  .theme-circus .status-orbit { animation: spin 3.5s linear infinite; }
+  .theme-cozy .status-dot { animation: circus-breathe 2.8s ease-in-out infinite; }
+  .theme-cozy .environment { animation: circus-flicker 9s linear infinite; }
+  .theme-cozy .mission-strip h2 { animation: circus-sway 12s ease-in-out infinite; }
+  .theme-cozy .brand-mark { animation: circus-sway 6s ease-in-out infinite; }
+  .theme-cozy .button:hover { transform: translateY(-2px) rotate(-.6deg); }
+  .theme-cozy .status-orbit { animation: spin 3.5s linear infinite; }
 }

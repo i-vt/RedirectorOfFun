@@ -1,0 +1,192 @@
+/* Obnoxious Clown theme: the full nightmare. Applied when the account theme
+   is "obnoxious" (body gets .theme-obnoxious); CSS-only override of the base
+   skin plus a conditional script (theme-obnoxious.js) for the interactive
+   pieces. Every animation respects prefers-reduced-motion. */
+
+.theme-obnoxious {
+  --p-abyss: oklch(.07 .02 345);
+  --p-panel: oklch(.13 .05 348);
+  --p-raised: oklch(.17 .06 350);
+  --p-line: oklch(.3 .09 350);
+  --p-cyan: oklch(.66 .24 22);          /* blood crimson where cyan used to be */
+  --p-mint: oklch(.82 .22 145);         /* acid green */
+  --p-amber: oklch(.85 .18 70);         /* neon yellow */
+  --p-red: oklch(.7 .26 18);
+  --p-text: oklch(.92 .02 330);
+  --p-muted: oklch(.74 .05 340);
+  --p-dim: oklch(.6 .07 345);
+  --c-focus: 0 0 0 3px oklch(.82 .22 145/.4);
+}
+
+/* Big-top stripes across the top of every workspace. */
+.theme-obnoxious .topbar {
+  border-top: none;
+  position: relative;
+}
+.theme-obnoxious .topbar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 7px;
+  background: repeating-linear-gradient(90deg,
+      oklch(.66 .24 22) 0 24px,
+      oklch(.07 .02 345) 24px 48px);
+}
+
+/* Harlequin checkerboard behind the sidebar. */
+.theme-obnoxious .sidebar {
+  background:
+    repeating-conic-gradient(oklch(.66 .24 22/.06) 0 25%, transparent 0 50%)
+      0 0 / 26px 26px,
+    var(--s-bg);
+}
+
+/* Red curtain scallops down the sidebar's right edge. */
+.theme-obnoxious .sidebar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 13px;
+  background-image: radial-gradient(circle at 0 10px, oklch(.5 .2 22/.6) 6px, transparent 7px);
+  background-size: 13px 20px;
+  background-repeat: repeat-y;
+  opacity: .6;
+  pointer-events: none;
+}
+
+/* Section headings written in dripping blood. */
+.theme-obnoxious .section-label {
+  position: relative;
+  padding-bottom: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='12' viewBox='0 0 64 12'%3E%3Cpath d='M0 0h64v2c-4 0-6 0-6 3s-2 5-3 5-3-4-3-5c0-3-2-3-6-3v2c0 4-2 6-3 6s-3-2-3-6V2H32v1c0 4-2 6-3 6s-3-2-3-6V2H20c0 4-2 5-3 5s-3-1-3-5V0z' fill='oklch(45%25 .2 22)' opacity='.55'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-position: bottom left;
+  background-size: 64px 12px;
+  color: oklch(.66 .24 22);
+}
+
+/* Jester-warped corners everywhere. */
+.theme-obnoxious .panel,
+.theme-obnoxious .rail-section,
+.theme-obnoxious .form-panel,
+.theme-obnoxious .compact-panel {
+  border-radius: 4px 22px 4px 22px;
+  background-image: repeating-linear-gradient(135deg,
+      oklch(.66 .24 22/.03) 0 6px, transparent 6px 18px);
+}
+
+/* Ticket stubs: perforated left edge on every metric/stat card. */
+.theme-obnoxious .metric,
+.theme-obnoxious .stat-card,
+.theme-obnoxious .card {
+  position: relative;
+  border-radius: 2px 14px 2px 14px;
+  border-left: none;
+  background-image: repeating-linear-gradient(135deg,
+      oklch(.66 .24 22/.04) 0 5px, transparent 5px 14px);
+}
+.theme-obnoxious .metric::before,
+.theme-obnoxious .stat-card::before,
+.theme-obnoxious .card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  background-image: radial-gradient(circle at 2px 7px, var(--s-bg) 2.6px, transparent 3.2px);
+  background-size: 9px 15px;
+  background-repeat: repeat-y;
+}
+
+/* Punchier interactions. */
+.theme-obnoxious ::selection { background: oklch(.5 .22 22/.55); }
+.theme-obnoxious .status-badge { border-radius: 16px 3px 16px 3px; letter-spacing: .12em; }
+.theme-obnoxious .button { border-radius: 18px 4px 18px 4px; }
+.theme-obnoxious .field-input { border-radius: 5px 16px 5px 16px; }
+.theme-obnoxious .brand-mark { transform: none; }
+
+/* The balloon replaces the orbit on the overview. */
+.theme-obnoxious .circus-balloon { width: 62px; height: 92px; }
+
+/* Eyes in the sidebar footer. */
+.theme-obnoxious .circus-eyes { display: inline-flex; gap: 9px; margin-left: 10px; }
+.theme-obnoxious .circus-eyes i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: oklch(.82 .22 145/.55);
+  box-shadow: 0 0 9px oklch(.82 .22 145/.5);
+}
+
+/* Flashlight overlay container (positioned by JS). */
+#circus-flashlight {
+  position: fixed;
+  width: 420px;
+  height: 420px;
+  margin: -210px 0 0 -210px;
+  border-radius: 50%;
+  background: radial-gradient(circle, oklch(.96 .02 90/.08), transparent 62%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* The whole unsettling motion kit. */
+@media (prefers-reduced-motion: no-preference) {
+  /* failing fairground tube sign */
+  @keyframes tube-flicker {
+    0%, 88% { color: var(--s-positive); opacity: 1; }
+    89% { color: oklch(.07 .02 345); }
+    90% { color: oklch(.66 .24 22); }
+    91% { color: oklch(.07 .02 345); }
+    92.5% { color: var(--s-positive); }
+    94% { color: oklch(.66 .24 22); }
+    95%, 100% { color: var(--s-positive); }
+  }
+  @keyframes balloon-float {
+    0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+    50% { transform: translateY(-9px) rotate(1.5deg); }
+  }
+  @keyframes pendulum {
+    0% { transform: rotate(0); }
+    25% { transform: rotate(3.2deg); }
+    55% { transform: rotate(-2.2deg); }
+    80% { transform: rotate(1.1deg); }
+    100% { transform: rotate(0); }
+  }
+  @keyframes clown-nod {
+    0% { transform: scale(1) rotate(0); }
+    30% { transform: scale(1.07) rotate(1.4deg); }
+    60% { transform: scale(.96) rotate(-1deg); }
+    100% { transform: scale(1) rotate(0); }
+  }
+  @keyframes eyes-blink {
+    0%, 93%, 100% { opacity: .55; transform: scaleY(1); }
+    95%, 97% { opacity: .04; transform: scaleY(.12); }
+  }
+  @keyframes slow-drift {
+    from { transform: translateX(-18%); }
+    to { transform: translateX(18%); }
+  }
+  @keyframes jester-bow {
+    0%, 100% { transform: rotate(0); }
+    12% { transform: rotate(-9deg); }
+    24% { transform: rotate(3deg); }
+    36% { transform: rotate(-2deg); }
+    48% { transform: rotate(0); }
+  }
+
+  .theme-obnoxious .environment { animation: tube-flicker 7s linear infinite; }
+  .theme-obnoxious .status-dot { animation: none; box-shadow: 0 0 12px oklch(.66 .24 22/.8); }
+  .theme-obnoxious .circus-balloon { animation: balloon-float 5s ease-in-out infinite; }
+  .theme-obnoxious .brand-mark.jester { transform-origin: 50% 100%; animation: jester-bow 9s ease-in-out infinite; }
+  .theme-obnoxious .primary-nav a:hover { transform-origin: top center; animation: pendulum .75s ease-in-out; transform: none; }
+  .theme-obnoxious .mission-strip { transform: rotate(-.5deg); }
+  .theme-obnoxious .empty-state p { animation: slow-drift 34s ease-in-out infinite alternate; display: inline-block; }
+  .theme-obnoxious .circus-eyes i { animation: eyes-blink 8.5s linear infinite; }
+  .theme-obnoxious .circus-eyes i + i { animation-delay: 4.2s; }
+  .theme-obnoxious .button.wobble { animation: clown-nod .5s ease-out; }
+}
