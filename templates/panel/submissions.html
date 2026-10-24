@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">VERIFICATION GATE</span><h2>Approval queue</h2><p>Decrypted submissions from droppers/loaders. Approve to release the linked content; deny to serve the deny response.</p></div>
+    <span class="status-badge {% if pending_count %}warn{% else %}good{% endif %}">{{ pending_count }} PENDING</span>
+  </div>
+  <form class="filter-bar" method="get" action="{% url 'gate-submissions' %}" hx-get="{% url 'gate-submissions' %}" hx-target="#submissions-table" hx-trigger="submit, change from:#filter-status">
+    <label><span>STATUS</span><select id="filter-status" class="field-input" name="status">
+      <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pending</option>
+      <option value="approved" {% if status == 'approved' %}selected{% endif %}>Approved</option>
+      <option value="denied" {% if status == 'denied' %}selected{% endif %}>Denied</option>
+      <option value="" {% if not status %}selected{% endif %}>All</option>
+    </select></label>
+  </form>
+  <div id="submissions-table">{% include "panel/_submissions_table.html" %}</div>
+  <p class="muted mono" style="font-size:.66rem;margin-top:10px">KEYBOARD: <strong>j/k</strong> move · <strong>a</strong> approve · <strong>d</strong> deny · <strong>u</strong> undo · <a href="{% url 'm-submissions' %}">mobile view →</a></p>
+</section>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const rows = [...document.querySelectorAll(".submission-row")];
+  if (!rows.length) return;
+  let index = 0;
+  const style = document.createElement("style");
+  style.textContent = ".submission-row.kbd-selected{outline:2px solid var(--s-accent);outline-offset:-2px}";
+  document.head.appendChild(style);
+  const select = (i) => {
+    index = Math.max(0, Math.min(rows.length - 1, i));
+    rows.forEach(r => r.classList.remove("kbd-selected"));
+    rows[index].classList.add("kbd-selected");
+    rows[index].scrollIntoView({block: "nearest"});
+  };
+  select(0);
+  document.addEventListener("keydown", (event) => {
+    if (event.target.matches("input, textarea, select") || event.metaKey || event.ctrlKey || event.altKey) return;
+    const row = rows[index];
+    if (!row) return;
+    const submit = (action) => {
+      const form = row.querySelector(`form[action*="/${action}/"]`) || row.parentElement.querySelector(`#sub-${row.dataset.submission} ~ tr form`);
+      const target = [...row.querySelectorAll("form")].find(f => f.action.includes(`/${action}/`));
+      if (target) { event.preventDefault(); target.requestSubmit(); }
+    };
+    switch (event.key) {
+      case "j": event.preventDefault(); select(index + 1); break;
+      case "k": event.preventDefault(); select(index - 1); break;
+      case "a": if (!row.dataset.decided) submit("approve"); break;
+      case "d": if (!row.dataset.decided) submit("deny"); break;
+      case "u": if (row.dataset.decided) submit("undo"); break;
+    }
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading"><div><span class="section-label">NGINX LOG INTELLIGENCE</span><h2>404 event stream</h2><p>Search stored events without exposing raw client addresses.</p></div><span class="status-badge good">ASYNC INGESTION</span></div>
+  <form id="event-filters" class="filter-bar" method="get" action="{% url 'events' %}" hx-get="{% url 'events' %}" hx-target="#events-table" hx-push-url="true" hx-trigger="submit, keyup changed delay:450ms from:#filter-path, change from:#filter-method, change from:#filter-days">
+    <label><span>PATH CONTAINS</span><input id="filter-path" class="field-input" type="search" name="path" value="{{ request.GET.path }}" placeholder="/example" maxlength="200"></label>
+    <label><span>METHOD</span><select id="filter-method" class="field-input" name="method"><option value="">All methods</option><option {% if request.GET.method == 'GET' %}selected{% endif %}>GET</option><option {% if request.GET.method == 'POST' %}selected{% endif %}>POST</option><option {% if request.GET.method == 'HEAD' %}selected{% endif %}>HEAD</option><option {% if request.GET.method == 'PUT' %}selected{% endif %}>PUT</option><option {% if request.GET.method == 'DELETE' %}selected{% endif %}>DELETE</option></select></label>
+    <label><span>TIME WINDOW</span><select id="filter-days" class="field-input" name="days"><option value="1" {% if request.GET.days == '1' %}selected{% endif %}>Last 24 hours</option><option value="7" {% if request.GET.days == '7' %}selected{% endif %}>Last 7 days</option><option value="30" {% if not request.GET.days or request.GET.days == '30' %}selected{% endif %}>Last 30 days</option><option value="90" {% if request.GET.days == '90' %}selected{% endif %}>Last 90 days</option></select></label>
+    <button class="button secondary" type="submit">Apply filters</button>
+  </form>
+  <div id="events-table">{% include "panel/_events_table.html" %}</div>
+</section>
+{% endblock %}

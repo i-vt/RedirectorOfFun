@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% load static %}
+{% block head %}<script defer src="{% static 'js/chart.umd.min.js' %}"></script><script defer src="{% static 'js/dashboard.js' %}"></script>{% endblock %}
+{% block content %}
+<div class="dashboard-grid">
+  <div class="dashboard-primary">
+    <section class="mission-strip">
+      <div><span class="section-label">CONTROL PLANE / LIVE</span><h2>Operational clarity,<br><span>without edge complexity.</span></h2></div>
+      <div class="mission-status"><span class="status-orbit"><i></i></span><strong>READY</strong><small>DATABASE CONNECTED</small></div>
+    </section>
+    <section class="metric-grid" aria-label="404 analytics summary">
+      <article class="metric"><span>ALL EVENTS</span><strong>{{ stats.total }}</strong><small>STORED WITHIN RETENTION</small></article>
+      <article class="metric"><span>TODAY / UTC</span><strong>{{ stats.today }}</strong><small>EVENTS TODAY / UTC</small></article>
+      <article class="metric"><span>14-DAY VOLUME</span><strong>{{ stats.period }}</strong><small>FILTERABLE EVENT STREAM</small></article>
+      <article class="metric"><span>UNIQUE PATHS</span><strong>{{ stats.unique_paths }}</strong><small>LAST 14 DAYS</small></article>
+    </section>
+    <section class="metric-grid" aria-label="Gate summary" style="margin-top:-8px">
+      <article class="metric"><span>ACTIVE LINKS</span><strong>{{ gate_summary.active_links }}</strong><small><a href="{% url 'gate-links' %}">DELIVERY LINKS →</a></small></article>
+      <article class="metric"><span>PENDING APPROVALS</span><strong>{{ gate_summary.pending_approvals }}</strong><small><a href="{% url 'gate-submissions' %}">APPROVAL QUEUE →</a></small></article>
+      <article class="metric"><span>RELEASES / 24H</span><strong>{{ gate_summary.releases_24h }}</strong><small>KEYS + PAYLOADS</small></article>
+      <article class="metric"><span>SUSPICIOUS / 24H</span><strong class="{% if gate_summary.suspicious_24h %}warn-text{% endif %}">{{ gate_summary.suspicious_24h }}</strong><small><a href="{% url 'gate-events' %}">GATE EVENTS →</a></small></article>
+    </section>
+    <section class="panel chart-panel">
+      <div class="panel-heading"><div><span class="section-label">EVENT TELEMETRY</span><h3>404 volume / 14 days</h3></div><a class="text-link" href="{% url 'events' %}">OPEN EVENT STREAM →</a></div>
+      <div class="chart-wrap"><canvas id="events-chart" aria-label="Line chart of 404 events over 14 days" role="img"></canvas></div>
+      {{ stats_json|json_script:"series-data" }}
+    </section>
+    <section class="panel">
+      <div class="panel-heading"><div><span class="section-label">RECENT ACTIVITY</span><h3>Latest 404 events</h3></div><span class="live-label"><i></i> LOG DERIVED</span></div>
+      {% if recent_events %}<div class="table-wrap"><table><thead><tr><th>TIME / UTC</th><th>METHOD</th><th>REQUESTED PATH</th><th>STATUS</th></tr></thead><tbody>{% for event in recent_events %}<tr><td class="mono muted">{{ event.occurred_at|date:"m-d H:i:s" }}</td><td>{{ event.method }}</td><td class="path-cell" title="{{ event.path }}">{{ event.path }}</td><td><span class="status-code">{{ event.status }}</span></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state"><strong>No events ingested yet</strong><p>Point the collector at an nginx JSON access log. New 404 records will appear here without changing response behavior.</p><a href="{% url 'panel-health' %}">Check collector configuration →</a></div>{% endif %}
+    </section>
+  </div>
+  <aside class="right-rail">
+    <section class="rail-section"><div class="panel-heading"><h3>Top requested paths</h3><span>14D</span></div>{% if stats.top_paths %}<ol class="rank-list">{% for item in stats.top_paths %}<li><span class="rank">0{{ forloop.counter }}</span><div><strong title="{{ item.path }}">{{ item.path }}</strong><span class="rank-bar"><i style="--bar:{% widthratio item.count stats.top_paths.0.count 100 %}%"></i></span></div><b>{{ item.count }}</b></li>{% endfor %}</ol>{% else %}<p class="rail-empty">No path data available.</p>{% endif %}</section>
+    <section class="rail-section"><div class="panel-heading"><h3>Audit trail</h3><a href="{% url 'audit-log' %}">VIEW ALL</a></div>{% if recent_audit %}<div class="activity-list">{% for event in recent_audit %}<div class="activity"><span class="activity-node"></span><div><strong>{{ event.action }}</strong><p>{{ event.actor|default:"System" }} · {{ event.created_at|timesince }} ago</p></div></div>{% endfor %}</div>{% else %}<p class="rail-empty">No administrative events yet.</p>{% endif %}</section>
+    <section class="rail-section"><div class="panel-heading"><h3>Collector</h3><span class="status-badge {% if collector_state %}good{% else %}warn{% endif %}">{% if collector_state %}CONFIGURED{% else %}WAITING{% endif %}</span></div><dl class="system-list"><div><dt>Integration</dt><dd>ASYNC LOG</dd></div><div><dt>Last checkpoint</dt><dd>{% if collector_state %}{{ collector_state.updated_at|date:"H:i:s" }}{% else %}-{% endif %}</dd></div><div><dt>Readiness</dt><dd class="good-text">AVAILABLE</dd></div></dl><a class="button secondary full" href="{% url 'panel-health' %}">Inspect service health</a></section>
+  </aside>
+</div>
+{% endblock %}

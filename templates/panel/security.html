@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading"><div><span class="section-label">ACCOUNT</span><h2>Two-factor authentication</h2><p>TOTP second factor for your operator account. Enabling it protects the panel even if your password leaks.</p></div><span class="status-badge {% if enabled %}good{% else %}warn{% endif %}">{% if enabled %}ENABLED{% else %}DISABLED{% endif %}</span></div>
+
+  {% if just_enabled %}
+  <div class="panel" style="margin-top:18px">
+    <div class="panel-heading"><div><span class="section-label">BACKUP CODES</span><h2>Save these now</h2><p>Each code works once if you lose your device. They are shown exactly once and stored only as hashes.</p></div></div>
+    <div class="grid-2" style="margin-top:12px">
+      {% for code in backup_codes %}<code class="mono" style="font-size:1rem;padding:8px 12px;border:var(--c-panel-border)">{{ code }}</code>{% endfor %}
+    </div>
+    <a class="button secondary" style="margin-top:16px" href="{% url 'security' %}">I saved them</a>
+  </div>
+  {% elif enabled %}
+  <div class="panel" style="margin-top:18px">
+    <div class="panel-heading"><div><span class="section-label">DISABLE</span><h2>Turn off 2FA</h2><p>Requires a current authenticator code or one of your {{ backup_code_count }} remaining backup codes. Disabling invalidates all existing sessions.</p></div></div>
+    <form method="post" class="filter-bar" style="margin-top:14px">{% csrf_token %}
+      <input type="hidden" name="action" value="disable">
+      <label><span>CURRENT CODE OR BACKUP CODE</span><input class="field-input mono" name="code" required autocomplete="one-time-code"></label>
+      <button class="button secondary" type="submit" data-confirm="Disable two-factor authentication?">Disable 2FA</button>
+    </form>
+  </div>
+  {% elif pending_secret %}
+  <div class="panel" style="margin-top:18px">
+    <div class="panel-heading"><div><span class="section-label">ENROLLMENT</span><h2>Confirm your authenticator</h2><p>Add this secret to your authenticator app, then enter a generated code to activate.</p></div></div>
+    <p class="mono" style="margin-top:12px;word-break:break-all">{{ pending_secret }}</p>
+    <p class="mono muted" style="word-break:break-all;font-size:.62rem">{{ pending_uri }}</p>
+    <form method="post" class="filter-bar" style="margin-top:14px">{% csrf_token %}
+      <input type="hidden" name="action" value="confirm">
+      <label><span>6-DIGIT CODE</span><input class="field-input mono" name="code" inputmode="numeric" autocomplete="one-time-code" required></label>
+      <button class="button" type="submit">Enable 2FA</button>
+    </form>
+  </div>
+  {% else %}
+  <form method="post" style="margin-top:18px">{% csrf_token %}
+    <input type="hidden" name="action" value="enroll">
+    <button class="button" type="submit">Begin 2FA enrollment</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

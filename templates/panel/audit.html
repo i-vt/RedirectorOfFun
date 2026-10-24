@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading"><div><span class="section-label">IMMUTABLE ACTIVITY RECORD</span><h2>Administrative audit trail</h2><p>Who changed what, when, and under which request identifier.</p></div><span class="status-badge good">APPEND ONLY</span></div>
+  <form class="filter-bar compact-filter" method="get"><label><span>ACTION CONTAINS</span><input class="field-input" type="search" name="action" value="{{ request.GET.action }}" placeholder="operator"></label><button class="button secondary" type="submit">Filter audit log</button></form>
+  {% if events %}<div class="table-wrap"><table><thead><tr><th>TIME / UTC</th><th>ACTOR</th><th>ACTION</th><th>TARGET</th><th>REQUEST ID</th></tr></thead><tbody>{% for event in events %}<tr><td class="mono muted nowrap">{{ event.created_at|date:"Y-m-d H:i:s" }}</td><td>{{ event.actor|default:"System" }}</td><td><span class="audit-action">{{ event.action }}</span></td><td>{{ event.target_type }}{% if event.target_id %} #{{ event.target_id }}{% endif %}</td><td class="mono muted">{{ event.request_id|slice:":12"|default:"-" }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state"><strong>No audit events found</strong><p>Privileged mutations will be recorded here.</p></div>{% endif %}
+  {% if page.paginator.num_pages > 1 %}<nav class="pagination"><span>PAGE {{ page.number }} / {{ page.paginator.num_pages }}</span><div>{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&action={{ request.GET.action|urlencode }}">← Previous</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}&action={{ request.GET.action|urlencode }}">Next →</a>{% endif %}</div></nav>{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% load gate_extras %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading"><div><span class="section-label">RELEASE GATES</span><h2>{{ title }}</h2><p>Public path must live under <code>{{ base_path }}</code> so nginx routes it to the control plane.</p></div></div>
+  {% if not link.pk and templates %}
+  <form method="get" class="filter-bar" action="{% url 'gate-link-create' %}">
+    <label><span>START FROM A DEPLOYMENT TEMPLATE</span><select class="field-input" name="template">
+      <option value="">Blank link</option>
+      {% for key, tpl in templates.items %}<option value="{{ key }}" {% if request.GET.template == key %}selected{% endif %}>{{ tpl.label }} - {{ tpl.description }}</option>{% endfor %}
+    </select></label>
+    <button class="button secondary" type="submit">Load template</button>
+  </form>
+  {% endif %}
+  <form method="post" enctype="multipart/form-data" class="stacked-form">
+    {% csrf_token %}
+    <fieldset>
+      <legend>IDENTITY</legend>
+      <label><span>PATH</span><input class="field-input mono" name="path" required maxlength="240" value="{{ link.path|default:base_path }}" placeholder="{{ base_path }}update/x7Q9"></label>
+      <div class="grid-2">
+        <label><span>KIND</span><select class="field-input" name="kind">{% for value, label in kinds %}<option value="{{ value }}" {% if link.kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+        <label><span>LABEL</span><input class="field-input" name="label" maxlength="120" value="{{ link.label }}" placeholder="Quarterly update package"></label>
+      </div>
+      {% if domains %}
+      <label><span>SERVED ON DOMAIN</span><select class="field-input" name="domain">
+        <option value="">(any / default)</option>
+        {% for d in domains %}<option value="{{ d }}" {% if link.domain == d %}selected{% endif %}>{{ d }}</option>{% endfor %}
+      </select></label>
+      {% else %}
+      <label><span>SERVED ON DOMAIN (set REDIRECTOR_DOMAINS to enable the list)</span><input class="field-input mono" name="domain" maxlength="253" value="{{ link.domain }}" placeholder="updates.example.com"></label>
+      {% endif %}
+      <label><span>AGENT / BUILD TAG</span><input class="field-input" name="agent_label" maxlength="120" value="{{ link.agent_label }}" placeholder="agent-42 / build 2026-10"></label>
+    </fieldset>
+    <fieldset>
+      <legend>CONTENT</legend>
+      <label><span>KEY TEXT (kind = key)</span><textarea class="field-input mono" name="key_text" rows="4">{{ link.key_text }}</textarea></label>
+      <label><span>PWNDROP SOURCE URL (kind = proxy - fetched server-side, location never exposed)</span><input class="field-input mono" name="pwndrop_url" value="{{ link.pwndrop_url }}" placeholder="http://10.0.0.5:8080/files/payload.bin"></label>
+      <label><span>PAYLOAD FILE (kind = file)</span><input class="field-input" type="file" name="payload">{% if link.payload %}<small class="muted">current: {{ link.payload.name }}</small>{% endif %}</label>
+      <div class="grid-2">
+        <label><span>DENY RESPONSE TEXT (on_deny = benevolent)</span><textarea class="field-input mono" name="benevolent_text" rows="3">{{ link.benevolent_text }}</textarea></label>
+        <label><span>DENY RESPONSE FILE</span><input class="field-input" type="file" name="benevolent_file">{% if link.benevolent_file %}<small class="muted">current: {{ link.benevolent_file.name }}</small>{% endif %}</label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>GATE</legend>
+      <div class="grid-2">
+        <label><span>GATE TYPE</span><select class="field-input" name="gate_type">{% for value, label in gates %}<option value="{{ value }}" {% if link.gate_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+        <label><span>STATIC TOKEN (gate = token, sent as ?t= or X-Gate-Token)</span><input class="field-input mono" name="gate_token" value="{{ link.gate_token }}"></label>
+      </div>
+      <div class="grid-2">
+        <label><span>TOTP SECRET (gate = totp)</span><input class="field-input mono" name="totp_secret" value="{{ link.totp_secret }}"></label>
+        <label><span>TOTP WINDOW (SECONDS)</span><input class="field-input" type="number" min="5" name="totp_window" value="{{ link.totp_window|default:30 }}"></label>
+      </div>
+      <div class="grid-3">
+        <label><span>DECODE/DECRYPT TEMPLATE (gate = submission)</span><select class="field-input" name="cipher">{% for value, label in ciphers %}<option value="{{ value }}" {% if link.cipher == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+        <label><span>KEY (xor / aes256)</span><input class="field-input mono" name="cipher_key" value="{{ link.cipher_key }}"></label>
+        <label><span>IV (aes256, hex)</span><input class="field-input mono" name="cipher_iv" value="{{ link.cipher_iv }}"></label>
+      </div>
+      <label><span>EXPECTED JSON FIELDS (comma separated)</span><input class="field-input mono" name="expected_fields" value="{{ expected_fields_csv }}" placeholder="hostname, username, screenshot"></label>
+      <label><span>AUTO-DECISION RULES (JSON, optional - first match decides; no match stays manual)</span><textarea class="field-input mono" name="auto_rules" rows="4" placeholder='[{"action":"approve","when":{"fields_match":{"hostname":"^corp-laptop-\\d+$"},"forbid":["vmware|vbox|sandbox"],"require_images":true}}]'>{{ link.auto_rules|as_json }}</textarea></label>
+    </fieldset>
+    <fieldset>
+      <legend>RELEASE RULES</legend>
+      <div class="grid-2">
+        <label><span>WHILE HELD SHOW</span><select class="field-input" name="placeholder">{% for value, label in placeholders %}<option value="{{ value }}" {% if link.placeholder == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+        <label><span>ON DENY SERVE</span><select class="field-input" name="on_deny">{% for value, label in denies %}<option value="{{ value }}" {% if link.on_deny == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+      </div>
+      <div class="grid-3">
+        <label><span>JA3 FINGERPRINT (requires OpenResty front, docs/openresty-ja3.md)</span><input class="field-input mono" name="ja3_fingerprint" maxlength="64" value="{{ link.ja3_fingerprint }}" placeholder="e3b0c44298fc1c149afbf4c8996fb924"></label>
+        <label><span>JA4 FINGERPRINT</span><input class="field-input mono" name="ja4_fingerprint" maxlength="64" value="{{ link.ja4_fingerprint }}" placeholder="t13d1516h2_8daaf6152771_b186095e22b6"></label>
+        <label><span>&nbsp;</span><span class="check"><input type="checkbox" name="watermark" {% if link.watermark %}checked{% endif %}> WATERMARK RELEASES (append unique marker; exact value is logged per download)</span></label>
+      </div>
+      <div class="grid-3">
+        <label class="check"><input type="checkbox" name="requires_approval" {% if link.requires_approval %}checked{% endif %}> <span>VERIFICATION GATE (operator approves before release)</span></label>
+        <label class="check"><input type="checkbox" name="one_time" {% if link.one_time %}checked{% endif %}> <span>ONE-TIME (deactivate after first release)</span></label>
+        <label class="check"><input type="checkbox" name="active" {% if link.active or link is None %}checked{% endif %}> <span>ACTIVE</span></label>
+      </div>
+      <div class="grid-2">
+        <label><span>MAX USES (0 = unlimited)</span><input class="field-input" type="number" min="0" name="max_uses" value="{{ link.max_uses|default:0 }}"></label>
+        <label><span>EXPIRES AT (ISO, optional)</span><input class="field-input" type="datetime-local" name="expires_at" value="{{ link.expires_at|date:'Y-m-d\TH:i' }}"></label>
+      </div>
+    </fieldset>
+    <button class="button" type="submit">Save link</button>
+  </form>
+</section>
+{% endblock %}

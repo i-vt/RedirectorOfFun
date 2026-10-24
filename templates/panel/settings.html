@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="two-column-page">
+  <section class="panel page-panel"><div class="panel-heading"><div><span class="section-label">DELIVERY PREFERENCES</span><h2>Notification routing</h2><p>External delivery is asynchronous and cannot roll back administrative changes.</p></div></div>
+    <form method="post" class="preference-form">{% csrf_token %}<div class="table-wrap"><table><thead><tr><th>EVENT CATEGORY</th>{% for channel, label in channel_choices %}<th>{{ label|upper }}</th>{% endfor %}</tr></thead><tbody>{% for row in preference_matrix %}<tr><td><strong>{{ row.label }}</strong><small class="table-subtitle">{{ row.event_type|upper }}</small></td>{% for item in row.channels %}<td><label class="check-control"><input type="checkbox" name="pref-{{ row.event_type }}-{{ item.channel }}" {% if item.enabled %}checked{% endif %}><span aria-label="{{ row.label }} via {{ item.channel }}"></span></label></td>{% endfor %}</tr>{% endfor %}</tbody></table></div><button class="button primary" type="submit">Save notification preferences</button></form>
+  </section>
+  <aside><section class="panel compact-panel"><span class="section-label">BROWSER PERMISSION</span><h3>Desktop notifications</h3><p>Browser alerts require a user gesture. Panel notifications work without this permission.</p><button id="browser-permission" class="button secondary full" type="button">Enable browser notifications</button><small id="browser-permission-state" class="form-note">Checking browser support…</small></section>
+    <section class="panel compact-panel"><span class="section-label">WEB PUSH</span><h3>Push when the panel is closed</h3><p>Web Push (VAPID) notifies this device even when no panel tab is open. Configure <code>VAPID_*</code> keys first (<code>manage.py vapid_keys</code>).</p><button id="webpush-subscribe" class="button secondary full" type="button">Enable web push on this device</button><small id="webpush-state" class="form-note">Not subscribed.</small></section>
+    <script>
+    (() => {
+      const button = document.getElementById("webpush-subscribe");
+      const state = document.getElementById("webpush-state");
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        state.textContent = "Web Push is not supported by this browser.";
+        button.disabled = true; return;
+      }
+      const csrf = document.querySelector('meta[name="csrf-token"]').content;
+      const headers = {"X-CSRFToken": csrf, "Content-Type": "application/json"};
+      fetch("/api/v1/push/key/", {headers}).then(r => r.json()).then(async (cfg) => {
+        if (!cfg.configured) { state.textContent = "VAPID keys not configured on the server."; button.disabled = true; return; }
+        const registration = await navigator.serviceWorker.register("/static/js/sw.js");
+        const subscription = await registration.pushManager.getSubscription();
+        state.textContent = subscription ? "Subscribed on this device." : "Not subscribed.";
+        button.addEventListener("click", async () => {
+          try {
+            const sub = await registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: cfg.public_key});
+            const json = sub.toJSON();
+            const response = await fetch("/api/v1/push/subscribe/", {method: "POST", headers, body: JSON.stringify({endpoint: json.endpoint, keys: json.keys})});
+            state.textContent = response.ok ? "Subscribed on this device." : "Subscription failed.";
+          } catch (exc) { state.textContent = "Subscription failed: " + exc; }
+        });
+      }).catch(() => { state.textContent = "Could not reach the push key endpoint."; });
+    })();
+    </script>
+    <section class="panel compact-panel"><div class="panel-heading"><h3>Recent deliveries</h3><span>{{ recent_notifications|length }}</span></div>{% for item in recent_notifications %}<article class="notification-item"><div><span class="status-badge {% if item.status == 'sent' %}good{% elif item.status == 'failed' %}bad{% else %}warn{% endif %}">{{ item.status|upper }}</span><small>{{ item.channel|upper }}</small></div><strong>{{ item.payload.title }}</strong><p>{{ item.payload.detail }}</p><form method="post" action="{% url 'notification-dismiss' item.pk %}">{% csrf_token %}<button class="text-button" type="submit">DISMISS</button></form></article>{% empty %}<p class="rail-empty">No notifications yet.</p>{% endfor %}</section>
+  </aside>
+</div>
+{% endblock %}

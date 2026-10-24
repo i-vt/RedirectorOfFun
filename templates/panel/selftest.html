@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">SYSTEM</span><h2>Self-test</h2><p>Blocking checks run automatically at container startup before gunicorn starts. Non-blocking checks report configuration gaps.</p></div>
+    <form method="post">{% csrf_token %}<button class="button" type="submit">Run now</button></form>
+  </div>
+  {% if results %}
+  <div class="table-wrap"><table><thead><tr><th>CHECK</th><th>RESULT</th><th>DETAIL</th></tr></thead><tbody>
+    {% for check in results %}
+    <tr>
+      <td class="mono">{{ check.name }}{% if check.blocking %}<br><span class="muted">blocking</span>{% endif %}</td>
+      <td><span class="status-badge {% if check.status == 'pass' %}good{% elif check.status == 'warn' %}warn{% elif check.status == 'fail' %}bad{% endif %}">{{ check.status|upper }}</span></td>
+      <td class="mono muted">{{ check.message }}</td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% else %}<div class="empty-state"><strong>Not run yet</strong><p>Click “Run now” to execute the check suite.</p></div>{% endif %}
+</section>
+{% endblock %}

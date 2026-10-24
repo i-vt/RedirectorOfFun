@@ -1,0 +1,4 @@
+<div class="panel-inline mono" style="padding:12px 16px">
+  {% for window, code in codes.items %}<span class="status-badge {% if forloop.last %}good{% endif %}">window {{ window }}: <strong>{{ code }}</strong></span> {% endfor %}
+  <small class="muted">valid window ±1 · header X-Gate-Token or ?t=</small>
+</div>

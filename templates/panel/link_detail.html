@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">RELEASE GATES</span><h2 class="mono">{{ link.path }}</h2><p>{{ link.get_kind_display }} · gate: {{ link.get_gate_display|lower }} · cipher: {{ link.get_cipher_display }}</p></div>
+    <div>
+      {% if link.gate_type == 'totp' %}<a class="button secondary" href="{% url 'gate-link-totp' link.pk %}" hx-get="{% url 'gate-link-totp' link.pk %}" hx-target="#totp-codes">Show TOTP codes</a>{% endif %}
+      <a class="button secondary" href="{% url 'gate-link-edit' link.pk %}">Edit</a>
+      <form method="post" action="{% url 'gate-link-toggle' link.pk %}" style="display:inline">{% csrf_token %}<button class="button secondary" type="submit">{{ link.active|yesno:"Deactivate,Activate" }}</button></form>
+      <form method="post" action="{% url 'gate-link-burn' link.pk %}" style="display:inline" data-confirm="BURN this link? It deactivates, denies all traffic, and bans every visitor IP except the approved target.">{% csrf_token %}<button class="button secondary" type="submit" style="color:var(--s-danger)">Burn notice</button></form>
+    </div>
+  </div>
+  <div id="totp-codes"></div>
+  <div class="stat-grid">
+    <div class="stat-card"><span class="section-label">STATUS</span><strong>{% if not link.active %}INACTIVE{% elif link.expired %}EXPIRED{% elif link.requires_approval %}{{ link.get_approval_status_display|upper }}{% else %}LIVE{% endif %}</strong></div>
+    <div class="stat-card"><span class="section-label">RELEASES</span><strong class="mono">{{ link.hit_count }}{% if link.max_uses %} / {{ link.max_uses }}{% endif %}</strong></div>
+    <div class="stat-card"><span class="section-label">EXPIRES</span><strong class="mono">{{ link.expires_at|date:"Y-m-d H:i e"|default:"never" }}</strong></div>
+    <div class="stat-card"><span class="section-label">TAG</span><strong>{{ link.agent_label|default:"-" }}</strong></div>
+    <div class="stat-card"><span class="section-label">DOMAIN</span><strong class="mono">{{ link.domain|default:"default" }}</strong></div>
+    <div class="stat-card"><span class="section-label">FINGERPRINTS</span><strong class="mono">{{ link.ja3_fingerprint|slice:":10"|default:"-" }} {{ link.ja4_fingerprint|slice:":10"|default:"-" }}</strong></div>
+    <div class="stat-card"><span class="section-label">WATERMARK</span><strong>{{ link.watermark|yesno:"ON,off" }}</strong></div>
+  </div>
+  <p class="muted" style="font-size:.7rem"><a href="{% url 'm-link' link.pk %}">Open in mobile UI →</a></p>
+  {% if link.requires_approval %}
+  <div class="panel-heading"><div><span class="section-label">VERIFICATION GATE</span><h2>Operator decision</h2></div></div>
+  {% with sub=link.submissions.first %}
+  {% if link.approval_status == 'pending' and sub %}
+    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'approve' %}" style="display:inline">{% csrf_token %}<button class="button" type="submit">Approve &amp; release</button></form>
+    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'deny' %}" style="display:inline" data-confirm="Deny this submission?">{% csrf_token %}<button class="button secondary" type="submit">Deny</button></form>
+  {% elif link.approval_status == 'pending' %}
+    <p class="muted">No submission received yet - the link stays held until a package arrives.</p>
+  {% else %}<p>Decided by {{ link.decided_by|default:"system" }} at {{ link.decided_at|date:"Y-m-d H:i e" }}.</p>{% endif %}
+  {% endwith %}
+  {% endif %}
+  <div class="panel-heading"><div><span class="section-label">SUBMISSIONS</span><h2>Received packages</h2></div></div>
+  {% include "panel/_submissions_table.html" with submissions=submissions page=None %}
+  <div class="panel-heading"><div><span class="section-label">TRAFFIC</span><h2>Recent hits</h2></div></div>
+  {% if hits %}<div class="table-wrap"><table><thead><tr><th>UTC</th><th>CATEGORY</th><th>STATUS</th><th>CLIENT</th></tr></thead><tbody>{% for hit in hits %}<tr><td class="mono muted nowrap">{{ hit.created_at|date:"Y-m-d H:i:s" }}</td><td><span class="method">{{ hit.get_category_display }}</span></td><td><span class="status-code">{{ hit.status_code }}</span></td><td class="mono muted">{{ hit.ip_hash|slice:":12"|default:"-" }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state"><strong>No hits yet</strong></div>{% endif %}
+</section>
+{% endblock %}

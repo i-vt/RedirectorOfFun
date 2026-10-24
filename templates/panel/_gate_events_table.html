@@ -1,0 +1,14 @@
+{% if events %}<div class="table-wrap"><table><thead><tr><th>UTC</th><th>CATEGORY</th><th>PATH</th><th>STATUS</th><th>CLIENT</th><th>USER AGENT</th></tr></thead><tbody>
+{% for event in events %}
+<tr>
+  <td class="mono muted nowrap">{{ event.created_at|date:"Y-m-d H:i:s" }}</td>
+  <td><span class="method">{{ event.get_category_display }}</span></td>
+  <td class="path-cell mono" title="{{ event.path }}">{{ event.path }}</td>
+  <td><span class="status-code">{{ event.status_code }}</span></td>
+  <td class="mono muted">{{ event.ip_hash|slice:":12"|default:"-" }}</td>
+  <td class="mono muted">{{ event.user_agent|truncatechars:50|default:"-" }}</td>
+</tr>
+{% endfor %}
+</tbody></table></div>
+{% if page.paginator.num_pages > 1 %}<nav class="pagination" aria-label="Event pages"><span>PAGE {{ page.number }} / {{ page.paginator.num_pages }}</span><div>{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&category={{ category|urlencode }}&days={{ request.GET.days|urlencode }}">← Previous</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}&category={{ category|urlencode }}&days={{ request.GET.days|urlencode }}">Next →</a>{% endif %}</div></nav>{% endif %}
+{% else %}<div class="empty-state"><strong>No matching events</strong><p>Adjust the filters or wait for traffic to hit the public surface.</p></div>{% endif %}

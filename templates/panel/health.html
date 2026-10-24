@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="health-grid">
+  <section class="panel page-panel"><div class="panel-heading"><div><span class="section-label">DEPENDENCY STATUS</span><h2>Service health</h2><p>Live process checks are separate from dependency readiness.</p></div><span class="status-badge good">READY</span></div>
+    <div class="health-list"><article><span class="health-icon good-text">✓</span><div><strong>Django application</strong><p>Process responding to requests</p></div><a href="/health/live/">LIVENESS JSON →</a></article><article><span class="health-icon good-text">✓</span><div><strong>PostgreSQL / SQLite</strong><p>Database query and migration state</p></div><a href="/health/ready/">READINESS JSON →</a></article><article><span class="health-icon {% if collector %}good-text{% else %}warn-text{% endif %}">{% if collector %}✓{% else %}!{% endif %}</span><div><strong>404 collector</strong><p>{% if collector %}Checkpoint updated {{ collector.updated_at|date:"Y-m-d H:i:s" }} UTC{% else %}No checkpoint recorded yet{% endif %}</p></div><span>{{ event_count }} EVENTS</span></article></div>
+  </section>
+  <aside class="panel compact-panel"><span class="section-label">OPERATIONS</span><h3>Startup validation</h3><ul class="check-list"><li>Required settings checked</li><li>Database connectivity checked</li><li>Pending migrations reported</li><li>Collector log access isolated</li><li>Notification delivery asynchronous</li></ul><p class="form-note">Migrations run as a controlled release step before the web workers start.</p></aside>
+</div>
+{% endblock %}
