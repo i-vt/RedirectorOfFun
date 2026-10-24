@@ -17,12 +17,17 @@ done
 
 C2_SCHEME="${C2_SCHEME:-http}"
 UA_PATTERN="${UA_PATTERN:-}"
+PANEL_UPSTREAM="${PANEL_UPSTREAM:-panel:3000}"
+
+# Dynamic include files written by the control plane (mounted volumes).
+touch /etc/nginx/banlist.conf /etc/nginx/agent_routes.conf 2>/dev/null || true
 
 echo "[entrypoint] Configuring nginx for $DOMAIN_NAME → $C2_SERVER"
 
 sed -i "s/<DOMAIN_NAME>/$(printf '%s' "$DOMAIN_NAME" | sed 's/[\/&]/\\&/g')/g" "$CONF"
 sed -i "s/<C2_SERVER>/$(printf '%s'   "$C2_SERVER"   | sed 's/[\/&]/\\&/g')/g" "$CONF"
 sed -i "s/<C2_SCHEME>/$C2_SCHEME/g" "$CONF"
+sed -i "s/<PANEL_UPSTREAM>/$(printf '%s' "$PANEL_UPSTREAM" | sed 's/[\/&]/\\&/g')/g" "$CONF"
 
 if [ -n "$UA_PATTERN" ]; then
   sed -i "s|#UA_FILTER# ||g" "$CONF"
@@ -32,7 +37,7 @@ else
 fi
 
 echo "[entrypoint] Updating blocklist..."
-blocklist-update.sh || echo "[entrypoint] WARNING: blocklist update failed — continuing."
+blocklist-update.sh || echo "[entrypoint] WARNING: blocklist update failed - continuing."
 
 echo "[entrypoint] Starting cron..."
 service cron start

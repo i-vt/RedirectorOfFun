@@ -1,0 +1,16 @@
+{% extends "auth.html" %}
+{% block title %}Operator sign in{% endblock %}
+{% block form %}
+<span class="section-label">AUTHENTICATED ACCESS</span>
+<h2>Operator sign in</h2>
+<p class="form-intro">Use your named operator account. Administrative actions are recorded.</p>
+{% if messages %}{% for message in messages %}<div class="form-banner {{ message.tags }}">{{ message }}</div>{% endfor %}{% endif %}
+{% if form.non_field_errors %}<div class="form-banner error">{{ form.non_field_errors }}</div>{% endif %}
+<form method="post" class="stack-form">{% csrf_token %}
+  <label for="id_username">Username</label>{{ form.username }}
+  <label for="id_password">Password</label>{{ form.password }}
+  <input type="hidden" name="next" value="{{ next }}">
+  <button class="button primary" type="submit">Sign in to control plane <span>→</span></button>
+</form>
+<p class="form-note">Sessions expire after 8 hours and are invalidated when access is revoked.</p>
+{% endblock %}

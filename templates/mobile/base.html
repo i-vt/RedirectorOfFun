@@ -1,0 +1,58 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{{ title|default:"RDR" }} · RDR//OPS mobile</title>
+  <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
+  <style>
+    :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#3fb68b;--warn:#d29922;--danger:#f85149;--mono:ui-monospace,Menlo,Consolas,monospace}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 -apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:76px}
+    header{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--border);padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+    header strong{font-family:var(--mono);font-size:.8rem;letter-spacing:.12em}
+    header span{color:var(--muted);font-size:.72rem}
+    main{padding:14px 14px 24px;max-width:640px;margin:0 auto}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px}
+    .card .path{font-family:var(--mono);font-size:.72rem;color:var(--muted);overflow-wrap:anywhere}
+    .badge{display:inline-block;border:1px solid;border-radius:6px;padding:2px 8px;font-size:.62rem;letter-spacing:.08em;margin:6px 4px 0 0}
+    .badge.good{color:var(--accent)}.badge.warn{color:var(--warn)}.badge.bad{color:var(--danger)}
+    .row{display:flex;gap:10px;margin-top:12px}
+    .btn{flex:1;min-height:52px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:1rem;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}
+    .btn.primary{background:var(--accent);border-color:var(--accent);color:#04140d}
+    .btn.danger{color:var(--danger);border-color:var(--danger)}
+    .btn.secondary{color:var(--muted)}
+    .btn:active{transform:scale(.98)}
+    .btn-row form{flex:1}
+    .btn-row .btn{width:100%}
+    img.shot{max-width:100%;border-radius:10px;border:1px solid var(--border);margin-top:10px}
+    pre{font-family:var(--mono);font-size:.72rem;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;overflow:auto;max-height:320px;margin:10px 0 0}
+    textarea{width:100%;min-height:88px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:10px;font-family:var(--mono);font-size:.85rem;margin-top:8px}
+    .muted{color:var(--muted)}.mono{font-family:var(--mono)}
+    nav.tabbar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);display:flex;padding:8px 6px calc(8px + env(safe-area-inset-bottom));z-index:5}
+    nav.tabbar a{flex:1;text-align:center;text-decoration:none;color:var(--muted);font-size:.62rem;letter-spacing:.08em;padding:8px 0 6px;border-radius:8px}
+    nav.tabbar a.active{color:var(--accent);background:rgba(63,182,139,.08)}
+    nav.tabbar a .ico{display:block;font-size:1.25rem;margin-bottom:2px}
+    .empty{text-align:center;color:var(--muted);padding:48px 16px}
+    .pager{display:flex;justify-content:space-between;margin-top:8px}
+    .pager a{color:var(--accent);text-decoration:none;padding:12px}
+    .toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:10px 16px;z-index:9;font-size:.85rem}
+  </style>
+  <script>
+    function post(url, data){const token=document.querySelector('meta[name=csrf-token]').content;
+      return fetch(url,{method:"POST",headers:{"X-CSRFToken":token,"Content-Type":"application/json"},body:JSON.stringify(data||{})}).then(r=>location.reload());}
+  </script>
+</head>
+<body>
+  <header><strong>RDR//OPS</strong><span>{{ title|upper }}</span></header>
+  <main>{% block content %}{% endblock %}</main>
+  <nav class="tabbar">
+    <a href="{% url 'm-submissions' %}" class="{% if request.resolver_match.url_name == 'm-submissions' or request.resolver_match.url_name == 'm-submission' %}active{% endif %}"><span class="ico">✓</span>APPROVE</a>
+    <a href="{% url 'm-links' %}" class="{% if request.resolver_match.url_name == 'm-links' or request.resolver_match.url_name == 'm-link' %}active{% endif %}"><span class="ico">🔗</span>LINKS</a>
+    <a href="{% url 'm-events' %}" class="{% if request.resolver_match.url_name == 'm-events' %}active{% endif %}"><span class="ico">◔</span>EVENTS</a>
+    <a href="{% url 'overview' %}"><span class="ico">▣</span>DESKTOP</a>
+  </nav>
+</body>
+</html>

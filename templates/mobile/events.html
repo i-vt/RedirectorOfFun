@@ -1,0 +1,14 @@
+{% extends "mobile/base.html" %}
+{% block content %}
+{% for e in events %}
+<div class="card">
+  <div class="path">{{ e.path|default:"-" }}</div>
+  <div>
+    <span class="badge {% if e.category == 'suspicious' or e.category == 'banned' %}bad{% elif e.category == 'hit' %}warn{% else %}good{% endif %}">{{ e.get_category_display|upper }}</span>
+    <span class="badge mono">{{ e.created_at|date:"H:i d M" }} UTC</span>
+    <span class="badge mono">{{ e.status_code }}</span>
+  </div>
+</div>
+{% empty %}<div class="empty"><strong>No events</strong></div>{% endfor %}
+{% if page.paginator.num_pages > 1 %}<div class="pager">{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">← Newer</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}">Older →</a>{% endif %}</div>{% endif %}
+{% endblock %}

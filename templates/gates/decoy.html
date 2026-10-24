@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Update Service</title>
+  <style>
+    body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#f5f6f8;color:#1c1e21;display:flex;min-height:100vh;align-items:center;justify-content:center}
+    .card{background:#fff;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.08);padding:48px 56px;max-width:520px;text-align:center}
+    .badge{width:56px;height:56px;border-radius:14px;background:#0b5fff;margin:0 auto 20px;display:flex;align-items:center;justify-content:center}
+    .badge svg{width:28px;height:28px;fill:#fff}
+    h1{font-size:22px;margin:0 0 8px}
+    p{color:#606770;margin:0 0 20px;font-size:15px;line-height:1.5}
+    .ok{display:inline-flex;align-items:center;gap:8px;color:#12805c;font-size:14px}
+    .ok::before{content:"";width:8px;height:8px;border-radius:50%;background:#31a24c}
+    footer{margin-top:28px;color:#8a8d91;font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge"><svg viewBox="0 0 24 24"><path d="M8 5h8v14H8zM10 3h4v2h-4zM10 16h4v2h-4z" opacity=".95"/></svg></div>
+    <h1>Update Service</h1>
+    <p>Automatic updates are managed by this service. No action is required.</p>
+    <span class="ok">All systems operational</span>
+    <footer>&copy; 2024 Update Service</footer>
+  </div>
+  {% if canary %}<img src="{{ canary }}" width="1" height="1" alt="" aria-hidden="true" style="position:absolute;left:-9999px">{% endif %}
+</body>
+</html>

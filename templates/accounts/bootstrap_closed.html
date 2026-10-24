@@ -1,0 +1,9 @@
+{% extends "auth.html" %}
+{% block title %}{{ title|default:"Setup closed" }}{% endblock %}
+{% block headline %}This link has<br>done its job.{% endblock %}
+{% block form %}
+<span class="section-label">CAPABILITY RETIRED</span>
+<h2>{{ title|default:"Bootstrap is closed" }}</h2>
+<p class="form-intro">{{ message|default:"The initial administrator has already been created. This setup URL cannot be used again." }}</p>
+<a class="button primary" href="{% url 'login' %}">Continue to sign in <span>→</span></a>
+{% endblock %}

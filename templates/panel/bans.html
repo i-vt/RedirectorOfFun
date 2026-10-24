@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading"><div><span class="section-label">EDGE DEFENSE</span><h2>Banned IPs</h2><p>Banned visitors receive the default decoy page. nginx-level denies are synced when include paths are configured.</p></div></div>
+  <form class="filter-bar" method="post" action="{% url 'gate-bans' %}">
+    {% csrf_token %}
+    <label><span>IP ADDRESS</span><input class="field-input mono" name="ip" required placeholder="203.0.113.50"></label>
+    <label><span>NOTE</span><input class="field-input" name="note" maxlength="240" placeholder="scanner, sandbox egress, …"></label>
+    <button class="button" type="submit">Ban IP</button>
+  </form>
+  {% if bans %}
+  <div class="table-wrap"><table><thead><tr><th>IP</th><th>NOTE</th><th>SOURCE</th><th>CREATED / UTC</th><th>STATUS</th><th></th></tr></thead><tbody>
+    {% for ban in bans %}
+    <tr>
+      <td class="mono">{{ ban.ip }}</td>
+      <td>{{ ban.note|default:"-" }}</td>
+      <td>{% if ban.auto_created %}<span class="status-badge warn">AUTO</span>{% else %}{{ ban.created_by|default:"manual" }}{% endif %}</td>
+      <td class="mono muted nowrap">{{ ban.created_at|date:"Y-m-d H:i" }}</td>
+      <td>{% if ban.active %}<span class="status-badge good">BANNED</span>{% else %}<span class="status-badge">LIFTED</span>{% endif %}</td>
+      <td><form method="post" action="{% url 'gate-ban-toggle' ban.pk %}">{% csrf_token %}<button class="text-button" type="submit">{{ ban.active|yesno:"Lift,Reinstate" }}</button></form></td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% if page.paginator.num_pages > 1 %}<nav class="pagination"><span>PAGE {{ page.number }} / {{ page.paginator.num_pages }}</span><div>{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">← Previous</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}">Next →</a>{% endif %}</div></nav>{% endif %}
+  {% else %}<div class="empty-state"><strong>No banned IPs</strong><p>Manual bans and auto-bans from suspicious-activity thresholds appear here.</p></div>{% endif %}
+</section>
+{% endblock %}

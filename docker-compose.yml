@@ -1,0 +1,94 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-redirector_panel}
+      POSTGRES_USER: ${POSTGRES_USER:-redirector}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  panel:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-redirector}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-redirector_panel}
+      NGINX_JSON_LOG_PATH: /var/log/nginx/access.json
+    ports:
+      - "3000:3000"
+    volumes:
+      - nginx-logs:/var/log/nginx:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  collector:
+    build: .
+    restart: unless-stopped
+    command: ["python", "manage.py", "ingest_404_logs"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-redirector}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-redirector_panel}
+      NGINX_JSON_LOG_PATH: /var/log/nginx/access.json
+    volumes:
+      - nginx-logs:/var/log/nginx:ro
+    depends_on:
+      panel:
+        condition: service_healthy
+
+  notification-worker:
+    build: .
+    restart: unless-stopped
+    command: ["python", "manage.py", "deliver_notifications"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-redirector}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-redirector_panel}
+    depends_on:
+      panel:
+        condition: service_healthy
+
+  telegram-worker:
+    build: .
+    restart: "no"
+    command: ["python", "manage.py", "poll_telegram"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-redirector}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-redirector_panel}
+    depends_on:
+      panel:
+        condition: service_healthy
+
+  redirector:
+    profiles: ["edge"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME}
+      C2_SERVER: ${C2_SERVER}
+      C2_SCHEME: ${C2_SCHEME:-http}
+      UA_PATTERN: ${UA_PATTERN:-}
+      PANEL_UPSTREAM: ${PANEL_UPSTREAM:-panel:3000}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - ./docker/blocklist.conf:/etc/nginx/blocklist.conf
+      - ./docker/banlist.conf:/etc/nginx/banlist.conf
+      - ./docker/agent_routes.conf:/etc/nginx/agent_routes.conf
+      - nginx-logs:/var/log/nginx
+
+volumes:
+  postgres-data:
+  letsencrypt:
+  nginx-logs:
+    name: redirector-nginx-logs

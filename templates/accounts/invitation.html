@@ -1,0 +1,16 @@
+{% extends "auth.html" %}
+{% block title %}Accept operator invitation{% endblock %}
+{% block headline %}Your operator<br>access awaits.{% endblock %}
+{% block intro %}This invitation is single-use and expires {{ invitation.expires_at|date:"Y-m-d H:i" }} UTC. Set your own password to activate the {{ invitation.role|lower }} account.{% endblock %}
+{% block form %}
+<span class="section-label">OPERATOR INVITATION</span>
+<h2>Activate {{ invitation.username }}</h2>
+<p class="form-intro">Assigned role: <strong>{{ invitation.role }}</strong></p>
+{% if form.non_field_errors %}<div class="form-banner error">{{ form.non_field_errors }}</div>{% endif %}
+<form method="post" class="stack-form">{% csrf_token %}
+  <label for="id_username">Username</label>{{ form.username }}
+  <label for="id_password">Password <span>12+ characters</span></label>{{ form.password }}
+  <label for="id_password_confirm">Confirm password</label>{{ form.password_confirm }}
+  <button class="button primary" type="submit">Activate operator account <span>→</span></button>
+</form>
+{% endblock %}

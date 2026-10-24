@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">SURFACE TELEMETRY</span><h2>Gate events</h2><p>Every touch of the public surface: gate hits, releases, holds, denials, expired links, bans, and suspicious activity.</p></div>
+    <span class="status-badge {% if suspicious_today %}warn{% else %}good{% endif %}">{{ suspicious_today }} SUSPICIOUS TODAY</span>
+  </div>
+  <form class="filter-bar" method="get" action="{% url 'gate-events' %}" hx-get="{% url 'gate-events' %}" hx-target="#gate-events-table" hx-trigger="submit, change from:#filter-category, change from:#filter-days">
+    <label><span>CATEGORY</span><select id="filter-category" class="field-input" name="category"><option value="">All categories</option>{% for value, label in categories %}<option value="{{ value }}" {% if category == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label><span>WINDOW</span><select id="filter-days" class="field-input" name="days"><option value="1" {% if request.GET.days == '1' %}selected{% endif %}>Last 24 hours</option><option value="7" {% if not request.GET.days or request.GET.days == '7' %}selected{% endif %}>Last 7 days</option><option value="30" {% if request.GET.days == '30' %}selected{% endif %}>Last 30 days</option></select></label>
+    <button class="button secondary" type="submit">Apply filters</button>
+  </form>
+  <div id="gate-events-table">{% include "panel/_gate_events_table.html" %}</div>
+</section>
+{% endblock %}

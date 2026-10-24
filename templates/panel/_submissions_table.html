@@ -1,0 +1,27 @@
+{% load gate_extras %}
+{% if submissions %}<div class="table-wrap"><table><thead><tr><th>RECEIVED / UTC</th><th>LINK</th><th>STATUS</th><th>FIELDS</th><th>IMAGES</th><th>DECISION</th></tr></thead><tbody>{% for sub in submissions %}
+<tr class="submission-row" id="sub-{{ sub.pk }}" data-submission="{{ sub.pk }}" {% if sub.status != 'pending' %}data-decided="1"{% endif %}>
+  <td class="mono muted nowrap">{{ sub.created_at|date:"Y-m-d H:i:s" }}</td>
+  <td class="path-cell mono"><a href="{% url 'gate-link-detail' sub.link.pk %}">{{ sub.link.path }}</a></td>
+  <td>{% if sub.status == 'pending' %}<span class="status-badge warn">PENDING</span>{% elif sub.status == 'approved' %}<span class="status-badge good">APPROVED</span>{% else %}<span class="status-badge bad">DENIED</span>{% endif %}</td>
+  <td class="mono muted">{{ sub.decoded_json.keys|join:", "|truncatechars:60|default:"-" }}</td>
+  <td>{% for img in sub.images.all %}<a href="{% url 'gate-submission-image' img.pk %}" target="_blank" rel="noopener"><img src="{% url 'gate-submission-image' img.pk %}" alt="{{ img.field_name }}" style="max-height:64px;border-radius:6px;border:1px solid #30363d"></a>{% empty %}-{% endfor %}</td>
+  <td>{% if sub.status == 'pending' %}
+    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'approve' %}" style="display:inline">{% csrf_token %}<button class="button" type="submit">Approve</button></form>
+    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'deny' %}" style="display:inline" data-confirm="Deny this submission?">{% csrf_token %}<button class="button secondary" type="submit">Deny</button></form>
+    {% else %}<span class="mono muted">{{ sub.decided_by|default:"-" }}</span>
+    <form method="post" action="{% url 'gate-submission-undo' sub.pk %}" style="display:inline" data-confirm="Undo this decision ({{ undo_seconds }}s window, before any release)?">{% csrf_token %}<button class="text-button" type="submit">UNDO</button></form>{% endif %}</td>
+</tr>
+<tr class="detail-row" id="sub-detail-{{ sub.pk }}"><td colspan="6">
+  <details><summary class="mono muted">decoded JSON{% if sub.note %} · note: {{ sub.note|truncatechars:60 }}{% endif %}</summary>
+    <pre class="mono" style="max-height:260px;overflow:auto">{{ sub.decoded_json|pretty_json }}</pre>
+    <form method="post" action="{% url 'gate-submission-note' sub.pk %}" class="filter-bar" style="margin-top:8px">{% csrf_token %}
+      <label style="flex:1"><span>OPERATOR NOTE</span><input class="field-input" name="note" maxlength="4000" value="{{ sub.note }}" placeholder="sandbox marker, customer tag, recheck reason…"></label>
+      <button class="button secondary" type="submit">Save note</button>
+    </form>
+    {% if sub.note %}<p class="mono muted" style="font-size:.68rem">noted by {{ sub.note_by|default:"-" }} at {{ sub.note_at|date:"Y-m-d H:i e" }}</p>{% endif %}
+  </details>
+</td></tr>
+{% endfor %}</tbody></table></div>
+{% if page and page.paginator.num_pages > 1 %}<nav class="pagination" aria-label="Submission pages"><span>PAGE {{ page.number }} / {{ page.paginator.num_pages }}</span><div>{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&status={{ status|urlencode }}">← Previous</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}&status={{ status|urlencode }}">Next →</a>{% endif %}</div></nav>{% endif %}
+{% else %}<div class="empty-state"><strong>No submissions</strong><p>Submissions appear here when a gated link receives a valid encrypted package.</p></div>{% endif %}

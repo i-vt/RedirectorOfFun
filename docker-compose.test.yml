@@ -1,0 +1,26 @@
+services:
+  test-panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: redirector-control-plane:test
+    environment:
+      DEBUG: "false"
+      SESSION_COOKIE_SECURE: "false"
+      CSRF_COOKIE_SECURE: "false"
+      DJANGO_SECRET_KEY: "end-to-end-test-only-secret"
+      ANALYTICS_IP_HASH_SALT: "end-to-end-test-only-analytics-salt"
+      ALLOWED_HOSTS: "*"
+      BOOTSTRAP_BASE_URL: "http://localhost:3100"
+      ANALYTICS_ALERT_THRESHOLD: "1000"
+      PORT: "3000"
+    ports:
+      - "3100:3000"
+    volumes:
+      - ./.test-runtime:/test-runtime
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health/ready/')"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s

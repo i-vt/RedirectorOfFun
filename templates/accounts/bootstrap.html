@@ -1,0 +1,17 @@
+{% extends "auth.html" %}
+{% block title %}Claim initial administrator{% endblock %}
+{% block headline %}Claim this<br>control plane.{% endblock %}
+{% block intro %}This one-time URL is the initial credential. The first successful password-setting request creates the administrator and permanently closes setup.{% endblock %}
+{% block form %}
+<span class="section-label">ONE-TIME BOOTSTRAP</span>
+<h2>Create initial administrator</h2>
+<p class="form-intro">Choose a named administrator account. The password is never written to logs.</p>
+{% if form.non_field_errors %}<div class="form-banner error">{{ form.non_field_errors }}</div>{% endif %}
+<form method="post" action="{% url 'bootstrap' token %}" class="stack-form">
+  <label for="id_username">Administrator username</label>{{ form.username }}
+  <label for="id_password">Password <span>12+ characters</span></label>{{ form.password }}{% for error in form.password.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+  <label for="id_password_confirm">Confirm password</label>{{ form.password_confirm }}{% for error in form.password_confirm.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+  <button class="button primary" type="submit">Claim and create administrator <span>→</span></button>
+</form>
+<div class="capability-note"><strong>CAPABILITY URL</strong><p>Anyone possessing this unclaimed URL can claim the instance. After success, this route returns 410 and cannot be reopened from the panel.</p></div>
+{% endblock %}

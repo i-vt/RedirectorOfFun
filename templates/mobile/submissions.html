@@ -1,0 +1,24 @@
+{% extends "mobile/base.html" %}
+{% load gate_extras %}
+{% block content %}
+{% if submissions %}
+  {% for s in submissions %}
+  <div class="card" id="s{{ s.pk }}">
+    <div class="path">{{ s.link.path }}</div>
+    <div>
+      <span class="badge warn">PENDING</span>
+      {% if s.decoded_json.hostname %}<span class="badge">{{ s.decoded_json.hostname }}</span>{% endif %}
+      {% if s.images.count %}<span class="badge good">{{ s.images.count }} IMG</span>{% endif %}
+    </div>
+    <div class="row btn-row">
+      <a class="btn secondary" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="{% url 'm-submission' s.pk %}">Review</a>
+      <form method="post" action="{% url 'm-submission' s.pk %}">{% csrf_token %}<input type="hidden" name="action" value="approve"><button class="btn primary" type="submit">Approve</button></form>
+      <form method="post" action="{% url 'm-submission' s.pk %}" onsubmit="return confirm('Deny this submission?')">{% csrf_token %}<input type="hidden" name="action" value="deny"><button class="btn danger" type="submit">Deny</button></form>
+    </div>
+  </div>
+  {% endfor %}
+  {% if page.paginator.num_pages > 1 %}<div class="pager">{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">← Newer</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}">Older →</a>{% endif %}</div>{% endif %}
+{% else %}
+  <div class="empty"><strong>Queue clear</strong><p class="muted">No submissions awaiting approval.</p></div>
+{% endif %}
+{% endblock %}

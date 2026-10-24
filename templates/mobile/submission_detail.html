@@ -1,0 +1,47 @@
+{% extends "mobile/base.html" %}
+{% load gate_extras %}
+{% block content %}
+<div class="card">
+  <div class="path">{{ s.link.path }}</div>
+  <div>
+    <span class="badge {% if s.status == 'pending' %}warn{% elif s.status == 'approved' %}good{% else %}bad{% endif %}">{{ s.status|upper }}</span>
+    <span class="badge mono">#{{ s.pk }}</span>
+    <span class="badge mono">{{ s.created_at|date:"H:i d M" }} UTC</span>
+  </div>
+  {% for img in images %}
+    <img class="shot" src="{% url 'gate-submission-image' img.pk %}" alt="{{ img.field_name }}">
+  {% endfor %}
+  <pre>{{ s.decoded_json|pretty_json }}</pre>
+</div>
+
+{% if s.status == 'pending' %}
+<div class="row">
+  <form method="post" style="flex:1">{% csrf_token %}<input type="hidden" name="action" value="approve"><button class="btn primary" type="submit" style="width:100%">Approve &amp; release</button></form>
+  <form method="post" style="flex:1" onsubmit="return confirm('Deny this submission?')">{% csrf_token %}<input type="hidden" name="action" value="deny"><button class="btn danger" type="submit" style="width:100%">Deny</button></form>
+</div>
+{% else %}
+<div class="row">
+  <form method="post" style="flex:1">{% csrf_token %}<input type="hidden" name="action" value="undo"><button class="btn secondary" type="submit" style="width:100%" onclick="return confirm('Undo the decision?')">Undo decision</button></form>
+</div>
+<p class="muted mono" style="font-size:.7rem;margin:10px 4px 0">Undo works within the configured window and before any release.</p>
+{% endif %}
+
+<div class="card" style="margin-top:14px">
+  <form method="post">{% csrf_token %}
+    <input type="hidden" name="action" value="note">
+    <label class="muted" style="font-size:.72rem;letter-spacing:.1em">OPERATOR NOTE</label>
+    <textarea name="note" placeholder="sandbox marker, customer tag, recheck reason…">{{ s.note }}</textarea>
+    <button class="btn secondary" type="submit" style="width:100%;margin-top:8px">Save note</button>
+  </form>
+  {% if s.note %}<p class="muted mono" style="font-size:.7rem;margin:8px 0 0">last edited by {{ s.note_by|default:"-" }} at {{ s.note_at|date:"H:i d M" }} UTC</p>{% endif %}
+</div>
+
+{% if siblings %}
+<div class="card">
+  <label class="muted" style="font-size:.72rem;letter-spacing:.1em">OTHER SUBMISSIONS ON THIS LINK</label>
+  {% for o in siblings %}
+    <div style="margin-top:8px"><a href="{% url 'm-submission' o.pk %}" style="color:var(--accent);text-decoration:none" class="mono">#{{ o.pk }} {{ o.status }}</a> <span class="muted mono" style="font-size:.7rem">{{ o.created_at|date:"H:i d M" }}</span></div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

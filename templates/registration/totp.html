@@ -1,0 +1,15 @@
+{% extends "auth.html" %}
+{% block title %}Second factor{% endblock %}
+{% block form %}
+<span class="section-label">SECOND FACTOR</span>
+<h2>Verify your identity</h2>
+<p class="form-intro">Enter the 6-digit code from your authenticator app, or a backup code.</p>
+{% if error %}<div class="form-banner error">{{ error }}</div>{% endif %}
+<form method="post" class="stack-form">{% csrf_token %}
+  <label for="id_code">Code</label>
+  <input class="field-input mono" id="id_code" name="code" inputmode="numeric" autocomplete="one-time-code" autofocus required>
+  <input type="hidden" name="next" value="{{ next }}">
+  <button class="button primary" type="submit">Verify <span>→</span></button>
+</form>
+<p class="form-note">Backup codes work once each. Lost your device? Ask an administrator to reset your 2FA.</p>
+{% endblock %}

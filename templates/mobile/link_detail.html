@@ -1,0 +1,38 @@
+{% extends "mobile/base.html" %}
+{% load gate_extras %}
+{% block content %}
+<div class="card">
+  <div class="path">{{ link.path }}</div>
+  <div>
+    <span class="badge {% if link.active %}good{% else %}bad{% endif %}">{% if link.active %}ACTIVE{% else %}INACTIVE{% endif %}</span>
+    <span class="badge mono">{{ link.get_kind_display }}</span>
+    <span class="badge mono">{{ link.get_gate_display }}</span>
+    {% if link.watermark %}<span class="badge good">WM</span>{% endif %}
+    {% if link.ja3_fingerprint or link.ja4_fingerprint %}<span class="badge good">JA</span>{% endif %}
+  </div>
+  <p class="muted mono" style="font-size:.7rem;margin:8px 0 0">{{ link.hit_count }} release(s){% if link.max_uses %} of {{ link.max_uses }}{% endif %}{% if link.expires_at %} · expires {{ link.expires_at|date:"d M H:i" }} UTC{% endif %}</p>
+</div>
+
+<div class="row">
+  <form method="post" style="flex:1">{% csrf_token %}<input type="hidden" name="action" value="toggle"><button class="btn secondary" type="submit" style="width:100%">{{ link.active|yesno:"Deactivate,Activate" }}</button></form>
+  <form method="post" style="flex:1" onsubmit="return confirm('BURN this link? It deactivates, denies everyone, and bans all visitor IPs except the approved target. This cannot be undone.')">{% csrf_token %}<input type="hidden" name="action" value="burn"><button class="btn danger" type="submit" style="width:100%">Burn link</button></form>
+</div>
+
+{% if submissions %}
+<div class="card" style="margin-top:14px">
+  <label class="muted" style="font-size:.72rem;letter-spacing:.1em">SUBMISSIONS</label>
+  {% for s in submissions %}
+    <div style="margin-top:8px"><a href="{% url 'm-submission' s.pk %}" style="color:var(--accent);text-decoration:none" class="mono">#{{ s.pk }} {{ s.status }}</a>{% if s.note %} <span class="muted">- {{ s.note|truncatechars:40 }}</span>{% endif %}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if hits %}
+<div class="card" style="margin-top:14px">
+  <label class="muted" style="font-size:.72rem;letter-spacing:.1em">RECENT HITS</label>
+  {% for h in hits %}
+    <div class="mono" style="font-size:.72rem;margin-top:6px">{{ h.created_at|date:"H:i d M" }} · {{ h.get_category_display }} · {{ h.ip_hash|slice:":10"|default:"-" }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

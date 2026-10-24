@@ -1,0 +1,17 @@
+{% extends "mobile/base.html" %}
+{% block content %}
+{% for link in links %}
+<div class="card">
+  <div class="path">{{ link.path }}</div>
+  <div>
+    <span class="badge {% if not link.active %}bad{% elif link.requires_approval and link.approval_status == 'pending' %}warn{% else %}good{% endif %}">
+      {% if not link.active %}INACTIVE{% elif link.requires_approval %}{{ link.approval_status|upper }}{% else %}LIVE{% endif %}
+    </span>
+    <span class="badge mono">{{ link.kind }}</span>
+    <span class="badge mono">{{ link.hit_count }}{% if link.max_uses %}/{{ link.max_uses }}{% endif %} uses</span>
+  </div>
+  <div class="row"><a class="btn secondary" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="{% url 'm-link' link.pk %}">Open</a></div>
+</div>
+{% empty %}<div class="empty"><strong>No links</strong></div>{% endfor %}
+{% if page.paginator.num_pages > 1 %}<div class="pager">{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">← Newer</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}">Older →</a>{% endif %}</div>{% endif %}
+{% endblock %}

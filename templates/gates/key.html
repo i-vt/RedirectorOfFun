@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configuration key</title>
+  <style>
+    body{margin:0;font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;background:#0d1117;color:#e6edf3;display:flex;min-height:100vh;align-items:center;justify-content:center}
+    .card{max-width:760px;padding:40px}
+    h1{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:18px;font-weight:600}
+    pre{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:24px;font-size:14px;overflow-wrap:anywhere;white-space:pre-wrap}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Configuration key</h1>
+    <pre id="key">{{ key_text }}</pre>
+  </div>
+  <script>document.addEventListener("DOMContentLoaded",()=>{const range=document.createRange();range.selectNodeContents(document.getElementById("key"));const sel=getSelection();sel.removeAllRanges();sel.addRange(range);});</script>
+</body>
+</html>
