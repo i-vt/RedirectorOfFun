@@ -98,7 +98,7 @@ python3 manage.py runserver 0.0.0.0:3000
 A JSON client can claim the same URL:
 
 ```bash
-curl -X POST "http://localhost:3000/setup/REPLACE_WITH_TOKEN/" \
+curl -X POST "http://localhost/setup/REPLACE_WITH_TOKEN/" \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"REPLACE_WITH_A_STRONG_PASSWORD"}'
 ```
@@ -120,7 +120,7 @@ The stack starts PostgreSQL, the panel, the 404 collector, and the notification 
 docker compose --profile edge up -d --build
 ```
 
-The panel listens on port 3000. Run migrations as a release step; the provided panel entrypoint does this before starting web workers.
+The panel is served on the standard ports through the web tier: **http://localhost** and **https://localhost** (the latter uses an auto-generated self-signed certificate on first start; mount real certificates into `docker/certs` to replace it). Port 3000 is internal to the compose network. There is no operator IP allowlist by default — the service listens on 0.0.0.0 like a regular web service; to whitelist, use the commented `allow`/`deny` rules in `docker/panel-web.conf` or bind the published ports to a specific interface in `docker-compose.yml`. With `--edge`, the redirector owns 80/443 instead; reach the panel via the commented `127.0.0.1:3000:3000` bind in `docker-compose.yml` or an SSH tunnel. Run migrations as a release step; the provided panel entrypoint does this before starting web workers.
 
 ### nginx 404 integration
 

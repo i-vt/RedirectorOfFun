@@ -1,0 +1,11 @@
+# Web tier in front of the panel: nginx on the standard ports with
+# auto-generated self-signed TLS so https works out of the box.
+FROM nginx:alpine
+
+RUN apk add --no-cache openssl
+
+COPY docker/panel-web.conf /etc/nginx/conf.d/default.conf
+COPY docker/entrypoint-web.sh /entrypoint-web.sh
+RUN chmod +x /entrypoint-web.sh
+
+ENTRYPOINT ["/entrypoint-web.sh"]

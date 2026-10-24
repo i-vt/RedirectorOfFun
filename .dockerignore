@@ -11,3 +11,4 @@ node_modules
 .test-deps
 .git
 var
+docker/certs

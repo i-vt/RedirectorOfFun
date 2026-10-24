@@ -141,9 +141,14 @@ DECISION_UNDO_SECONDS = int(os.getenv("DECISION_UNDO_SECONDS", "10"))
 DECOY_CANARIES = env_bool("DECOY_CANARIES", True)
 REDIRECTOR_DOMAINS = [d.strip() for d in os.getenv("REDIRECTOR_DOMAINS", "").split(",") if d.strip()]
 # Peers allowed to supply X-Forwarded-For; any other client has its own
-# header ignored so it cannot spoof addresses for bans or telemetry.
-TRUSTED_PROXIES = tuple(p.strip() for p in os.getenv("TRUSTED_PROXIES", "127.0.0.1,::1").split(",") if p.strip())
+# header ignored so it cannot spoof addresses for bans or telemetry. CIDR
+# ranges are supported. The private ranges cover the docker networks the
+# web tier and the edge run in.
+TRUSTED_PROXIES = tuple(p.strip() for p in os.getenv(
+    "TRUSTED_PROXIES", "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16").split(",") if p.strip())
 SUBMISSION_MAX_BYTES = int(os.getenv("SUBMISSION_MAX_BYTES", str(4 * 1024 * 1024)))
+# The panel is reached through the nginx web tier, which sets this header.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "")
 VAPID_ADMIN_EMAIL = os.getenv("VAPID_ADMIN_EMAIL", "mailto:operators@example.com")

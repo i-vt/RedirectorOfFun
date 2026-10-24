@@ -488,7 +488,7 @@ class ApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(DeliveryLink.objects.filter(path="/g/ar/1").exists())
 
-    @override_settings(TRUSTED_PROXIES=["10.0.0.5"])
+    @override_settings(TRUSTED_PROXIES=["10.0.0.5", "172.16.0.0/12"])
     def test_xff_ignored_from_untrusted_peer(self):
         link = DeliveryLink.objects.create(path="/g/xff/1", kind="key", key_text="K",
                                            gate_type="token", gate_token="t")
@@ -499,11 +499,17 @@ class ApiTests(TestCase):
                         HTTP_X_FORWARDED_FOR="10.0.0.5")
         hit = HitEvent.objects.filter(link=link).order_by("-created_at").first()
         self.assertEqual(hit.raw_ip, "198.51.100.5")
-        # The real trusted proxy's XFF (client address first) is honored.
+        # A trusted proxy's XFF is honored, and the LAST entry wins so a
+        # client cannot prepend a fake address.
         self.client.get(link.path, {"t": "t"}, REMOTE_ADDR="10.0.0.5",
-                        HTTP_X_FORWARDED_FOR="198.51.100.6")
+                        HTTP_X_FORWARDED_FOR="6.6.6.6, 198.51.100.6")
         hit = HitEvent.objects.filter(link=link).order_by("-created_at").first()
         self.assertEqual(hit.raw_ip, "198.51.100.6")
+        # Docker-network peers are trusted by default (the web tier).
+        self.client.get(link.path, {"t": "t"}, REMOTE_ADDR="172.18.0.5",
+                        HTTP_X_FORWARDED_FOR="198.51.100.7")
+        hit = HitEvent.objects.filter(link=link).order_by("-created_at").first()
+        self.assertEqual(hit.raw_ip, "198.51.100.7")
 
     def test_telegram_fetches_callback_queries(self):
         with mock.patch.object(telegram, "_api", return_value=[]) as api_mock:

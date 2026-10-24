@@ -21,12 +21,39 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-redirector}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-redirector_panel}
       NGINX_JSON_LOG_PATH: /var/log/nginx/access.json
-    ports:
-      - "3000:3000"
+    # Direct panel access is internal only; the web tier publishes 80/443.
+    # To reach the panel directly (e.g. SSH tunnel when the edge profile
+    # owns 80/443), uncomment a localhost bind:
+    # ports:
+    #   - "127.0.0.1:3000:3000"
     volumes:
       - nginx-logs:/var/log/nginx:ro
     depends_on:
       db:
+        condition: service_healthy
+
+  web:
+    profiles: ["panelweb"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      # Operator IP whitelisting (disabled by default; the service listens on
+      # 0.0.0.0 like a regular web service). To restrict access by source IP,
+      # either bind the ports to a specific interface, e.g.:
+      #   - "203.0.113.10:80:80"
+      #   - "203.0.113.10:443:443"
+      # or use the commented allow/deny rules in docker/panel-web.conf.
+    volumes:
+      # Holds the auto-generated self-signed certificate on first start;
+      # mount real certificates over it (fullchain.pem + privkey.pem) for
+      # a trusted https:// name.
+      - ./docker/certs:/etc/nginx/certs
+    depends_on:
+      panel:
         condition: service_healthy
 
   collector:

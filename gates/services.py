@@ -26,15 +26,36 @@ logger = logging.getLogger(__name__)
 SUSPICIOUS_AUTO_BAN_REASON = "auto-banned after repeated suspicious activity"
 
 
+def _remote_is_trusted(remote):
+    if not remote:
+        return False
+    try:
+        address = ipaddress.ip_address(remote)
+    except ValueError:
+        return False
+    for entry in getattr(settings, "TRUSTED_PROXIES", ("127.0.0.1", "::1")):
+        try:
+            if "/" in entry:
+                if address in ipaddress.ip_network(entry, strict=False):
+                    return True
+            elif address == ipaddress.ip_address(entry):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def client_ip(request):
     # X-Forwarded-For is only honored when the immediate peer is a configured
-    # proxy; otherwise a client can forge it to evade bans or frame third parties.
+    # proxy; otherwise a client can forge it to evade bans or frame third
+    # parties. The single trusted hop appends the observed address, so the
+    # LAST entry is the real client; earlier entries may be client-supplied
+    # garbage.
     remote = request.META.get("REMOTE_ADDR", "")
-    proxies = getattr(settings, "TRUSTED_PROXIES", ("127.0.0.1", "::1"))
-    if remote in proxies:
+    if _remote_is_trusted(remote):
         forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
         if forwarded:
-            return forwarded.split(",")[0].strip()
+            return forwarded.split(",")[-1].strip()
     return remote
 
 

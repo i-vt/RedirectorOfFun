@@ -104,12 +104,13 @@ if [[ $RESET -eq 0 && -f .env ]]; then
   fi
 fi
 
-PROFILE_ARGS=()
+PROFILE_ARGS=(--profile panelweb)
 if [[ $EDGE -eq 1 ]]; then
   PROFILE_ARGS=(--profile edge)
-  echo "Starting the control plane and redirector edge…"
+  echo "Starting the control plane and redirector edge (the edge owns ports 80/443;"
+  echo "reach the panel via the uncommented localhost:3000 bind or an SSH tunnel)…"
 else
-  echo "Starting the control plane, PostgreSQL, collector, and notification worker…"
+  echo "Starting the control plane, PostgreSQL, collector, notification worker, and web tier…"
 fi
 
 "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" up -d --build
@@ -128,7 +129,7 @@ for attempt in $(seq 1 60); do
 done
 
 "${COMPOSE[@]}" ps
-printf '\nControl plane: http://localhost:3000\n'
+printf '\nControl plane: http://localhost (https://localhost works too, self-signed)\n'
 printf 'Initial setup URL (printed only for an unclaimed instance):\n'
 "${COMPOSE[@]}" logs panel 2>&1 | grep -E 'Initial administrator setup|/setup/' || true
 printf '\nUseful commands:\n'
