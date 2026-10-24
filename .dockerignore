@@ -1,0 +1,12 @@
+.git
+__pycache__
+*.pyc
+db.sqlite3
+staticfiles
+.env
+.pytest_cache
+.musepool
+node_modules
+.test-runtime
+.test-deps
+.git
