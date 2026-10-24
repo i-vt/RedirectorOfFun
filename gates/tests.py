@@ -1171,6 +1171,30 @@ class DecoyPageTests(TestCase):
         self.assertTrue(DecoyPage.objects.get(template_key="update-service").is_default)
 
 
+@tag("functional")
+@override_settings(ROOT_URLCONF="config.test_urls")
+class OperatorPrefixTests(TestCase):
+    def test_operator_paths_live_under_the_prefix(self):
+        self.assertEqual(reverse("login"), "/testprefix/login/")
+        self.assertEqual(reverse("logout"), "/testprefix/logout/")
+        self.assertEqual(reverse("overview"), "/testprefix/panel/")
+        self.assertEqual(reverse("gate-links"), "/testprefix/panel/links/")
+        self.assertEqual(reverse("gate-decoys"), "/testprefix/panel/decoys/")
+        self.assertEqual(reverse("api-links"), "/testprefix/api/v1/links/")
+        self.assertEqual(reverse("m-submissions"), "/testprefix/m/")
+        self.assertEqual(self.client.get("/testprefix/login/").status_code, 200)
+        # infrastructure stays at the root
+        self.assertEqual(self.client.get("/health/live/").status_code, 200)
+
+    def test_unprefixed_operator_paths_are_gone(self):
+        for path in ("/panel/", "/login/", "/api/v1/links/", "/m/"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 404, path)
+        # and unknown paths present the decoy to anonymous visitors
+        response = self.client.get("/panel/")
+        self.assertContains(response, "Update Service", status_code=404)
+
+
 
 
 

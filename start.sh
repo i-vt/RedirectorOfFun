@@ -58,7 +58,8 @@ if [[ ! -f .env ]]; then
   DJANGO_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
   ANALYTICS_SALT=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
   POSTGRES_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')
-  export DJANGO_SECRET ANALYTICS_SALT POSTGRES_SECRET
+  OP_PREFIX=$(python3 -c 'import uuid; print(uuid.uuid4())')
+  export DJANGO_SECRET ANALYTICS_SALT POSTGRES_SECRET OP_PREFIX
   python3 - <<'PY'
 import os
 from pathlib import Path
@@ -66,6 +67,7 @@ text = Path(".env.example").read_text()
 text = text.replace("replace-with-a-long-random-secret", os.environ["DJANGO_SECRET"])
 text = text.replace("replace-with-a-different-long-random-secret", os.environ["ANALYTICS_SALT"])
 text = text.replace("replace-with-a-database-password", os.environ["POSTGRES_SECRET"])
+text = text.replace("replace-with-random-prefix", os.environ["OP_PREFIX"])
 Path(".env").write_text(text)
 PY
   chmod 600 .env 2>/dev/null || true
@@ -172,12 +174,19 @@ print_access_urls() {
   done <<<"$(host_addresses)"
 }
 
+OP_SEGMENT=""
+OP_PREFIX=$(grep -E '^OPERATOR_PREFIX=' .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "\"'")
+OP_PREFIX="${OP_PREFIX%/}"
+if [[ -n "$OP_PREFIX" && "$OP_PREFIX" != replace-with-random-prefix ]]; then
+  OP_SEGMENT="${OP_PREFIX}/"
+fi
+
 printf '\nControl plane (http on 80, https on 443 self-signed):\n'
-print_access_urls ""
+print_access_urls "/${OP_SEGMENT}panel/"
 SETUP_TOKEN=$("${COMPOSE[@]}" logs panel 2>&1 | grep -oE '/setup/[A-Za-z0-9_-]+/' | head -1 | cut -d/ -f2)
 if [[ -n "$SETUP_TOKEN" ]]; then
   printf 'Initial administrator setup (anyone with this URL can claim it):\n'
-  print_access_urls "/setup/${SETUP_TOKEN}/"
+  print_access_urls "/${OP_SEGMENT}setup/${SETUP_TOKEN}/"
 fi
 printf '\nUseful commands:\n'
 printf '  Logs:      docker compose logs -f panel collector notification-worker\n'
