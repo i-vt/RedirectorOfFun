@@ -127,7 +127,7 @@ def _blank():
 
 
 def _placeholder(link=None):
-    return HttpResponse(render_to_string("gates/placeholder.html", {"link": link}), status=200)
+    return range_aware_response(request, render_to_string("gates/placeholder.html", {"link": link}), content_type="text/html")
 
 
 def _canary_url(request):
@@ -195,6 +195,8 @@ def decoy_response(request=None, status=200):
         if url:
             context["canary"] = url
         html = render_to_string("gates/decoy.html", context)
+    if request is not None:
+        return range_aware_response(request, html, content_type="text/html")
     return HttpResponse(html, status=status)
 
 
@@ -210,8 +212,11 @@ def gate_denied_response(link, request=None):
         return _decoy(request, status=status)
     if link.on_deny == "benevolent":
         if link.benevolent_file:
-            return FileResponse(link.benevolent_file.open("rb"), as_attachment=False)
-        return HttpResponse(link.benevolent_text or "", content_type="text/plain", status=200)
+            with link.benevolent_file.open("rb") as handle:
+                return range_aware_response(request, handle.read(),
+                                            filename=link.benevolent_file.name.rsplit("/", 1)[-1])
+        return range_aware_response(request, link.benevolent_text or "",
+                                    content_type="text/plain")
     return HttpResponse(status=404)
 
 
@@ -443,6 +448,39 @@ def _safe_filename(name):
     return cleaned or "download.bin"
 
 
+def range_aware_response(request, content, *, filename=None, content_type="application/octet-stream"):
+    """Uniform HTTP Range support for everything the gate serves.
+
+    nginx answers ranges on its static decoy pages, so the gated content must
+    too; the asymmetry between response types is itself a fingerprint.
+    """
+    if isinstance(content, str):
+        content = content.encode()
+    total = len(content)
+    range_header = request.headers.get("Range", "")
+    if range_header.startswith("bytes="):
+        try:
+            start_s, _, end_s = range_header[6:].partition("-")
+            start = int(start_s) if start_s else 0
+            end = int(end_s) if end_s else total - 1
+            if start > end or start >= total or start < 0:
+                raise ValueError("bad range")
+            end = min(end, total - 1)
+        except ValueError:
+            response = HttpResponse(status=416)
+            response["Content-Range"] = f"bytes */{total}"
+            return response
+        response = HttpResponse(content[start:end + 1], status=206, content_type=content_type)
+        response["Content-Range"] = f"bytes {start}-{end}/{total}"
+    else:
+        response = HttpResponse(content, content_type=content_type)
+    response["Accept-Ranges"] = "bytes"
+    if filename:
+        response["Content-Disposition"] = f'attachment; filename="{_safe_filename(filename)}"'
+        response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 def serve_link(link, request):
     """Release content for an approved/ungated link."""
     marker = build_watermark(link) if link.watermark else ""
@@ -455,7 +493,8 @@ def serve_link(link, request):
                    detail={"watermark": marker} if marker else {})
         notify("gates", {"title": "Key retrieved", "detail": f"{link.path} served its key ({link.hit_count} use(s))."})
         key_text = link.key_text + (f"\n{marker}\n" if marker else "")
-        return HttpResponse(
+        return range_aware_response(
+            request,
             render_to_string("gates/key.html", {"link": link, "key_text": key_text}),
             content_type="text/html",
         )
@@ -482,10 +521,8 @@ def serve_link(link, request):
         "title": "Gated download released",
         "detail": f"{link.path} released '{filename}' ({len(content)} bytes, use {link.hit_count}).",
     })
-    response = HttpResponse(content, content_type=content_type or "application/octet-stream")
-    response["Content-Disposition"] = f'attachment; filename="{filename}"'
-    response["X-Content-Type-Options"] = "nosniff"
-    return response
+    return range_aware_response(request, content, filename=filename,
+                                content_type=content_type or "application/octet-stream")
 
 
 def _link_content(link):

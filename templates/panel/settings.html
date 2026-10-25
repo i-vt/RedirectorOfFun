@@ -10,6 +10,12 @@
       <select class="field-input" name="theme">{% for value, label in theme_choices %}<option value="{{ value }}" {% if theme == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
       <button class="button secondary full" type="submit">Apply theme</button>
     </form></section>
+    <section class="panel compact-panel"><span class="section-label">GATE CODES</span><h3>TOTP format</h3><p>How time-based gate codes look in transit. 8-char hex is the default; 6-digit decimal blends in with standard TOTP tokens. Switching formats invalidates in-flight links.</p>
+    <form method="post" class="stack-form">{% csrf_token %}
+      <input type="hidden" name="action" value="gate_style">
+      <select class="field-input" name="totp_style">{% for value, label in totp_style_choices %}<option value="{{ value }}" {% if totp_style == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <button class="button secondary full" type="submit">Apply format</button>
+    </form></section>
     <section class="panel compact-panel"><span class="section-label">BROWSER PERMISSION</span><h3>Desktop notifications</h3><p>Browser alerts require a user gesture. Panel notifications work without this permission.</p><button id="browser-permission" class="button secondary full" type="button">Enable browser notifications</button><small id="browser-permission-state" class="form-note">Checking browser support…</small></section>
     <section class="panel compact-panel"><span class="section-label">WEB PUSH</span><h3>Push when the panel is closed</h3><p>Web Push (VAPID) notifies this device even when no panel tab is open. Configure <code>VAPID_*</code> keys first (<code>manage.py vapid_keys</code>).</p><button id="webpush-subscribe" class="button secondary full" type="button">Enable web push on this device</button><small id="webpush-state" class="form-note">Not subscribed.</small></section>
     <script>

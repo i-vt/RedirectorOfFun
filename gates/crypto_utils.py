@@ -131,7 +131,17 @@ def validate_expected_fields(decoded: dict, expected_fields) -> list:
 
 
 def totp_code(secret: str, window_index: int, length: int = 8) -> str:
-    """Time-based code: truncated HMAC-SHA256 of the window index."""
+    """Time-based code. Style comes from the panel-wide GateConfig: truncated
+    HMAC hex by default, or a 6-digit decimal code that looks like a standard
+    TOTP token."""
+    from .models import GateConfig
+    style = GateConfig.get_solo().totp_style
+    if style == "digits6":
+        import struct
+        key_bytes = secret.encode()
+        digest = hmac.new(key_bytes, struct.pack(">Q", window_index), hashlib.sha1).digest()
+        offset = digest[-1] & 0x0F
+        return str((struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF) % 1000000).zfill(6)
     digest = hmac.new(secret.encode(), str(window_index).encode(), hashlib.sha256).hexdigest()
     return digest[:length]
 

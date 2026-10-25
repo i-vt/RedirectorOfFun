@@ -34,6 +34,7 @@ urlpatterns = [
     path("apikeys/<int:pk>/revoke/", views.APIKeyRevoke.as_view(), name="api-apikey-revoke"),
     path("links/<int:pk>/totp/", views.LinkTotpCodes.as_view(), name="api-link-totp"),
     path("selftest/", views.SelftestRun.as_view(), name="api-selftest-run"),
+    path("gate-config/", views.GateConfigView.as_view(), name="api-gate-config"),
     path("operators/invitations/", views.InvitationCreate.as_view(), name="api-invitations"),
     path("operators/<int:pk>/reset-2fa/", views.OperatorReset2FA.as_view(), name="api-operator-reset-2fa"),
     path("block-rules/", views.BlockingRuleList.as_view(), name="api-block-rules"),

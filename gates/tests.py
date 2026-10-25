@@ -1519,6 +1519,92 @@ def dj_settings_for_test():
     return settings
 
 
+@tag("functional")
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class GateFormatAndRangeTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="fmtop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+
+    def test_totp_hex8_default(self):
+        from gates.crypto_utils import totp_code
+        code = totp_code("s3cr3t", 42)
+        self.assertEqual(len(code), 8)
+        self.assertTrue(all(c in "0123456789abcdef" for c in code))
+
+    def test_totp_digits6_style(self):
+        from gates.crypto_utils import totp_code
+        from gates.models import GateConfig
+        config = GateConfig.get_solo()
+        config.totp_style = "digits6"
+        config.save(update_fields=["totp_style"])
+        code = totp_code("s3cr3t", 42)
+        self.assertEqual(len(code), 6)
+        self.assertTrue(code.isdigit())
+        config.totp_style = "hex8"
+        config.save(update_fields=["totp_style"])
+
+    def test_totp_digits6_gate_flow(self):
+        import time
+        from gates.crypto_utils import totp_code
+        from gates.models import GateConfig
+        config = GateConfig.get_solo()
+        config.totp_style = "digits6"
+        config.save(update_fields=["totp_style"])
+        link = DeliveryLink.objects.create(path="/g/fmt/1", kind="key", key_text="K",
+                                           gate_type="totp", totp_secret="s3cr3t")
+        window = int(time.time()) // 30
+        public = Client()
+        ok = public.get(link.path, {"t": totp_code("s3cr3t", window)})
+        self.assertEqual(ok.status_code, 200)
+        config.totp_style = "hex8"
+        config.save(update_fields=["totp_style"])
+
+    def test_gate_style_via_settings_page(self):
+        response = self.client.post(reverse("settings"), {"action": "gate_style", "totp_style": "digits6"})
+        self.assertEqual(response.status_code, 302)
+        from gates.models import GateConfig
+        self.assertEqual(GateConfig.get_solo().totp_style, "digits6")
+
+    def test_gate_style_via_api(self):
+        response = self.client.patch("/api/v1/gate-config/", data={"totp_style": "digits6"},
+                                     content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get("/api/v1/gate-config/")
+        self.assertEqual(response.json()["totp_style"], "digits6")
+
+    def test_key_download_supports_range(self):
+        link = DeliveryLink.objects.create(path="/g/rng/1", kind="key", key_text="K" * 2000)
+        public = Client()
+        full = public.get(link.path)
+        self.assertEqual(full.get("Accept-Ranges"), "bytes")
+        partial = public.get(link.path + "?re=1", HTTP_RANGE="bytes=0-99")
+        self.assertIn(partial.status_code, (200, 206))
+
+    def test_benevolent_supports_range_uniformly(self):
+        link = DeliveryLink.objects.create(path="/g/rng/2", kind="key", key_text="K" * 500,
+                                           requires_approval=True, approval_status="denied",
+                                           on_deny="benevolent")
+        link.benevolent_file.save("b.bin", ContentFile(b"B" * 4000), save=True)
+        public = Client()
+        full = public.get(link.path)
+        self.assertEqual(full.get("Accept-Ranges"), "bytes")
+        partial = public.get(link.path, HTTP_RANGE="bytes=0-99")
+        self.assertEqual(partial.status_code, 206)
+        self.assertEqual(partial.get("Content-Range"), "bytes 0-99/4000")
+        bad = public.get(link.path, HTTP_RANGE="bytes=9999-10000")
+        self.assertEqual(bad.status_code, 416)
+
+    def test_file_download_supports_range(self):
+        link = DeliveryLink.objects.create(path="/g/rng/3", kind="proxy",
+                                           pwndrop_url="http://10.255.255.1/x.bin")
+        with mock.patch("gates.services._fetch_pwndrop", return_value=(b"P" * 2000, "application/octet-stream")):
+            partial = Client().get(link.path, HTTP_RANGE="bytes=500-999")
+        self.assertEqual(partial.status_code, 206)
+        self.assertEqual(partial.get("Content-Range"), "bytes 500-999/2000")
+
+
 @tag("unit")
 class BasePathCustomizationTests(TestCase):
     def test_settings_normalize_bases(self):

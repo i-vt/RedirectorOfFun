@@ -533,6 +533,26 @@ class IPIntel(models.Model):
         return f"{self.ip} AS{self.asn} {self.org}"
 
 
+class GateConfig(models.Model):
+    """Singleton of operator-chosen gate behavior."""
+
+    TOTP_STYLE_CHOICES = [
+        ("hex8", "8-character hex (truncated HMAC)"),
+        ("digits6", "6-digit decimal (standard TOTP look)"),
+    ]
+
+    key = models.CharField(max_length=10, unique=True, default="main")
+    totp_style = models.CharField(max_length=10, choices=TOTP_STYLE_CHOICES, default="hex8")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return "gate configuration"
+
+    @classmethod
+    def get_solo(cls):
+        return cls.objects.get_or_create(key="main")[0]
+
+
 class HitEvent(models.Model):
     """Unified tracking for everything that touches the public surface."""
 

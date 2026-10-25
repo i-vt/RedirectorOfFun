@@ -374,6 +374,14 @@ nysm_initialize() {
     run_cmd sed -i "/#UA_FILTER#/d" "$CONF_DST"
   fi
 
+  # HSTS opt-in: set HSTS_MAX_AGE (e.g. 31536000) to emit Strict-Transport-Security.
+  if [ -n "${HSTS_MAX_AGE:-}" ]; then
+    run_cmd sed -i "s|#hsts# ||g" "$CONF_DST"
+    run_cmd sed -i "s|<HSTS_MAX_AGE>|${HSTS_MAX_AGE}|g" "$CONF_DST"
+  else
+    run_cmd sed -i "/#hsts#/d" "$CONF_DST"
+  fi
+
   # Reload nginx with the substituted HTTP config so it can serve
   # /.well-known/acme-challenge/ from /var/www/html during the ACME challenge
   nysm_action "Reloading nginx with HTTP config..."

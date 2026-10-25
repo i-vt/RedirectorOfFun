@@ -391,6 +391,27 @@ class SelftestRun(APIView):
                          "checks": results})
 
 
+class GateConfigView(APIView):
+    def get(self, request):
+        from gates.models import GateConfig
+        config = GateConfig.get_solo()
+        return Response({"totp_style": config.totp_style,
+                         "choices": dict(GateConfig.TOTP_STYLE_CHOICES)})
+
+    def patch(self, request):
+        from gates.models import GateConfig
+        style = str(request.data.get("totp_style", ""))
+        if style not in dict(GateConfig.TOTP_STYLE_CHOICES):
+            return Response({"detail": "totp_style must be one of the listed choices."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        config = GateConfig.get_solo()
+        config.totp_style = style
+        config.save(update_fields=["totp_style"])
+        record_event(action="gate.totp_style_changed", actor=request.user, target=config,
+                     metadata={"totp_style": style, "via": "api"}, request=request)
+        return Response({"totp_style": config.totp_style})
+
+
 class InvitationCreate(APIView):
     permission_classes = [IsAdministrator]
 

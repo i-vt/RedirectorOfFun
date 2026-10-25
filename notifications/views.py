@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.db import transaction
 from audit.services import record_event
+from gates.models import GateConfig
 from .models import NotificationOutbox, NotificationPreference
 
 
@@ -19,6 +20,16 @@ def settings_view(request):
                 record_event(action="operator.theme_changed", actor=request.user, target=request.user,
                              metadata={"theme": theme}, request=request)
                 messages.success(request, "Interface theme updated.")
+            return redirect("settings")
+        if request.POST.get("action") == "gate_style":
+            style = request.POST.get("totp_style", "hex8")
+            if style in dict(GateConfig.TOTP_STYLE_CHOICES):
+                config = GateConfig.get_solo()
+                config.totp_style = style
+                config.save(update_fields=["totp_style"])
+                record_event(action="gate.totp_style_changed", actor=request.user, target=config,
+                             metadata={"totp_style": style}, request=request)
+                messages.success(request, "Gate code format updated; reissue in-flight links.")
             return redirect("settings")
         for event_type, _ in NotificationPreference.EVENT_CHOICES:
             for channel, _ in NotificationPreference.CHANNEL_CHOICES:
@@ -45,6 +56,8 @@ def settings_view(request):
         "recent_notifications": NotificationOutbox.objects.filter(recipient=request.user)[:8],
         "theme": request.user.theme,
         "theme_choices": request.user.THEME_CHOICES,
+        "totp_style": GateConfig.get_solo().totp_style,
+        "totp_style_choices": GateConfig.TOTP_STYLE_CHOICES,
     })
 
 
