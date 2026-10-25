@@ -355,6 +355,16 @@ nysm_initialize() {
   run_cmd sed -i "s/<C2_SCHEME>/$scheme/g"         "$CONF_DST"
   run_cmd sed -i "s/<PANEL_UPSTREAM>/$safe_panel/g" "$CONF_DST"
 
+  # Randomized per-deployment base paths for gates and agent routes. Set
+  # GATE_BASE_PATH / AGENT_BASE_PATH in the environment to keep a pair.
+  local gate_suffix agent_suffix safe_gate safe_agent
+  gate_suffix=$(head -c 200 /dev/urandom | tr -dc 'a-z0-9' | head -c 4)
+  agent_suffix=$(head -c 200 /dev/urandom | tr -dc 'a-z0-9' | head -c 4)
+  safe_gate=$(printf '%s' "${GATE_BASE_PATH:-/g${gate_suffix}/}" | sed 's/[\/&]/\\&/g')
+  safe_agent=$(printf '%s' "${AGENT_BASE_PATH:-/a${agent_suffix}/}" | sed 's/[\/&]/\\&/g')
+  run_cmd sed -i "s|<GATE_BASE>|$safe_gate|g" "$CONF_DST"
+  run_cmd sed -i "s|<AGENT_BASE>|$safe_agent|g" "$CONF_DST"
+
   if [ -n "$ua_pattern" ]; then
     local safe_ua
     safe_ua=$(printf '%s' "$ua_pattern" | sed 's/[\/&]/\\&/g')

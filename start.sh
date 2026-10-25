@@ -52,7 +52,9 @@ create_env() {
   ANALYTICS_SALT=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
   POSTGRES_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')
   OP_PREFIX=$(python3 -c 'import uuid; print(uuid.uuid4())')
-  export DJANGO_SECRET ANALYTICS_SALT POSTGRES_SECRET OP_PREFIX
+  GATE_SUFFIX=$(python3 -c 'import secrets; print("".join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(4)))')
+  AGENT_SUFFIX=$(python3 -c 'import secrets; print("".join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(4)))')
+  export DJANGO_SECRET ANALYTICS_SALT POSTGRES_SECRET OP_PREFIX GATE_SUFFIX AGENT_SUFFIX
   python3 - <<'PY'
 import os
 from pathlib import Path
@@ -61,6 +63,8 @@ text = text.replace("replace-with-a-long-random-secret", os.environ["DJANGO_SECR
 text = text.replace("replace-with-a-different-long-random-secret", os.environ["ANALYTICS_SALT"])
 text = text.replace("replace-with-a-database-password", os.environ["POSTGRES_SECRET"])
 text = text.replace("replace-with-random-prefix", os.environ["OP_PREFIX"])
+text = text.replace("GATE_BASE_PATH=/g/", f"GATE_BASE_PATH=/g{os.environ['GATE_SUFFIX']}/")
+text = text.replace("AGENT_BASE_PATH=/a/", f"AGENT_BASE_PATH=/a{os.environ['AGENT_SUFFIX']}/")
 Path(".env").write_text(text)
 PY
   chmod 600 .env 2>/dev/null || true

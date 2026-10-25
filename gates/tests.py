@@ -1471,6 +1471,48 @@ class RuleChainSemanticsTests(TestCase):
         self.assertEqual(BlockingRule.objects.get(pk=r2.pk).order, 0)
 
 
+@tag("unit")
+class BasePathCustomizationTests(TestCase):
+    def test_settings_normalize_bases(self):
+        from config.settings import _norm_base
+        self.assertEqual(_norm_base("/g/", "/g/"), "/g/")
+        self.assertEqual(_norm_base("fsafs/20fj", "/g/"), "/fsafs/20fj/")
+        self.assertEqual(_norm_base("", "/g/"), "/g/")
+        self.assertEqual(_norm_base("  /a4q9/  ", "/a/"), "/a4q9/")
+
+    def test_default_conf_has_placeholders(self):
+        from django.conf import settings as dj_settings
+        import os
+        conf = open(os.path.join(dj_settings.BASE_DIR, "default.conf")).read()
+        self.assertIn("<GATE_BASE>", conf)
+        self.assertIn("<AGENT_BASE>", conf)
+        self.assertNotIn("location /g/", conf)
+        self.assertNotIn("location /a/", conf)
+
+
+@tag("functional")
+@override_settings(GATE_BASE_PATH="/gx7q/", AGENT_BASE_PATH="/aq2w/", AUTO_BAN_THRESHOLD=0)
+class CustomBasePathTests(TestCase):
+    def test_links_live_under_custom_base(self):
+        link = DeliveryLink.objects.create(path="/gx7q/drop1", kind="key", key_text="KEY")
+        response = self.client.get(link.path)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "KEY")
+        # the default /g/ base no longer routes
+        stale = self.client.get("/g/drop1")
+        self.assertEqual(stale.status_code, 404)
+
+    def test_canary_follows_the_custom_base(self):
+        response = self.client.get("/gx7q/canary/deadbeef.gif")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/gif")
+        self.assertTrue(HitEvent.objects.filter(category="suspicious").exists())
+
+    def test_agent_paths_follow_custom_base(self):
+        agent = AgentChannel.objects.create(label="a1")
+        self.assertTrue(agent.path.startswith("/aq2w/"), agent.path)
+
+
 @tag("functional")
 class APIKeyAuthTests(TestCase):
     def setUp(self):

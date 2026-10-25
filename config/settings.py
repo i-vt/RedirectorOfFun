@@ -137,12 +137,17 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # Release gates / delivery links.
-GATE_BASE_PATH = os.getenv("GATE_BASE_PATH", "/g/")
+def _norm_base(value, default):
+    value = value.strip().strip("/")
+    return f"/{value}/" if value else default
+
+
+GATE_BASE_PATH = _norm_base(os.getenv("GATE_BASE_PATH", "/g/"), "/g/")
 # Secret URL prefix in front of every operator path (/panel, /api, /m, /login,
 # /setup, django-admin). start.sh fills this with a random UUID; empty means
 # unprefixed, which is only reasonable for local development.
 OPERATOR_PREFIX = os.getenv("OPERATOR_PREFIX", "").strip().strip("/")
-AGENT_BASE_PATH = os.getenv("AGENT_BASE_PATH", "/a/")
+AGENT_BASE_PATH = _norm_base(os.getenv("AGENT_BASE_PATH", "/a/"), "/a/")
 AUTO_BAN_THRESHOLD = int(os.getenv("AUTO_BAN_THRESHOLD", "5"))
 NGINX_BAN_INCLUDE = os.getenv("NGINX_BAN_INCLUDE", "")
 NGINX_AGENT_ROUTES_INCLUDE = os.getenv("NGINX_AGENT_ROUTES_INCLUDE", "")
