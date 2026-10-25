@@ -27,6 +27,7 @@
         <label><span>RULESET</span><select class="field-input" id="qr-ruleset"><option value="">Ungrouped (after all sets)</option>{% for s in rule_sets %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select></label>
         <label><span>COMBINE CONDITIONS WITH</span><select class="field-input" id="qr-logic"><option value="all">AND (all must match)</option><option value="any">OR (any matches)</option><option value="xor">XOR (exactly one matches)</option></select></label>
       </div>
+      <label class="check" style="margin-top:10px"><input type="checkbox" id="qr-matchcase"> <span>MATCH CASE (off = case-insensitive)</span></label>
       <div id="qr-conditions" style="margin-top:14px"></div>
       <button class="button secondary" type="button" id="qr-add-condition" style="margin-top:10px">{% icon "plus" %}Add condition</button>
       <div class="panel" style="margin-top:14px;padding:14px">
@@ -176,19 +177,25 @@
   ];
   const CIDR_OPS = OPS.filter(o => ["is", "isnot"].includes(o.id));
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matchCaseBox = document.getElementById("qr-matchcase");
   const build = (op, value) => {
+    let pattern;
     switch (op) {
-      case "starts": return "^" + esc(value);
-      case "contains": return esc(value);
-      case "is": return "^" + esc(value) + "$";
-      case "isnot": return "^" + esc(value) + "$";
-      case "notcontains": return esc(value);
-      case "ends": return esc(value) + "$";
-      case "anything": return ".*";
-      case "notempty": return ".+";
-      case "empty": return "^$";
+      case "starts": pattern = "^" + esc(value); break;
+      case "contains": pattern = esc(value); break;
+      case "is": pattern = "^" + esc(value) + "$"; break;
+      case "isnot": pattern = "^" + esc(value) + "$"; break;
+      case "notcontains": pattern = esc(value); break;
+      case "ends": pattern = esc(value) + "$"; break;
+      case "anything": pattern = ".*"; break;
+      case "notempty": pattern = ".+"; break;
+      case "empty": pattern = "^$"; break;
+      default: pattern = esc(value);
     }
-    return esc(value);
+    if (!matchCaseBox.checked && pattern !== ".*" && pattern !== ".+" && pattern !== "^$") {
+      pattern = "(?i)" + pattern;
+    }
+    return pattern;
   };
 
   const addRow = () => {
@@ -239,7 +246,7 @@
   [closeBtn, cancelBtn].forEach(b => b.addEventListener("click", () => { modal.hidden = true; }));
   modal.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
   addBtn.addEventListener("click", () => { addRow(); preview(); });
-  ["qr-logic", "qr-name", "qr-action", "qr-ruleset"].forEach(id =>
+  ["qr-logic", "qr-name", "qr-action", "qr-ruleset", "qr-matchcase"].forEach(id =>
     document.getElementById(id).addEventListener("change", preview));
 
   createBtn.addEventListener("click", () => {
