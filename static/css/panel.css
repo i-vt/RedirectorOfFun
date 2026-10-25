@@ -98,6 +98,6 @@ table code{color:var(--s-accent)}
   background: var(--s-positive);
   clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
 }
-.jester-star-tip.t1 { left: -3px; top: 17px; }
-.jester-star-tip.t2 { left: 15px; top: 0px; }
-.jester-star-tip.t3 { left: 32px; top: 18px; }
+.jester-star-tip.t1 { left: -1px; top: 19px; }
+.jester-star-tip.t2 { left: 24px; top: 7px; }
+.jester-star-tip.t3 { left: 29px; top: 19px; }
