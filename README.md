@@ -7,16 +7,15 @@
 > Now with a full operator control plane: release gates, approval queues, a
 > firewall-style blocking chain, decoy management, and a themeable panel.
 
-<img width="543" height="498" alt="image" src="https://github.com/user-attachments/assets/b413caaf-9a91-49e4-942b-fec431dc7356" />
+## Screenshot
 
-## Screenshots
-
-The control plane in its three per-account themes (Settings -> Theme):
+### Panel: 
 
 ![Default theme: overview](docs/assets/default-overview.png)
-![Cozy Clown theme: overview](docs/assets/cozy-overview.png)
-![Obnoxious Clown theme: overview](docs/assets/obnoxious-overview.png)
 
+### Decoy Sample: 
+
+<img width="543" height="498" alt="image" src="https://github.com/user-attachments/assets/b413caaf-9a91-49e4-942b-fec431dc7356" />
 
 ---
 
