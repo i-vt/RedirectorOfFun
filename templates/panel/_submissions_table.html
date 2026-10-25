@@ -1,3 +1,4 @@
+{% load ui_icons %}
 {% load gate_extras %}
 {% if submissions %}<div class="table-wrap"><table><thead><tr><th>RECEIVED / UTC</th><th>LINK</th><th>STATUS</th><th>FIELDS</th><th>IMAGES</th><th>DECISION</th></tr></thead><tbody>{% for sub in submissions %}
 <tr class="submission-row" id="sub-{{ sub.pk }}" data-submission="{{ sub.pk }}" {% if sub.status != 'pending' %}data-decided="1"{% endif %}>
@@ -7,8 +8,8 @@
   <td class="mono muted">{{ sub.decoded_json.keys|join:", "|truncatechars:60|default:"-" }}</td>
   <td>{% for img in sub.images.all %}<a href="{% url 'gate-submission-image' img.pk %}" target="_blank" rel="noopener"><img src="{% url 'gate-submission-image' img.pk %}" alt="{{ img.field_name }}" style="max-height:64px;border-radius:6px;border:1px solid #30363d"></a>{% empty %}-{% endfor %}</td>
   <td>{% if sub.status == 'pending' %}
-    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'approve' %}" style="display:inline">{% csrf_token %}<button class="button" type="submit">Approve</button></form>
-    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'deny' %}" style="display:inline" data-confirm="Deny this submission?">{% csrf_token %}<button class="button secondary" type="submit">Deny</button></form>
+    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'approve' %}" style="display:inline">{% csrf_token %}<button class="button" type="submit">{% icon "check" %}Approve</button></form>
+    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'deny' %}" style="display:inline" data-confirm="Deny this submission?">{% csrf_token %}<button class="button secondary" type="submit">{% icon "x" %}Deny</button></form>
     {% else %}<span class="mono muted">{{ sub.decided_by|default:"-" }}</span>
     <form method="post" action="{% url 'gate-submission-undo' sub.pk %}" style="display:inline" data-confirm="Undo this decision ({{ undo_seconds }}s window, before any release)?">{% csrf_token %}<button class="text-button" type="submit">UNDO</button></form>{% endif %}</td>
 </tr>

@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% load ui_icons %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">
     <div><span class="section-label">SYSTEM</span><h2>Self-test</h2><p>Blocking checks run automatically at container startup before gunicorn starts. Non-blocking checks report configuration gaps.</p></div>
-    <form method="post">{% csrf_token %}<button class="button" type="submit">Run now</button></form>
+    <form method="post">{% csrf_token %}<button class="button" type="submit">{% icon "selftest" %}Run now</button></form>
   </div>
   {% if results %}
   <div class="table-wrap"><table><thead><tr><th>CHECK</th><th>RESULT</th><th>DETAIL</th></tr></thead><tbody>

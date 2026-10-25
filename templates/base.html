@@ -1,4 +1,4 @@
-{% load static %}<!doctype html>
+{% load static %}{% load ui_icons %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -7,6 +7,8 @@
   <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{{ title|default:"Control Plane" }} · RoF//OPS</title>
   <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
+  {% if theme == "cozy" %}<link rel="icon" href="{% static 'favicon-cozy.svg' %}" type="image/svg+xml">{% endif %}
+  {% if theme == "obnoxious" %}<link rel="icon" href="{% static 'favicon-obnoxious.svg' %}" type="image/svg+xml">{% endif %}
   <link rel="stylesheet" href="{% static 'css/panel.css' %}">
   {% if theme == "cozy" %}<link rel="stylesheet" href="{% static 'css/theme-cozy.css' %}">{% endif %}
   {% if theme == "obnoxious" %}<link rel="stylesheet" href="{% static 'css/theme-obnoxious.css' %}">{% endif %}
@@ -35,27 +37,27 @@
     <div class="environment"><span class="status-dot"></span> SYSTEM ONLINE <span class="env-code">V1.0</span></div>
     <nav class="primary-nav" aria-label="Primary navigation">
       <span class="nav-label">WORKSPACE</span>
-      <a class="{% if request.resolver_match.url_name == 'overview' %}active{% endif %}" href="{% url 'overview' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'overview' %}•{% else %}&nbsp;{% endif %}]</span> Overview</a>
-      <a class="{% if request.resolver_match.url_name == 'events' %}active{% endif %}" href="{% url 'events' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'events' %}•{% else %}&nbsp;{% endif %}]</span> 404 Events</a>
-      <a class="{% if request.resolver_match.url_name == 'gate-links' %}active{% endif %}" href="{% url 'gate-links' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'gate-links' %}•{% else %}&nbsp;{% endif %}]</span> Delivery Links</a>
-      <a class="{% if request.resolver_match.url_name == 'gate-submissions' %}active{% endif %}" href="{% url 'gate-submissions' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'gate-submissions' %}•{% else %}&nbsp;{% endif %}]</span> Approvals</a>
+      <a class="{% if request.resolver_match.url_name == 'overview' %}active{% endif %}" href="{% url 'overview' %}">{% icon "overview" %}<span class="bracket">[{% if request.resolver_match.url_name == 'overview' %}•{% else %}&nbsp;{% endif %}]</span> Overview</a>
+      <a class="{% if request.resolver_match.url_name == 'events' %}active{% endif %}" href="{% url 'events' %}">{% icon "events" %}<span class="bracket">[{% if request.resolver_match.url_name == 'events' %}•{% else %}&nbsp;{% endif %}]</span> 404 Events</a>
+      <a class="{% if request.resolver_match.url_name == 'gate-links' %}active{% endif %}" href="{% url 'gate-links' %}">{% icon "links" %}<span class="bracket">[{% if request.resolver_match.url_name == 'gate-links' %}•{% else %}&nbsp;{% endif %}]</span> Delivery Links</a>
+      <a class="{% if request.resolver_match.url_name == 'gate-submissions' %}active{% endif %}" href="{% url 'gate-submissions' %}">{% icon "approvals" %}<span class="bracket">[{% if request.resolver_match.url_name == 'gate-submissions' %}•{% else %}&nbsp;{% endif %}]</span> Approvals</a>
       <span class="nav-label">ADMINISTRATION</span>
-      {% if is_administrator %}<a class="{% if request.resolver_match.url_name == 'operators' %}active{% endif %}" href="{% url 'operators' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'operators' %}•{% else %}&nbsp;{% endif %}]</span> Operators</a>{% endif %}
-      <a class="{% if request.resolver_match.url_name == 'gate-bans' %}active{% endif %}" href="{% url 'gate-bans' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'gate-bans' %}•{% else %}&nbsp;{% endif %}]</span> Banned IPs</a>
-      <a class="{% if request.resolver_match.url_name == 'gate-block-rules' %}active{% endif %}" href="{% url 'gate-block-rules' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'gate-block-rules' %}•{% else %}&nbsp;{% endif %}]</span> Blocking Rules</a>
-      <a class="{% if request.resolver_match.url_name == 'gate-agents' %}active{% endif %}" href="{% url 'gate-agents' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'gate-agents' %}•{% else %}&nbsp;{% endif %}]</span> Agent Channels</a>
-      <a class="{% if request.resolver_match.url_name == 'gate-events' %}active{% endif %}" href="{% url 'gate-events' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'gate-events' %}•{% else %}&nbsp;{% endif %}]</span> Gate Events</a>
-      <a class="{% if request.resolver_match.url_name == 'gate-decoys' %}active{% endif %}" href="{% url 'gate-decoys' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'gate-decoys' %}•{% else %}&nbsp;{% endif %}]</span> Decoy Pages</a>
-      <a class="{% if request.resolver_match.url_name == 'audit-log' %}active{% endif %}" href="{% url 'audit-log' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'audit-log' %}•{% else %}&nbsp;{% endif %}]</span> Audit Log</a>
-      <a class="{% if request.resolver_match.url_name == 'settings' %}active{% endif %}" href="{% url 'settings' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'settings' %}•{% else %}&nbsp;{% endif %}]</span> Settings</a>
-      <a class="{% if request.resolver_match.url_name == 'security' %}active{% endif %}" href="{% url 'security' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'security' %}•{% else %}&nbsp;{% endif %}]</span> Security</a>
-      <a href="{% url 'm-submissions' %}"><span class="bracket">[&nbsp;]</span> Mobile UI</a>
-      <a class="{% if request.resolver_match.url_name == 'panel-health' %}active{% endif %}" href="{% url 'panel-health' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'panel-health' %}•{% else %}&nbsp;{% endif %}]</span> Service Health</a>
-      <a class="{% if request.resolver_match.url_name == 'gate-selftest' %}active{% endif %}" href="{% url 'gate-selftest' %}"><span class="bracket">[{% if request.resolver_match.url_name == 'gate-selftest' %}•{% else %}&nbsp;{% endif %}]</span> Self-Test</a>
+      {% if is_administrator %}<a class="{% if request.resolver_match.url_name == 'operators' %}active{% endif %}" href="{% url 'operators' %}">{% icon "operators" %}<span class="bracket">[{% if request.resolver_match.url_name == 'operators' %}•{% else %}&nbsp;{% endif %}]</span> Operators</a>{% endif %}
+      <a class="{% if request.resolver_match.url_name == 'gate-bans' %}active{% endif %}" href="{% url 'gate-bans' %}">{% icon "bans" %}<span class="bracket">[{% if request.resolver_match.url_name == 'gate-bans' %}•{% else %}&nbsp;{% endif %}]</span> Banned IPs</a>
+      <a class="{% if request.resolver_match.url_name == 'gate-block-rules' %}active{% endif %}" href="{% url 'gate-block-rules' %}">{% icon "rules" %}<span class="bracket">[{% if request.resolver_match.url_name == 'gate-block-rules' %}•{% else %}&nbsp;{% endif %}]</span> Blocking Rules</a>
+      <a class="{% if request.resolver_match.url_name == 'gate-agents' %}active{% endif %}" href="{% url 'gate-agents' %}">{% icon "agents" %}<span class="bracket">[{% if request.resolver_match.url_name == 'gate-agents' %}•{% else %}&nbsp;{% endif %}]</span> Agent Channels</a>
+      <a class="{% if request.resolver_match.url_name == 'gate-events' %}active{% endif %}" href="{% url 'gate-events' %}">{% icon "gate-events" %}<span class="bracket">[{% if request.resolver_match.url_name == 'gate-events' %}•{% else %}&nbsp;{% endif %}]</span> Gate Events</a>
+      <a class="{% if request.resolver_match.url_name == 'gate-decoys' %}active{% endif %}" href="{% url 'gate-decoys' %}">{% icon "decoys" %}<span class="bracket">[{% if request.resolver_match.url_name == 'gate-decoys' %}•{% else %}&nbsp;{% endif %}]</span> Decoy Pages</a>
+      <a class="{% if request.resolver_match.url_name == 'audit-log' %}active{% endif %}" href="{% url 'audit-log' %}">{% icon "audit" %}<span class="bracket">[{% if request.resolver_match.url_name == 'audit-log' %}•{% else %}&nbsp;{% endif %}]</span> Audit Log</a>
+      <a class="{% if request.resolver_match.url_name == 'settings' %}active{% endif %}" href="{% url 'settings' %}">{% icon "settings" %}<span class="bracket">[{% if request.resolver_match.url_name == 'settings' %}•{% else %}&nbsp;{% endif %}]</span> Settings</a>
+      <a class="{% if request.resolver_match.url_name == 'security' %}active{% endif %}" href="{% url 'security' %}">{% icon "security" %}<span class="bracket">[{% if request.resolver_match.url_name == 'security' %}•{% else %}&nbsp;{% endif %}]</span> Security</a>
+      <a href="{% url 'm-submissions' %}">{% icon "mobile" %}<span class="bracket">[&nbsp;]</span> Mobile UI</a>
+      <a class="{% if request.resolver_match.url_name == 'panel-health' %}active{% endif %}" href="{% url 'panel-health' %}">{% icon "health" %}<span class="bracket">[{% if request.resolver_match.url_name == 'panel-health' %}•{% else %}&nbsp;{% endif %}]</span> Service Health</a>
+      <a class="{% if request.resolver_match.url_name == 'gate-selftest' %}active{% endif %}" href="{% url 'gate-selftest' %}">{% icon "selftest" %}<span class="bracket">[{% if request.resolver_match.url_name == 'gate-selftest' %}•{% else %}&nbsp;{% endif %}]</span> Self-Test</a>
     </nav>
     <div class="sidebar-foot">
       <div class="operator-chip"><span class="operator-avatar">{{ user.username|first|upper }}</span><span><strong>{{ user.username }}</strong><small>{% if is_administrator %}ADMINISTRATOR{% else %}OPERATOR{% endif %}</small></span>{% if theme == "obnoxious" %}<span class="circus-eyes" aria-hidden="true"><i></i><i></i></span>{% endif %}</div>
-      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button" type="submit">[ SIGN OUT ]</button></form>
+      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button" type="submit">{% icon "signout" "icon icon-inline" %} [ SIGN OUT ]</button></form>
     </div>
   </aside>
   <div class="workspace">

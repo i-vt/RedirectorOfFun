@@ -1,4 +1,4 @@
-{% load static %}<!doctype html>
+{% load static %}{% load ui_icons %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -7,6 +7,8 @@
   <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{{ title|default:"RoF" }} · RoF//OPS mobile</title>
   <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
+  {% if theme == "cozy" %}<link rel="icon" href="{% static 'favicon-cozy.svg' %}" type="image/svg+xml">{% endif %}
+  {% if theme == "obnoxious" %}<link rel="icon" href="{% static 'favicon-obnoxious.svg' %}" type="image/svg+xml">{% endif %}
   {% if theme == "cozy" %}<link rel="stylesheet" href="{% static 'css/theme-cozy.css' %}">{% endif %}
   {% if theme == "obnoxious" %}<link rel="stylesheet" href="{% static 'css/theme-obnoxious.css' %}">{% endif %}
   <style>
@@ -36,7 +38,8 @@
     nav.tabbar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);display:flex;padding:8px 6px calc(8px + env(safe-area-inset-bottom));z-index:5}
     nav.tabbar a{flex:1;text-align:center;text-decoration:none;color:var(--muted);font-size:.62rem;letter-spacing:.08em;padding:8px 0 6px;border-radius:8px}
     nav.tabbar a.active{color:var(--accent);background:rgba(63,182,139,.08)}
-    nav.tabbar a .ico{display:block;font-size:1.25rem;margin-bottom:2px}
+    nav.tabbar a .ico{display:block;margin:0 auto 2px;width:20px;height:20px}
+    nav.tabbar a .icon{width:20px;height:20px;display:block;margin:0 auto}
     .empty{text-align:center;color:var(--muted);padding:48px 16px}
     .pager{display:flex;justify-content:space-between;margin-top:8px}
     .pager a{color:var(--accent);text-decoration:none;padding:12px}
@@ -51,10 +54,10 @@
   <header><strong>RoF//OPS</strong><span>{{ title|upper }}</span></header>
   <main>{% block content %}{% endblock %}</main>
   <nav class="tabbar">
-    <a href="{% url 'm-submissions' %}" class="{% if request.resolver_match.url_name == 'm-submissions' or request.resolver_match.url_name == 'm-submission' %}active{% endif %}"><span class="ico">✓</span>APPROVE</a>
-    <a href="{% url 'm-links' %}" class="{% if request.resolver_match.url_name == 'm-links' or request.resolver_match.url_name == 'm-link' %}active{% endif %}"><span class="ico">🔗</span>LINKS</a>
-    <a href="{% url 'm-events' %}" class="{% if request.resolver_match.url_name == 'm-events' %}active{% endif %}"><span class="ico">◔</span>EVENTS</a>
-    <a href="{% url 'overview' %}"><span class="ico">▣</span>DESKTOP</a>
+    <a href="{% url 'm-submissions' %}" class="{% if request.resolver_match.url_name == 'm-submissions' or request.resolver_match.url_name == 'm-submission' %}active{% endif %}">{% icon "approvals" %}APPROVE</a>
+    <a href="{% url 'm-links' %}" class="{% if request.resolver_match.url_name == 'm-links' or request.resolver_match.url_name == 'm-link' %}active{% endif %}">{% icon "links" %}LINKS</a>
+    <a href="{% url 'm-events' %}" class="{% if request.resolver_match.url_name == 'm-events' %}active{% endif %}">{% icon "gate-events" %}EVENTS</a>
+    <a href="{% url 'overview' %}">{% icon "overview" %}DESKTOP</a>
   </nav>
 </body>
 </html>

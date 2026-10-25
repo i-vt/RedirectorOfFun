@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load ui_icons %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading"><div><span class="section-label">C2 EDGE</span><h2>Agent channels</h2><p>Per-agent beacon URLs under <code>{{ base_path }}</code>. nginx proxies matching traffic to the C2 backend; mismatched UAs get a bare 404. Rotate a token to burn a deployed agent.</p></div></div>
@@ -7,7 +8,7 @@
     <label><span>LABEL</span><input class="field-input" name="label" required maxlength="120" placeholder="agent-07"></label>
     <label><span>UA REGEX (empty = allow all)</span><input class="field-input mono" name="ua_pattern" maxlength="240" placeholder="Mozilla/5\.0.*Windows NT"></label>
     <label><span>NOTE</span><input class="field-input" name="note" maxlength="240"></label>
-    <button class="button" type="submit">Create channel</button>
+    <button class="button" type="submit">{% icon "broadcast" %}Create channel</button>
   </form>
   {% if agents %}
   <div class="table-wrap"><table><thead><tr><th>URL</th><th>LABEL</th><th>UA PATTERN</th><th>HITS</th><th>LAST SEEN / UTC</th><th>STATUS</th><th></th></tr></thead><tbody>

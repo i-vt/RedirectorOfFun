@@ -1668,6 +1668,24 @@ class ThemeTests(TestCase):
         self.assertNotContains(response, "circus-balloon")
         self.assertContains(response, "status-orbit")
 
+    def test_nav_icons_and_theme_favicons(self):
+        response = self.client.get(reverse("overview"))
+        self.assertContains(response, 'class="icon"', count=None)  # nav icons present
+        self.assertContains(response, 'favicon.svg')
+        self.assertNotContains(response, "favicon-obnoxious.svg")
+        self.operator.theme = "obnoxious"
+        self.operator.save(update_fields=["theme"])
+        response = self.client.get(reverse("overview"))
+        self.assertContains(response, "favicon-obnoxious.svg")
+        self.operator.theme = "cozy"
+        self.operator.save(update_fields=["theme"])
+        response = self.client.get(reverse("overview"))
+        self.assertContains(response, "favicon-cozy.svg")
+
+    def test_mobile_tabbar_icons(self):
+        response = self.client.get("/m/")
+        self.assertContains(response, 'class="icon"')
+
 
 @tag("functional")
 @override_settings(ROOT_URLCONF="config.test_urls", OPERATOR_PREFIX="testprefix")

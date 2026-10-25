@@ -1,12 +1,13 @@
 {% extends "base.html" %}
+{% load ui_icons %}
 {% load gate_extras %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">
     <div><span class="section-label">EDGE DEFENSE</span><h2>Blocking rules</h2><p>Rulesets are evaluated top to bottom; the first matching rule wins. An ALLOW rule stops the chain, so place allow rules (trusted operators) before block rules to override them. Drag rows to reorder; drag set headers to reorder sets.</p></div>
     <div>
-      <a class="button secondary" href="{% url 'gate-block-rule-test' %}">Test rules</a>
-      <a class="button secondary" href="{% url 'gate-block-rules-export' %}">Export JSON</a>
+      <a class="button secondary" href="{% url 'gate-block-rule-test' %}">{% icon "flask" %}Test rules</a>
+      <a class="button secondary" href="{% url 'gate-block-rules-export' %}">{% icon "download" %}Export JSON</a>
       <form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="seed_presets"><button class="button secondary" type="submit">Ensure presets</button></form>
     </div>
   </div>
@@ -26,7 +27,7 @@
       </div>
       <label><span>CONDITIONS (JSON list of {"type", "pattern", "negate"?}; types: {% for t in condition_types %}{{ t }}{% if not forloop.last %}, {% endif %}{% endfor %})</span>
         <textarea class="field-input mono" name="conditions" rows="3" placeholder='[{"type": "cidr", "pattern": "203.0.113.0/24"}]'>[]</textarea></label>
-      <button class="button" type="submit">Create rule</button>
+      <button class="button" type="submit">{% icon "plus" %}Create rule</button>
     </fieldset>
   </form>
 
@@ -51,7 +52,7 @@
       <legend>IMPORT RULES</legend>
       <label><span>PASTE EXPORT JSON (OR UPLOAD)</span><textarea class="field-input mono" name="import_payload" rows="3"></textarea></label>
       <label><span>FILE</span><input class="field-input" type="file" name="import_file" accept=".json"></label>
-      <button class="button secondary" type="submit">Import (created disabled)</button>
+      <button class="button secondary" type="submit">{% icon "upload" %}Import (created disabled)</button>
     </fieldset>
   </form>
 

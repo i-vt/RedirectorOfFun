@@ -1,13 +1,14 @@
 {% extends "base.html" %}
+{% load ui_icons %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">
     <div><span class="section-label">RELEASE GATES</span><h2 class="mono">{{ link.path }}</h2><p>{{ link.get_kind_display }} · gate: {{ link.get_gate_display|lower }} · cipher: {{ link.get_cipher_display }}</p></div>
     <div>
       {% if link.gate_type == 'totp' %}<a class="button secondary" href="{% url 'gate-link-totp' link.pk %}" hx-get="{% url 'gate-link-totp' link.pk %}" hx-target="#totp-codes">Show TOTP codes</a>{% endif %}
-      <a class="button secondary" href="{% url 'gate-link-edit' link.pk %}">Edit</a>
+      <a class="button secondary" href="{% url 'gate-link-edit' link.pk %}">{% icon "settings" %}Edit</a>
       <form method="post" action="{% url 'gate-link-toggle' link.pk %}" style="display:inline">{% csrf_token %}<button class="button secondary" type="submit">{{ link.active|yesno:"Deactivate,Activate" }}</button></form>
-      <form method="post" action="{% url 'gate-link-burn' link.pk %}" style="display:inline" data-confirm="BURN this link? It deactivates, denies all traffic, and bans every visitor IP except the approved target.">{% csrf_token %}<button class="button secondary" type="submit" style="color:var(--s-danger)">Burn notice</button></form>
+      <form method="post" action="{% url 'gate-link-burn' link.pk %}" style="display:inline" data-confirm="BURN this link? It deactivates, denies all traffic, and bans every visitor IP except the approved target.">{% csrf_token %}<button class="button secondary" type="submit" style="color:var(--s-danger)">{% icon "flame" %}Burn notice</button></form>
     </div>
   </div>
   <div id="totp-codes"></div>

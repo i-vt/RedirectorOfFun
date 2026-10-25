@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load ui_icons %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">
@@ -23,7 +24,7 @@
         <label><span>UPLOADED HTML FILE (kind = upload)</span><input class="field-input" type="file" name="html_file" accept=".html,.htm"></label>
       </div>
       <label><span>REDIRECT URL (kind = redirect)</span><input class="field-input mono" name="redirect_url" placeholder="https://www.microsoft.com/"></label>
-      <button class="button" type="submit">Add decoy page</button>
+      <button class="button" type="submit">{% icon "decoys" %}Add decoy page</button>
     </fieldset>
   </form>
   <div class="table-wrap" style="margin-top:18px"><table><thead><tr><th>NAME</th><th>KIND</th><th>DETAIL</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>

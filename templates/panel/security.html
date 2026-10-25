@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load ui_icons %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading"><div><span class="section-label">ACCOUNT</span><h2>Two-factor authentication</h2><p>TOTP second factor for your operator account. Enabling it protects the panel even if your password leaks.</p></div><span class="status-badge {% if enabled %}good{% else %}warn{% endif %}">{% if enabled %}ENABLED{% else %}DISABLED{% endif %}</span></div>
@@ -49,7 +50,7 @@
     <form method="post" class="filter-bar" style="margin-top:12px">{% csrf_token %}
       <input type="hidden" name="action" value="apikey_create">
       <label><span>NAME</span><input class="field-input" name="name" maxlength="120" placeholder="CI pipeline"></label>
-      <button class="button" type="submit">Create API key</button>
+      <button class="button" type="submit">{% icon "security" %}Create API key</button>
     </form>
     {% if api_keys %}
     <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>NAME</th><th>PREFIX</th><th>LAST USED</th><th>STATUS</th><th></th></tr></thead><tbody>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load ui_icons %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading"><div><span class="section-label">EDGE DEFENSE</span><h2>Banned IPs</h2><p>Banned visitors receive the default decoy page. nginx-level denies are synced when include paths are configured.</p></div></div>
@@ -6,7 +7,7 @@
     {% csrf_token %}
     <label><span>IP ADDRESS</span><input class="field-input mono" name="ip" required placeholder="203.0.113.50"></label>
     <label><span>NOTE</span><input class="field-input" name="note" maxlength="240" placeholder="scanner, sandbox egress, …"></label>
-    <button class="button" type="submit">Ban IP</button>
+    <button class="button" type="submit">{% icon "bans" %}Ban IP</button>
   </form>
   {% if bans %}
   <div class="table-wrap"><table><thead><tr><th>IP</th><th>NOTE</th><th>SOURCE</th><th>CREATED / UTC</th><th>STATUS</th><th></th></tr></thead><tbody>
