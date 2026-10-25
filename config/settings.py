@@ -148,6 +148,9 @@ GATE_BASE_PATH = _norm_base(os.getenv("GATE_BASE_PATH", "/g/"), "/g/")
 # unprefixed, which is only reasonable for local development.
 OPERATOR_PREFIX = os.getenv("OPERATOR_PREFIX", "").strip().strip("/")
 AGENT_BASE_PATH = _norm_base(os.getenv("AGENT_BASE_PATH", "/a/"), "/a/")
+# Public mount point for hosted lure sites: <LURE_BASE_PATH><slug>/<file>.
+# Must differ from GATE_BASE_PATH and AGENT_BASE_PATH.
+LURE_BASE_PATH = _norm_base(os.getenv("LURE_BASE_PATH", "/l/"), "/l/")
 AUTO_BAN_THRESHOLD = int(os.getenv("AUTO_BAN_THRESHOLD", "5"))
 NGINX_BAN_INCLUDE = os.getenv("NGINX_BAN_INCLUDE", "")
 NGINX_AGENT_ROUTES_INCLUDE = os.getenv("NGINX_AGENT_ROUTES_INCLUDE", "")

@@ -13,15 +13,17 @@ from audit.models import AuditEvent
 from audit.services import record_event
 from gates import services as gate_services
 from gates.models import (
-    AgentChannel, BannedIP, BlockingRule, DecoyPage, DeliveryLink, HitEvent, RuleSet, Submission,
+    AgentChannel, BannedIP, BlockingRule, DecoyPage, DeliveryLink, HitEvent, LureSite,
+    RuleSet, Submission,
 )
 from notifications.models import NotificationOutbox, NotificationPreference, PushSubscription
 from .pagination import AuditCursorPagination, EventCursorPagination, HitCursorPagination, OperatorPagination
 from .serializers import (
     AgentChannelSerializer, APIKeySerializer, AuditEventSerializer, BannedIPSerializer,
-    BlockingRuleSerializer, DecoyPageSerializer, DeliveryLinkSerializer, HitEventSerializer,
-    NotFoundEventSerializer, NotificationPreferenceSerializer, NotificationSerializer,
-    OperatorSerializer, PushSubscriptionSerializer, RuleSetSerializer, SubmissionSerializer,
+    BlockingRuleSerializer, DecoyAssetSerializer, DecoyPageSerializer, DeliveryLinkSerializer,
+    HitEventSerializer, LureFileSerializer, LureSiteSerializer, NotFoundEventSerializer,
+    NotificationPreferenceSerializer, NotificationSerializer, OperatorSerializer,
+    PushSubscriptionSerializer, RuleSetSerializer, SubmissionSerializer,
 )
 
 
@@ -527,6 +529,93 @@ class DecoyPageSetDefault(APIView):
         record_event(action="gate.decoy_defaulted", actor=request.user, target=page,
                      metadata={"via": "api"}, request=request)
         return Response(DecoyPageSerializer(page).data)
+
+
+class DecoyAssetWrite(APIView):
+    """Upsert or delete one tied asset of a decoy page."""
+
+    def put(self, request, pk):
+        page = get_object_or_404(DecoyPage, pk=pk)
+        path = str(request.data.get("path", "")).strip()
+        if not path:
+            return Response({"detail": "path is required."}, status=status.HTTP_400_BAD_REQUEST)
+        asset = page.assets.filter(path=path).first() or page.assets.model(page=page, path=path)
+        asset.content = str(request.data.get("content", ""))
+        try:
+            asset.full_clean()
+            asset.save()
+        except Exception as exc:  # noqa: BLE001 - DRF turns this into a 400
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError(getattr(exc, "message_dict", None) or str(exc))
+        record_event(action="gate.decoy_asset_saved", actor=request.user, target=page,
+                     metadata={"path": asset.path, "via": "api"}, request=request)
+        return Response(DecoyAssetSerializer(asset).data)
+
+    def delete(self, request, pk):
+        page = get_object_or_404(DecoyPage, pk=pk)
+        path = str(request.data.get("path", "")).strip()
+        deleted, _ = page.assets.filter(path=path).delete()
+        if deleted:
+            record_event(action="gate.decoy_asset_deleted", actor=request.user, target=page,
+                         metadata={"path": path, "via": "api"}, request=request)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class LureSiteList(generics.ListCreateAPIView):
+    serializer_class = LureSiteSerializer
+
+    def get_queryset(self):
+        return LureSite.objects.prefetch_related("files")
+
+    def perform_create(self, serializer):
+        site = serializer.save(created_by=self.request.user)
+        record_event(action="gate.lure_created", actor=self.request.user, target=site,
+                     metadata={"via": "api"}, request=self.request)
+
+
+class LureSiteDetail(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = LureSiteSerializer
+    queryset = LureSite.objects.prefetch_related("files")
+
+    def perform_update(self, serializer):
+        site = serializer.save()
+        record_event(action="gate.lure_updated", actor=self.request.user, target=site,
+                     request=self.request)
+
+    def perform_destroy(self, instance):
+        record_event(action="gate.lure_deleted", actor=self.request.user,
+                     metadata={"name": instance.name, "via": "api"}, request=self.request)
+        instance.delete()
+
+
+class LureFileWrite(APIView):
+    """Upsert or delete one file of a lure site."""
+
+    def put(self, request, pk):
+        site = get_object_or_404(LureSite, pk=pk)
+        path = str(request.data.get("path", "")).strip()
+        if not path:
+            return Response({"detail": "path is required."}, status=status.HTTP_400_BAD_REQUEST)
+        file = site.files.filter(path=path).first() or site.files.model(site=site, path=path)
+        file.content = str(request.data.get("content", ""))
+        try:
+            file.full_clean()
+            file.save()
+        except Exception as exc:  # noqa: BLE001 - DRF turns this into a 400
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError(getattr(exc, "message_dict", None) or str(exc))
+        record_event(action="gate.lure_file_saved", actor=request.user, target=site,
+                     metadata={"path": file.path, "via": "api"}, request=request)
+        return Response(LureFileSerializer(file).data)
+
+    def delete(self, request, pk):
+        site = get_object_or_404(LureSite, pk=pk)
+        path = str(request.data.get("path", "")).strip()
+        deleted, _ = site.files.filter(path=path).delete()
+        if deleted:
+            record_event(action="gate.lure_file_deleted", actor=request.user, target=site,
+                         metadata={"path": path, "via": "api"}, request=request)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class PushSubscribe(APIView):

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load ui_icons %}
+{% load static %}
+{% block head %}<script defer src="{% static 'js/site_editor.js' %}"></script>{% endblock %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">HOSTED CONTENT / LURE</span><h2>{{ site.name }}</h2><p>Live at <a class="mono" href="{{ site.public_path }}" target="_blank" rel="noopener">{{ site.public_path }}</a> · {% if site.active %}<span class="status-badge good">LIVE</span>{% else %}<span class="status-badge">OFFLINE</span>{% endif %}</p></div>
+    <div><a class="button secondary" href="{% url 'gate-lures' %}">← All lures</a></div>
+  </div>
+
+  <details>
+    <summary class="text-button" style="cursor:pointer">SITE SETTINGS</summary>
+    <form method="post" class="stacked-form" style="margin-top:10px">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="meta">
+      <div class="grid-3">
+        <label><span>NAME</span><input class="field-input" name="name" maxlength="120" value="{{ site.name }}"></label>
+        <label><span>URL SLUG</span><input class="field-input mono" name="slug" maxlength="60" value="{{ site.slug }}"></label>
+        <label><span>DESCRIPTION</span><input class="field-input" name="description" maxlength="240" value="{{ site.description }}"></label>
+      </div>
+      <label class="check"><input type="checkbox" name="active" {% if site.active %}checked{% endif %}> <span>LIVE (offline lures fall back to the decoy)</span></label>
+      <div style="margin-top:10px">
+        <button class="button" type="submit">Save settings</button>
+      </div>
+    </form>
+    <form method="post" data-confirm="Delete the whole lure '{{ site.name }}' and all its files?" style="margin-top:8px">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="delete_site">
+      <button class="text-button" type="submit" style="color:var(--s-danger)">{% icon "trash" %}DELETE SITE</button>
+    </form>
+  </details>
+
+  <div class="editor-grid" style="margin-top:16px">
+    <div>
+      <span class="section-label">FILES</span>
+      <div class="file-list" style="margin-top:8px">
+        {% for file in files %}
+        <a href="?file={{ file.path|urlencode }}" class="{% if current and file.pk == current.pk %}active{% endif %}">{{ file.path }}</a>
+        {% endfor %}
+      </div>
+      <form method="post" style="margin-top:12px">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_file">
+        <label><span class="section-label">ADD FILE</span><input class="field-input mono" name="path" maxlength="200" placeholder="about.html or js/app.js" style="margin-top:6px"></label>
+        <button class="button secondary" type="submit" style="margin-top:8px">{% icon "plus" %}Add</button>
+      </form>
+      <p class="muted" style="font-size:.66rem;margin-top:12px">Requests under {{ site.public_path }} map to these files. An empty path serves <code>index.html</code>; unknown paths serve <code>404.html</code> when it exists, else the decoy.</p>
+    </div>
+    <div>
+      {% if current %}
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_file">
+        <input type="hidden" name="original_path" value="{{ current.path }}">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <input class="field-input mono" name="path" maxlength="200" value="{{ current.path }}" style="flex:1">
+          <span class="status-badge">{{ current.content_type }}</span>
+          <a class="text-button" href="{{ site.public_path }}{{ current.path }}" target="_blank" rel="noopener">{% icon "eye" %}OPEN</a>
+        </div>
+        <textarea class="code-editor" name="content" data-code spellcheck="false">{{ current.content }}</textarea>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="button" type="submit">{% icon "check" %}Save file</button>
+          <button class="button secondary" type="submit" form="del-file-{{ current.pk }}" data-confirm="Delete {{ current.path }}?">{% icon "trash" %}Delete file</button>
+        </div>
+        <p class="muted" style="font-size:.66rem;margin-top:6px">Ctrl/⌘+S saves. Renaming the path field moves the file.</p>
+      </form>
+      <form method="post" id="del-file-{{ current.pk }}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_file">
+        <input type="hidden" name="path" value="{{ current.path }}">
+      </form>
+      {% else %}
+      <div class="empty-state"><strong>No files yet</strong><p>Add <code>index.html</code> on the left to put content at the site root.</p></div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

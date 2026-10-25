@@ -24,7 +24,7 @@ from .crypto_utils import (
 )
 from .models import (
     AgentChannel, BannedIP, BlockingRule, BUILTIN_DECOYS, DecoyPage, DeliveryLink,
-    HitEvent, IPIntel, Submission, SubmissionImage,
+    HitEvent, IPIntel, LureSite, Submission, SubmissionImage,
 )
 
 logger = logging.getLogger(__name__)
@@ -160,6 +160,9 @@ def render_decoy(page, request):
     """HTML for the decoy page, or None when the page is an external redirect."""
     if page is None or page.kind == "redirect":
         return None
+    if page.html:
+        # Operator-edited override beats both the upload and the built-in.
+        return _inject_canary(page.html, request)
     if page.kind == "upload":
         if not page.html_file:
             return None
@@ -202,6 +205,63 @@ def decoy_response(request=None, status=200):
 
 def _decoy(request=None, status=200):
     return decoy_response(request, status=status)
+
+
+# ─── Hosted sites (lures) and decoy asset bundles ──────────────────────────
+
+def serve_lure(request, rest):
+    """Serve a hosted lure site file. `rest` is '<slug>/<path>' after the lure
+    base prefix. Returns None when no active site owns the slug (caller then
+    treats the request as a normal not-found)."""
+    slug, _, rel = rest.partition("/")
+    site = LureSite.objects.filter(slug=slug[:60], active=True).first()
+    if site is None:
+        return None
+    ip = client_ip(request)
+    decision = evaluate_blocking_rules(request, ip, is_404=False)
+    if decision is not None:
+        rule, fired = decision
+        response = apply_blocking_rule(request, ip, rule, fired)
+        if response is not None:
+            return response
+    rel = rel.strip("/") or "index.html"
+    file = site.files.filter(path=rel).first()
+    if file is None:
+        record_hit("lure", request=request, path=request.path, status_code=404,
+                   detail={"slug": site.slug, "missing": rel[:200]})
+        missing = site.files.filter(path="404.html").first()
+        if missing is not None:
+            return range_aware_response(request, missing.content, content_type="text/html")
+        return _decoy(request)
+    record_hit("lure", request=request, path=request.path, status_code=200,
+               detail={"slug": site.slug, "file": rel})
+    return range_aware_response(request, file.content,
+                                content_type=file.content_type or "text/plain")
+
+
+def serve_decoy_asset(request, rest):
+    """Serve one tied asset of a decoy page. `rest` is '<page id>/<path>'.
+    Returns None when the page or asset does not exist."""
+    pk_part, _, rel = rest.partition("/")
+    if not pk_part.isdigit():
+        return None
+    page = DecoyPage.objects.filter(pk=int(pk_part), active=True).first()
+    if page is None:
+        return None
+    asset = page.assets.filter(path=rel.strip("/")).first()
+    if asset is None:
+        return None
+    ip = client_ip(request)
+    decision = evaluate_blocking_rules(request, ip, is_404=False)
+    if decision is not None:
+        rule, fired = decision
+        response = apply_blocking_rule(request, ip, rule, fired)
+        if response is not None:
+            return response
+    record_hit("decoy_asset", request=request, path=request.path, status_code=200,
+               detail={"page": page.pk, "file": asset.path})
+    return range_aware_response(request, asset.content,
+                                content_type=asset.content_type or "text/plain")
 
 
 def gate_denied_response(link, request=None):
@@ -580,6 +640,17 @@ def dispatch(request, path):
             agent.save(update_fields=["hits", "last_seen_at"])
             record_hit("hit", request=request, path=normalized, agent_channel=agent,
                        detail={"label": agent.label})
+        # Hosted content: lure sites and decoy asset bundles. Unknown slugs and
+        # missing assets fall through to the normal not-found handling below.
+        lure_base = getattr(settings, "LURE_BASE_PATH", "/l/")
+        if normalized.startswith(lure_base):
+            response = serve_lure(request, normalized[len(lure_base):])
+            if response is not None:
+                return response
+        if normalized.startswith("/d/"):
+            response = serve_decoy_asset(request, normalized[len("/d/"):])
+            if response is not None:
+                return response
         decision = evaluate_blocking_rules(request, ip, is_404=True)
         if decision is not None:
             rule, fired = decision

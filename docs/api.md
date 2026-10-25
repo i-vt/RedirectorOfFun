@@ -57,6 +57,30 @@ file is missing from storage).
 | GET | `hit-events/?category=suspicious` | Surface telemetry (cursor-paginated) |
 | GET | `gate-stats/` | 24h aggregates + pending counts |
 
+## Lures (hosted multi-page sites)
+
+Lures are served publicly at `<LURE_BASE_PATH><slug>/<file>` (default `/l/`).
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET/POST | `lures/` | List / create sites (`{"name", "slug", "description", "active"}`) |
+| GET/PATCH/DELETE | `lures/<id>/` | Manage a site (responses include nested `files` and `public_path`) |
+| PUT | `lures/<id>/file/` | Upsert a file: `{"path": "index.html", "content": "..."}` |
+| DELETE | `lures/<id>/file/` | Remove a file: `{"path": "index.html"}` |
+
+## Decoys
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET/POST | `decoys/` | List / create decoy pages |
+| GET/PATCH/DELETE | `decoys/<id>/` | Manage (writable `html` overrides the source content; `assets` nested read) |
+| POST | `decoys/<id>/default/` | Make the default cover page |
+| PUT | `decoys/<id>/asset/` | Upsert a tied asset: `{"path": "style.css", "content": "..."}` |
+| DELETE | `decoys/<id>/asset/` | Remove an asset: `{"path": "style.css"}` |
+
+Decoy assets are served publicly at `/d/<page id>/<path>` so the decoy HTML can
+reference its own CSS/JS from any 404 context.
+
 ## Blocking rules
 
 | Method | Path | Purpose |

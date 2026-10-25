@@ -3,7 +3,8 @@ from accounts.models import APIKey, Operator
 from analytics.models import NotFoundEvent
 from audit.models import AuditEvent
 from gates.models import (
-    AgentChannel, BannedIP, BlockingRule, DecoyPage, DeliveryLink, HitEvent, RuleSet, Submission,
+    AgentChannel, BannedIP, BlockingRule, DecoyAsset, DecoyPage, DeliveryLink, HitEvent,
+    LureFile, LureSite, RuleSet, Submission,
 )
 from notifications.models import NotificationOutbox, NotificationPreference, PushSubscription
 
@@ -128,12 +129,39 @@ class PushSubscriptionSerializer(serializers.ModelSerializer):
         extra_kwargs = {"endpoint": {"validators": []}}
 
 
+class DecoyAssetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DecoyAsset
+        fields = ["path", "content", "content_type", "public_path", "updated_at"]
+        read_only_fields = ["content_type", "public_path", "updated_at"]
+
+
 class DecoyPageSerializer(serializers.ModelSerializer):
+    assets = DecoyAssetSerializer(many=True, read_only=True)
+
     class Meta:
         model = DecoyPage
-        fields = ["id", "name", "kind", "template_key", "redirect_url", "active",
-                  "is_default", "created_at"]
+        fields = ["id", "name", "kind", "template_key", "redirect_url", "html", "active",
+                  "is_default", "assets", "created_at"]
         read_only_fields = ["is_default", "created_at"]
+
+
+class LureFileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LureFile
+        fields = ["path", "content", "content_type", "updated_at"]
+        read_only_fields = ["content_type", "updated_at"]
+
+
+class LureSiteSerializer(serializers.ModelSerializer):
+    files = LureFileSerializer(many=True, read_only=True)
+    public_path = serializers.ReadOnlyField()
+
+    class Meta:
+        model = LureSite
+        fields = ["id", "name", "slug", "description", "active", "public_path",
+                  "files", "created_at", "updated_at"]
+        read_only_fields = ["created_at", "updated_at"]
 
 
 class APIKeySerializer(serializers.ModelSerializer):

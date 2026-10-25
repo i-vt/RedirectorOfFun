@@ -364,6 +364,12 @@ nysm_initialize() {
   safe_agent=$(printf '%s' "${AGENT_BASE_PATH:-/a${agent_suffix}/}" | sed 's/[\/&]/\\&/g')
   run_cmd sed -i "s|<GATE_BASE>|$safe_gate|g" "$CONF_DST"
   run_cmd sed -i "s|<AGENT_BASE>|$safe_agent|g" "$CONF_DST"
+  # Lure sites keep a stable base (default /l/) - their URLs are shared with
+  # targets, so randomizing per deployment would break them. Override with
+  # LURE_BASE_PATH when a less guessable prefix is wanted.
+  local safe_lure
+  safe_lure=$(printf '%s' "${LURE_BASE_PATH:-/l/}" | sed 's/[\/&]/\\&/g')
+  run_cmd sed -i "s|<LURE_BASE>|$safe_lure|g" "$CONF_DST"
 
   if [ -n "$ua_pattern" ]; then
     local safe_ua

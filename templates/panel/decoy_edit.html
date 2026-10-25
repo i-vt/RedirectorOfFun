@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load ui_icons %}
+{% load static %}
+{% block head %}<script defer src="{% static 'js/site_editor.js' %}"></script>{% endblock %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">PUBLIC SURFACE / DECOY</span><h2>{{ page.name }}</h2><p>{{ page.get_kind_display }} · {% if page.active %}<span class="status-badge good">ACTIVE</span>{% else %}<span class="status-badge">INACTIVE</span>{% endif %}{% if page.is_default %} <span class="status-badge good">DEFAULT</span>{% endif %}</p></div>
+    <div><a class="button secondary" href="{% url 'gate-decoys' %}">← All decoys</a></div>
+  </div>
+
+  <details>
+    <summary class="text-button" style="cursor:pointer">SETTINGS</summary>
+    <form method="post" class="stacked-form" style="margin-top:10px">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="meta">
+      <div class="grid-2">
+        <label><span>NAME</span><input class="field-input" name="name" maxlength="120" value="{{ page.name }}"></label>
+        {% if page.kind == "redirect" %}<label><span>REDIRECT URL</span><input class="field-input mono" name="redirect_url" value="{{ page.redirect_url }}"></label>{% endif %}
+      </div>
+      <button class="button" type="submit" style="margin-top:8px">Save settings</button>
+    </form>
+  </details>
+
+  {% if page.kind != "redirect" %}
+  <div class="panel-heading" style="margin-top:18px"><div><span class="section-label">HTML</span><h3>Main page {% if override_active %}<span class="status-badge warn">OVERRIDE ACTIVE</span>{% endif %}</h3><p>{% if override_active %}This edited HTML is what visitors get.{% else %}Loaded from the {{ page.get_kind_display|lower }} source; saving here creates an editable override.{% endif %} Reference assets below at their <code>/d/{{ page.pk }}/...</code> URLs.</p></div></div>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save_html">
+    <textarea class="code-editor" name="content" data-code spellcheck="false">{{ editor_html }}</textarea>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="button" type="submit">{% icon "check" %}Save HTML</button>
+      {% if override_active %}<button class="button secondary" type="submit" form="revert-html" data-confirm="Revert to the source content? Your edited override is discarded.">Revert to source</button>{% endif %}
+    </div>
+  </form>
+  {% if override_active %}
+  <form method="post" id="revert-html">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save_html">
+    <input type="hidden" name="content" value="">
+  </form>
+  {% endif %}
+
+  <div class="panel-heading" style="margin-top:22px"><div><span class="section-label">TIED ASSETS</span><h3>CSS / JS / extra files</h3><p>Served publicly at <code>/d/{{ page.pk }}/&lt;path&gt;</code> so the decoy can load them from any 404 context.</p></div></div>
+  <div class="editor-grid" style="margin-top:12px">
+    <div>
+      <span class="section-label">FILES</span>
+      <div class="file-list" style="margin-top:8px">
+        {% for asset in assets %}
+        <a href="?asset={{ asset.path|urlencode }}" class="{% if current_asset and asset.pk == current_asset.pk %}active{% endif %}">{{ asset.path }}</a>
+        {% endfor %}
+      </div>
+      <form method="post" style="margin-top:12px">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_asset">
+        <label><span class="section-label">ADD ASSET</span><input class="field-input mono" name="path" maxlength="200" placeholder="style.css" style="margin-top:6px"></label>
+        <button class="button secondary" type="submit" style="margin-top:8px">{% icon "plus" %}Add</button>
+      </form>
+    </div>
+    <div>
+      {% if current_asset %}
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_asset">
+        <input type="hidden" name="original_path" value="{{ current_asset.path }}">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <input class="field-input mono" name="path" maxlength="200" value="{{ current_asset.path }}" style="flex:1">
+          <span class="status-badge">{{ current_asset.content_type }}</span>
+          <a class="text-button" href="{{ current_asset.public_path }}" target="_blank" rel="noopener">{% icon "eye" %}OPEN</a>
+        </div>
+        <textarea class="code-editor" name="content" data-code spellcheck="false" style="min-height:300px">{{ current_asset.content }}</textarea>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="button" type="submit">{% icon "check" %}Save asset</button>
+          <button class="button secondary" type="submit" form="del-asset-{{ current_asset.pk }}" data-confirm="Delete {{ current_asset.path }}?">{% icon "trash" %}Delete asset</button>
+        </div>
+      </form>
+      <form method="post" id="del-asset-{{ current_asset.pk }}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_asset">
+        <input type="hidden" name="path" value="{{ current_asset.path }}">
+      </form>
+      {% else %}
+      <div class="empty-state"><strong>No assets yet</strong><p>Add <code>style.css</code> or <code>app.js</code> on the left, then reference <code>/d/{{ page.pk }}/style.css</code> from the HTML.</p></div>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <p class="muted" style="margin-top:14px">Redirect decoys have no editable content - they send the visitor to the configured URL.</p>
+  {% endif %}
+</section>
+{% endblock %}

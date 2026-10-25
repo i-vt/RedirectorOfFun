@@ -15,8 +15,8 @@ from notifications.services import notify
 
 from .models import (
     AgentChannel, BannedIP, BlockingRule, BUILTIN_DECOYS, DecoyPage, DeliveryLink,
-    HitEvent, RuleSet, seed_blocking_rule_presets, Submission, SubmissionImage,
-    validate_auto_rules,
+    HitEvent, LureSite, RuleSet, seed_blocking_rule_presets, Submission,
+    SubmissionImage, validate_auto_rules,
 )
 from .link_templates import LINK_TEMPLATES
 from . import services
@@ -82,6 +82,11 @@ def _render_link_form(request, link, title):
 def _base_path():
     from django.conf import settings
     return getattr(settings, "GATE_BASE_PATH", "/g/")
+
+
+def _base_path_setting(name, default):
+    from django.conf import settings
+    return getattr(settings, name, default)
 
 
 def _split_csv(value):
@@ -268,6 +273,267 @@ def link_toggle(request, pk):
         record_event(action="gate.link_toggled", actor=request.user, target=link,
                      metadata={"active": link.active}, request=request)
     return redirect("gate-link-detail", pk=link.pk)
+
+
+DEFAULT_LURE_INDEX = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welcome</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="wrap">
+    <h1>It works.</h1>
+    <p>Edit this page from the panel. Add more pages and assets on the left.</p>
+  </main>
+</body>
+</html>
+"""
+
+DEFAULT_LURE_CSS = """body { font-family: system-ui, sans-serif; margin: 0; color: #1c2733; }
+.wrap { max-width: 640px; margin: 12vh auto; padding: 0 20px; }
+"""
+
+
+@login_required
+def lures_view(request):
+    """Hosted multi-page lure sites, served publicly under LURE_BASE_PATH."""
+    if request.method == "POST":
+        site = LureSite(
+            name=request.POST.get("name", "").strip()[:120] or "unnamed lure",
+            slug=request.POST.get("slug", "").strip().lower()[:60],
+            description=request.POST.get("description", "").strip()[:240],
+            created_by=request.user,
+        )
+        try:
+            site.full_clean()
+        except ValidationError as exc:
+            messages.error(request, "; ".join(
+                f"{field}: {', '.join(errors)}" for field, errors in exc.message_dict.items()))
+            return redirect("gate-lures")
+        site.save()
+        site.files.create(path="index.html", content=DEFAULT_LURE_INDEX)
+        site.files.create(path="css/style.css", content=DEFAULT_LURE_CSS)
+        record_event(action="gate.lure_created", actor=request.user, target=site, request=request)
+        messages.success(request, f"Lure '{site.name}' is live at {site.public_path}")
+        return redirect("gate-lure-edit", pk=site.pk)
+    from django.db.models import Count
+    sites = LureSite.objects.annotate(file_count=Count("files"))
+    return render(request, "panel/lures.html", {
+        "title": "Lures", "sites": sites,
+        "lure_base": _base_path_setting("LURE_BASE_PATH", "/l/"),
+    })
+
+
+def _file_form_error(request, exc):
+    message_dict = getattr(exc, "message_dict", None)
+    if message_dict:
+        messages.error(request, "; ".join(
+            f"{field}: {', '.join(errors)}" for field, errors in message_dict.items()))
+    else:
+        messages.error(request, str(exc) or "Save failed.")
+
+
+def _upsert_site_file(files, fk_name, owner, original, path, content):
+    """Create or rename+save a text file row under `owner`. Returns (file, error)."""
+    file = files.filter(path=original).first() if original else None
+    if file is None:
+        file = files.model(**{fk_name: owner})
+    file.path = path.strip()
+    file.content = content
+    try:
+        file.full_clean()
+        file.save()
+    except Exception as exc:  # noqa: BLE001 - ValidationError or raced IntegrityError
+        return None, exc
+    return file, None
+
+
+@login_required
+@transaction.atomic
+def lure_edit(request, pk):
+    """Multi-file browser editor for one lure site."""
+    from django.urls import reverse
+    from urllib.parse import quote
+    site = get_object_or_404(LureSite, pk=pk)
+
+    def back(file_path=""):
+        url = reverse("gate-lure-edit", args=[site.pk])
+        return redirect(f"{url}?file={quote(file_path)}" if file_path else url)
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        if action == "meta":
+            site.name = request.POST.get("name", "").strip()[:120] or site.name
+            site.slug = request.POST.get("slug", "").strip().lower()[:60] or site.slug
+            site.description = request.POST.get("description", "").strip()[:240]
+            site.active = request.POST.get("active", "off") == "on"
+            try:
+                site.full_clean()
+                site.save()
+                record_event(action="gate.lure_updated", actor=request.user, target=site,
+                             request=request)
+                messages.success(request, "Lure settings saved.")
+            except ValidationError as exc:
+                _file_form_error(request, exc)
+            return back()
+        if action == "save_file":
+            original = request.POST.get("original_path", "")
+            file, error = _upsert_site_file(site.files, "site", site, original,
+                                            request.POST.get("path", ""),
+                                            request.POST.get("content", ""))
+            if error is not None:
+                _file_form_error(request, error)
+                return back(original)
+            record_event(action="gate.lure_file_saved", actor=request.user, target=site,
+                         metadata={"path": file.path}, request=request)
+            messages.success(request, f"Saved {file.path}.")
+            return back(file.path)
+        if action == "add_file":
+            path = request.POST.get("path", "").strip()
+            if site.files.filter(path=path).exists():
+                messages.error(request, f"{path} already exists.")
+                return back(path)
+            file, error = _upsert_site_file(site.files, "site", site, "", path, "")
+            if error is not None:
+                _file_form_error(request, error)
+                return back()
+            messages.success(request, f"Created {file.path}.")
+            return back(file.path)
+        if action == "delete_file":
+            path = request.POST.get("path", "")
+            site.files.filter(path=path).delete()
+            record_event(action="gate.lure_file_deleted", actor=request.user, target=site,
+                         metadata={"path": path}, request=request)
+            messages.success(request, f"Deleted {path}.")
+            return back()
+        if action == "delete_site":
+            name = site.name
+            site.delete()
+            record_event(action="gate.lure_deleted", actor=request.user,
+                         metadata={"name": name}, request=request)
+            messages.success(request, f"Lure '{name}' deleted.")
+            return redirect("gate-lures")
+        return back()
+
+    files = site.files.all()
+    selected = request.GET.get("file", "")
+    current = files.filter(path=selected).first() \
+        or files.filter(path="index.html").first() or files.first()
+    return render(request, "panel/lure_edit.html", {
+        "title": f"Lure {site.slug}", "site": site, "files": files, "current": current,
+    })
+
+
+@login_required
+@transaction.atomic
+def lure_toggle(request, pk):
+    site = get_object_or_404(LureSite, pk=pk)
+    if request.method == "POST":
+        site.active = not site.active
+        site.save(update_fields=["active"])
+        record_event(action="gate.lure_toggled", actor=request.user, target=site,
+                     metadata={"active": site.active}, request=request)
+    return redirect("gate-lures")
+
+
+@login_required
+@transaction.atomic
+def decoy_edit(request, pk):
+    """Browser editor for a decoy page: HTML override plus tied assets."""
+    from django.urls import reverse
+    from urllib.parse import quote
+    page = get_object_or_404(DecoyPage, pk=pk)
+
+    def back(asset_path=""):
+        url = reverse("gate-decoy-edit", args=[page.pk])
+        return redirect(f"{url}?asset={quote(asset_path)}" if asset_path else url)
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        if action == "meta":
+            page.name = request.POST.get("name", "").strip()[:120] or page.name
+            if page.kind == "redirect":
+                page.redirect_url = request.POST.get("redirect_url", "").strip()
+            try:
+                page.full_clean()
+                page.save()
+                record_event(action="gate.decoy_updated", actor=request.user, target=page,
+                             request=request)
+                messages.success(request, "Decoy settings saved.")
+            except ValidationError as exc:
+                _file_form_error(request, exc)
+            return back()
+        if action == "save_html":
+            page.html = request.POST.get("content", "")
+            page.save(update_fields=["html"])
+            record_event(action="gate.decoy_updated", actor=request.user, target=page,
+                         metadata={"html_override": bool(page.html)}, request=request)
+            messages.success(request, "HTML saved."
+                             if page.html else "Override cleared - back to the source content.")
+            return back()
+        if action == "save_asset":
+            original = request.POST.get("original_path", "")
+            asset, error = _upsert_site_file(page.assets, "page", page, original,
+                                             request.POST.get("path", ""),
+                                             request.POST.get("content", ""))
+            if error is not None:
+                _file_form_error(request, error)
+                return back(original)
+            record_event(action="gate.decoy_asset_saved", actor=request.user, target=page,
+                         metadata={"path": asset.path}, request=request)
+            messages.success(request, f"Saved {asset.path} - served at {asset.public_path}")
+            return back(asset.path)
+        if action == "add_asset":
+            path = request.POST.get("path", "").strip()
+            if page.assets.filter(path=path).exists():
+                messages.error(request, f"{path} already exists.")
+                return back(path)
+            asset, error = _upsert_site_file(page.assets, "page", page, "", path, "")
+            if error is not None:
+                _file_form_error(request, error)
+                return back()
+            messages.success(request, f"Created {asset.path} - served at {asset.public_path}")
+            return back(asset.path)
+        if action == "delete_asset":
+            path = request.POST.get("path", "")
+            page.assets.filter(path=path).delete()
+            record_event(action="gate.decoy_asset_deleted", actor=request.user, target=page,
+                         metadata={"path": path}, request=request)
+            messages.success(request, f"Deleted {path}.")
+            return back()
+        return back()
+
+    # Editor source: the saved override, else the source content so the operator
+    # can start editing immediately (saving creates the override).
+    override_active = bool(page.html)
+    if override_active:
+        editor_html = page.html
+    elif page.kind == "upload" and page.html_file:
+        editor_html = page.html_file.read().decode("utf-8", errors="replace")
+    elif page.kind == "template":
+        meta = BUILTIN_DECOYS.get(page.template_key, {})
+        if meta.get("django_template"):
+            from django.template.loader import render_to_string
+            editor_html = render_to_string(meta["template_name"], {})
+        else:
+            try:
+                from django.conf import settings as dj_settings
+                editor_html = (dj_settings.BASE_DIR / meta["path"]).read_text(
+                    encoding="utf-8", errors="replace")
+            except (OSError, KeyError):
+                editor_html = ""
+    else:
+        editor_html = ""
+    assets = page.assets.all()
+    selected = request.GET.get("asset", "")
+    current_asset = assets.filter(path=selected).first() or assets.first()
+    return render(request, "panel/decoy_edit.html", {
+        "title": f"Decoy {page.name}", "page": page, "editor_html": editor_html,
+        "override_active": override_active, "assets": assets, "current_asset": current_asset,
+    })
 
 
 @login_required

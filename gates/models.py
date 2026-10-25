@@ -366,6 +366,8 @@ class DecoyPage(models.Model):
     kind = models.CharField(max_length=10, choices=KIND_CHOICES)
     template_key = models.CharField(max_length=40, blank=True)
     html_file = models.FileField(upload_to="decoys/", blank=True, null=True)
+    html = models.TextField(blank=True,
+                            help_text="Editable HTML override. When set it beats both the uploaded file and the built-in template.")
     redirect_url = models.URLField(blank=True)
     active = models.BooleanField(default=True)
     is_default = models.BooleanField(default=False)
@@ -390,10 +392,127 @@ class DecoyPage(models.Model):
         from django.core.exceptions import ValidationError
         if self.kind == "template" and self.template_key not in BUILTIN_DECOYS:
             raise ValidationError({"template_key": "unknown built-in decoy page"})
-        if self.kind == "upload" and not self.html_file:
+        if self.kind == "upload" and not self.html_file and not self.html:
             raise ValidationError({"html_file": "upload an HTML file"})
         if self.kind == "redirect" and not self.redirect_url:
             raise ValidationError({"redirect_url": "set the redirect URL"})
+
+
+def validate_site_file_path(value):
+    """Relative path of a file inside a lure site or decoy bundle.
+
+    Text assets only (HTML/CSS/JS/SVG/JSON/...); no traversal, no leading
+    slash, no backslashes, no query strings."""
+    import re
+    from django.core.exceptions import ValidationError
+    value = (value or "").strip()
+    if not value:
+        raise ValidationError("Path is required.")
+    if len(value) > 200:
+        raise ValidationError("Path is too long (max 200 chars).")
+    if value.startswith("/") or value.endswith("/"):
+        raise ValidationError("Use a relative path without leading/trailing slashes, e.g. css/app.css.")
+    if "\\" in value or ".." in value or "?" in value or "#" in value:
+        raise ValidationError("No backslashes, '..', '?' or '#' in paths.")
+    if not re.fullmatch(r"[A-Za-z0-9._/ -]+", value):
+        raise ValidationError("Only letters, digits, '.', '_', '-', '/' and spaces.")
+    if any(not segment or segment.startswith(".") for segment in value.split("/")):
+        raise ValidationError("Empty segments and dot-files are not allowed.")
+
+
+def site_file_content_type(path):
+    """Best-effort content type for a text asset, with web defaults."""
+    import mimetypes
+    lowered = path.lower()
+    if lowered.endswith((".html", ".htm")):
+        return "text/html"
+    if lowered.endswith(".css"):
+        return "text/css"
+    if lowered.endswith(".js") or lowered.endswith(".mjs"):
+        return "text/javascript"
+    guessed, _ = mimetypes.guess_type(path)
+    return guessed or "text/plain"
+
+
+class LureSite(models.Model):
+    """A hosted multi-page site (a lure) served publicly under LURE_BASE_PATH.
+
+    Distinct from decoy pages: decoys cover unknown/denied traffic, while a
+    lure is a deliberate destination the operator points targets at."""
+
+    name = models.CharField(max_length=120)
+    slug = models.SlugField(max_length=60, unique=True,
+                            help_text="URL segment under the lure base path, e.g. 'portal' -> /l/portal/")
+    description = models.CharField(max_length=240, blank=True)
+    active = models.BooleanField(default=True, db_index=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="lure_sites")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @property
+    def public_path(self):
+        return f"{getattr(settings, 'LURE_BASE_PATH', '/l/')}{self.slug}/"
+
+    def get_file(self, path):
+        return self.files.filter(path=path).first()
+
+    def __str__(self):
+        return f"{self.name} ({self.public_path})"
+
+
+class LureFile(models.Model):
+    """One text file (page or asset) inside a lure site."""
+
+    site = models.ForeignKey(LureSite, on_delete=models.CASCADE, related_name="files")
+    path = models.CharField(max_length=200, validators=[validate_site_file_path])
+    content = models.TextField(blank=True)
+    content_type = models.CharField(max_length=60, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["path"]
+        constraints = [models.UniqueConstraint(fields=["site", "path"], name="unique_lure_file_path")]
+
+    def save(self, *args, **kwargs):
+        if not self.content_type:
+            self.content_type = site_file_content_type(self.path)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.site.slug}/{self.path}"
+
+
+class DecoyAsset(models.Model):
+    """Extra tied-together files (CSS/JS/...) a decoy page references.
+
+    Served publicly at /d/<page id>/<path> so the decoy HTML can load its
+    own stylesheet and scripts from any 404 context."""
+
+    page = models.ForeignKey(DecoyPage, on_delete=models.CASCADE, related_name="assets")
+    path = models.CharField(max_length=200, validators=[validate_site_file_path])
+    content = models.TextField(blank=True)
+    content_type = models.CharField(max_length=60, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["path"]
+        constraints = [models.UniqueConstraint(fields=["page", "path"], name="unique_decoy_asset_path")]
+
+    @property
+    def public_path(self):
+        return f"/d/{self.page_id}/{self.path}"
+
+    def save(self, *args, **kwargs):
+        if not self.content_type:
+            self.content_type = site_file_content_type(self.path)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"decoy:{self.page_id}/{self.path}"
 
 
 def validate_blocking_conditions(value):
@@ -607,6 +726,8 @@ class HitEvent(models.Model):
         ("suspicious", "Suspicious activity"),
         ("canary", "Decoy canary re-hit"),
         ("blocked", "Blocked by rule"),
+        ("lure", "Lure site hit"),
+        ("decoy_asset", "Decoy asset served"),
     ]
 
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, db_index=True)

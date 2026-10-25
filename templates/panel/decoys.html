@@ -35,6 +35,7 @@
       <td class="mono muted">{% if page.kind == "template" %}{{ page.template_key }}{% elif page.kind == "upload" %}{{ page.html_file.name|default:"(no file)" }}{% else %}{{ page.redirect_url }}{% endif %}</td>
       <td>{% if page.active %}<span class="status-badge good">ACTIVE</span>{% else %}<span class="status-badge">INACTIVE</span>{% endif %}</td>
       <td>
+        <a class="text-button" href="{% url 'gate-decoy-edit' page.pk %}">{% icon "settings" %}EDIT</a>
         {% if not page.is_default %}
         <form method="post" action="{% url 'gate-decoy-default' page.pk %}" style="display:inline">{% csrf_token %}<button class="text-button" type="submit">MAKE DEFAULT</button></form>
         {% endif %}

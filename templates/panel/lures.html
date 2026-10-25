@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load ui_icons %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">HOSTED CONTENT</span><h2>Lures</h2><p>Multi-page sites hosted on this redirector under <code>{{ lure_base }}</code> - real destinations you point targets at. Distinct from decoys, which cover unknown and denied traffic.</p></div>
+  </div>
+  <form method="post" class="stacked-form">
+    {% csrf_token %}
+    <fieldset>
+      <legend>ADD A LURE SITE</legend>
+      <div class="grid-3">
+        <label><span>NAME</span><input class="field-input" name="name" maxlength="120" placeholder="Contoso update portal"></label>
+        <label><span>URL SLUG</span><input class="field-input mono" name="slug" maxlength="60" placeholder="portal"></label>
+        <label><span>DESCRIPTION</span><input class="field-input" name="description" maxlength="240" placeholder="Q4 update campaign landing"></label>
+      </div>
+      <button class="button" type="submit">{% icon "plus" %}Create lure</button>
+      <p class="muted" style="font-size:.7rem">A starter <code>index.html</code> and <code>css/style.css</code> are created for you; edit everything in the browser right after.</p>
+    </fieldset>
+  </form>
+  {% if sites %}
+  <div class="table-wrap" style="margin-top:18px"><table><thead><tr><th>NAME</th><th>PUBLIC URL</th><th>FILES</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>
+    {% for site in sites %}
+    <tr>
+      <td><strong>{{ site.name }}</strong>{% if site.description %}<br><span class="muted" style="font-size:.68rem">{{ site.description }}</span>{% endif %}</td>
+      <td class="mono"><a href="{{ site.public_path }}" target="_blank" rel="noopener">{{ site.public_path }}</a></td>
+      <td class="mono muted">{{ site.file_count }}</td>
+      <td>{% if site.active %}<span class="status-badge good">LIVE</span>{% else %}<span class="status-badge">OFFLINE</span>{% endif %}</td>
+      <td>
+        <a class="text-button" href="{% url 'gate-lure-edit' site.pk %}">{% icon "settings" %}EDIT</a>
+        <form method="post" action="{% url 'gate-lure-toggle' site.pk %}" style="display:inline">{% csrf_token %}<button class="text-button" type="submit">{{ site.active|yesno:"TAKE OFFLINE,BRING LIVE" }}</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% else %}
+  <div class="empty-state"><strong>No lures yet</strong><p>Create one above; it goes live immediately under the lure base path.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

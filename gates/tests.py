@@ -22,7 +22,7 @@ from .crypto_utils import (
 )
 from .models import (
     AgentChannel, BannedIP, BlockingRule, BotState, DecoyPage, DeliveryLink, HitEvent,
-    IPIntel, RuleSet, Submission, SubmissionImage, seed_blocking_rule_presets,
+    IPIntel, LureSite, RuleSet, Submission, SubmissionImage, seed_blocking_rule_presets,
     seed_builtin_decoys, validate_auto_rules,
 )
 from .selftest import is_healthy, run_selftest
@@ -2194,3 +2194,217 @@ class PayloadManagerTests(TestCase):
         self.assertIn(".bin", entry["payload"])
         self.assertEqual(entry["payload_size"], 32)
         self.assertIsNone(entry["benevolent_file"])
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class LureAndDecoySiteTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="luop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _lure(self, slug="portal", active=True):
+        site = LureSite.objects.create(name="Portal", slug=slug, active=active)
+        site.files.create(path="index.html", content="<h1>Portal Home</h1>")
+        site.files.create(path="about.html", content="<h1>About Us</h1>")
+        site.files.create(path="css/style.css", content="body{color:#111}")
+        return site
+
+    # ── Lure serving ────────────────────────────────────────────────────────
+    def test_lure_index_served_at_root(self):
+        self._lure()
+        response = self.public.get("/l/portal/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Portal Home", response.content)
+        self.assertIn("text/html", response["Content-Type"])
+
+    def test_lure_nested_page_and_asset_content_types(self):
+        site = self._lure()
+        self.assertIn(b"About Us", self.public.get("/l/portal/about.html").content)
+        css = self.public.get("/l/portal/css/style.css")
+        self.assertEqual(css.status_code, 200)
+        self.assertIn("text/css", css["Content-Type"])
+        site.files.create(path="js/app.js", content="console.log(1)")
+        script = self.public.get("/l/portal/js/app.js")
+        self.assertIn("text/javascript", script["Content-Type"])
+
+    def test_lure_hit_recorded(self):
+        site = self._lure()
+        self.public.get("/l/portal/")
+        hit = HitEvent.objects.get(category="lure")
+        self.assertEqual(hit.detail["slug"], "portal")
+        self.assertEqual(hit.detail["file"], "index.html")
+
+    def test_inactive_lure_falls_back_to_decoy(self):
+        self._lure(active=False)
+        response = self.public.get("/l/portal/")
+        self.assertContains(response, "Update Service")
+        self.assertNotIn(b"Portal Home", response.content)
+
+    def test_unknown_lure_slug_is_decoy(self):
+        self._lure()
+        response = self.public.get("/l/nope/")
+        self.assertContains(response, "Update Service")
+
+    def test_missing_lure_page_uses_site_404_then_decoy(self):
+        site = self._lure()
+        # No 404.html yet: global decoy.
+        response = self.public.get("/l/portal/no-such-page")
+        self.assertContains(response, "Update Service")
+        hit = HitEvent.objects.get(category="lure", status_code=404)
+        self.assertEqual(hit.detail["missing"], "no-such-page")
+        # With a 404.html the site keeps its own look.
+        site.files.create(path="404.html", content="<h1>Portal Not Found</h1>")
+        response = self.public.get("/l/portal/no-such-page")
+        self.assertIn(b"Portal Not Found", response.content)
+
+    def test_lure_traversal_gets_nowhere(self):
+        self._lure()
+        for nasty in ("/l/portal/../secret", "/l/portal/..%2fsecret", "/l/portal/%2e%2e/secret"):
+            response = self.public.get(nasty)
+            self.assertIn(b"Update Service", response.content, nasty)
+
+    def test_lure_blocking_rules_apply(self):
+        self._lure()
+        BlockingRule.objects.create(
+            name="block curl", logic="any",
+            conditions=[{"type": "ua", "pattern": r"(?i)^curl"}], enabled=True)
+        response = self.public.get("/l/portal/", HTTP_USER_AGENT="curl/8.0")
+        self.assertContains(response, "Update Service")
+        self.assertFalse(HitEvent.objects.filter(category="lure", status_code=200).exists())
+        self.assertTrue(HitEvent.objects.filter(category="blocked").exists())
+
+    # ── Decoy assets ────────────────────────────────────────────────────────
+    def test_decoy_asset_served(self):
+        page = DecoyPage.objects.create(name="P", kind="template", template_key="update-service")
+        asset = page.assets.create(path="style.css", content="a{color:red}")
+        response = self.public.get(asset.public_path)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"a{color:red}", response.content)
+        self.assertIn("text/css", response["Content-Type"])
+        self.assertTrue(HitEvent.objects.filter(category="decoy_asset").exists())
+
+    def test_decoy_asset_unknown_and_inactive_fall_back(self):
+        page = DecoyPage.objects.create(name="P", kind="template", template_key="update-service")
+        asset = page.assets.create(path="style.css", content="x")
+        response = self.public.get(f"/d/{page.pk}/missing.css")
+        self.assertContains(response, "Update Service")
+        page.active = False
+        page.save(update_fields=["active"])
+        response = self.public.get(asset.public_path)
+        self.assertContains(response, "Update Service")
+
+    # ── Decoy html override ─────────────────────────────────────────────────
+    def test_decoy_html_override_precedence_and_revert(self):
+        page = DecoyPage.objects.get(template_key="update-service")
+        DecoyPage.objects.filter(pk=page.pk).update(is_default=True)
+        page.html = "<h1>Edited Cover</h1>"
+        page.save(update_fields=["html"])
+        response = self.public.get("/definitely-not-real")
+        self.assertIn(b"Edited Cover", response.content)
+        self.assertNotIn(b"Update Service", response.content)
+        page.html = ""
+        page.save(update_fields=["html"])
+        response = self.public.get("/definitely-not-real")
+        self.assertContains(response, "Update Service")
+
+    # ── Browser editor (panel) ──────────────────────────────────────────────
+    def test_lure_create_seeds_files_and_redirects_to_editor(self):
+        response = self.client.post(reverse("gate-lures"), {
+            "name": "New Lure", "slug": "newlure", "description": "d"})
+        site = LureSite.objects.get(slug="newlure")
+        self.assertRedirects(response, reverse("gate-lure-edit", args=[site.pk]))
+        self.assertTrue(site.files.filter(path="index.html").exists())
+        self.assertTrue(site.files.filter(path="css/style.css").exists())
+        self.assertIn(b"It works", self.public.get("/l/newlure/").content)
+
+    def test_lure_editor_save_rename_delete(self):
+        site = self._lure()
+        url = reverse("gate-lure-edit", args=[site.pk])
+        self.client.post(url, {"action": "save_file", "original_path": "index.html",
+                               "path": "index.html", "content": "<h1>V2</h1>"})
+        self.assertIn(b"V2", self.public.get("/l/portal/").content)
+        # rename via the path field
+        self.client.post(url, {"action": "save_file", "original_path": "about.html",
+                               "path": "company.html", "content": "<h1>Co</h1>"})
+        self.assertFalse(site.files.filter(path="about.html").exists())
+        self.assertIn(b"Co", self.public.get("/l/portal/company.html").content)
+        # delete
+        self.client.post(url, {"action": "delete_file", "path": "company.html"})
+        self.assertFalse(site.files.filter(path="company.html").exists())
+
+    def test_lure_editor_rejects_bad_paths(self):
+        site = self._lure()
+        url = reverse("gate-lure-edit", args=[site.pk])
+        for bad in ("../evil", "/abs.html", "a//b.html", "x?.html", "..hidden"):
+            self.client.post(url, {"action": "add_file", "path": bad})
+            self.assertFalse(site.files.filter(path=bad).exists(), bad)
+        self.assertEqual(site.files.count(), 3)
+
+    def test_lure_meta_and_toggle(self):
+        site = self._lure()
+        self.client.post(reverse("gate-lure-edit", args=[site.pk]),
+                         {"action": "meta", "name": "Renamed", "slug": "portal",
+                          "description": "x", "active": "off"})
+        site.refresh_from_db()
+        self.assertFalse(site.active)
+        self.client.post(reverse("gate-lure-toggle", args=[site.pk]))
+        site.refresh_from_db()
+        self.assertTrue(site.active)
+
+    def test_decoy_editor_saves_override_and_assets(self):
+        page = DecoyPage.objects.get(template_key="update-service")
+        url = reverse("gate-decoy-edit", args=[page.pk])
+        response = self.client.get(url)
+        self.assertContains(response, "Update Service")  # prefilled from source
+        self.client.post(url, {"action": "save_html", "content": "<h1>My Cover</h1>"})
+        page.refresh_from_db()
+        self.assertEqual(page.html, "<h1>My Cover</h1>")
+        self.client.post(url, {"action": "add_asset", "path": "style.css"})
+        self.client.post(url, {"action": "save_asset", "original_path": "style.css",
+                               "path": "style.css", "content": "body{margin:0}"})
+        self.assertIn(b"body{margin:0}", self.public.get(f"/d/{page.pk}/style.css").content)
+        self.client.post(url, {"action": "delete_asset", "path": "style.css"})
+        self.assertFalse(page.assets.filter(path="style.css").exists())
+
+    # ── API parity ──────────────────────────────────────────────────────────
+    def test_api_lure_roundtrip(self):
+        _, raw = APIKey.create(operator=self.operator, name="ci")
+        auth = {"HTTP_AUTHORIZATION": f"ApiKey {raw}"}
+        response = self.client.post("/api/v1/lures/", data={
+            "name": "API Lure", "slug": "apilure", "description": "", "active": True,
+        }, content_type="application/json", **auth)
+        self.assertEqual(response.status_code, 201)
+        pk = response.json()["id"]
+        response = self.client.put(f"/api/v1/lures/{pk}/file/", data={
+            "path": "index.html", "content": "<h1>API Home</h1>"},
+            content_type="application/json", **auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"API Home", self.public.get("/l/apilure/").content)
+        detail = self.client.get(f"/api/v1/lures/{pk}/", **auth).json()
+        self.assertEqual(detail["files"][0]["path"], "index.html")
+        self.assertEqual(detail["public_path"], "/l/apilure/")
+        response = self.client.delete(f"/api/v1/lures/{pk}/file/",
+                                      data={"path": "index.html"},
+                                      content_type="application/json", **auth)
+        self.assertEqual(response.status_code, 204)
+
+    def test_api_decoy_html_and_assets(self):
+        _, raw = APIKey.create(operator=self.operator, name="ci")
+        auth = {"HTTP_AUTHORIZATION": f"ApiKey {raw}"}
+        page = DecoyPage.objects.get(template_key="update-service")
+        response = self.client.patch(f"/api/v1/decoys/{page.pk}/",
+                                     data={"html": "<h1>API Cover</h1>"},
+                                     content_type="application/json", **auth)
+        self.assertEqual(response.status_code, 200)
+        page.refresh_from_db()
+        self.assertEqual(page.html, "<h1>API Cover</h1>")
+        response = self.client.put(f"/api/v1/decoys/{page.pk}/asset/", data={
+            "path": "app.js", "content": "let a=1"}, content_type="application/json", **auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"let a=1", self.public.get(f"/d/{page.pk}/app.js").content)
+
+    def test_nav_links_to_lures(self):
+        response = self.client.get(reverse("overview"))
+        self.assertContains(response, reverse("gate-lures"))
