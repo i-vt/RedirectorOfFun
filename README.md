@@ -17,11 +17,6 @@ The control plane in its three per-account themes (Settings -> Theme):
 ![Cozy Clown theme: overview](docs/assets/cozy-overview.png)
 ![Obnoxious Clown theme: overview](docs/assets/obnoxious-overview.png)
 
-Obnoxious Clown on the blocking rules page, and the jester brand mark tinted per theme:
-
-![Obnoxious Clown theme: blocking rules](docs/assets/obnoxious-blockrules.png)
-![Jester hat brand mark tinted per theme](docs/assets/jester-brand-themes-v2.png)
-
 
 ---
 
