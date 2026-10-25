@@ -1,9 +1,26 @@
 # RedirectorOfFun
 
+[![CI](https://github.com/i-vt/RedirectorOfFun/actions/workflows/ci.yml/badge.svg)](https://github.com/i-vt/RedirectorOfFun/actions/workflows/ci.yml)
+
 > Modified from [coffeegist/now-you-see-me](https://github.com/coffeegist/now-you-see-me).  
 > Automated nginx C2 redirector with SSL, blocklisting, UA filtering, and more.
+> Now with a full operator control plane: release gates, approval queues, a
+> firewall-style blocking chain, decoy management, and a themeable panel.
 
 <img width="543" height="498" alt="image" src="https://github.com/user-attachments/assets/b413caaf-9a91-49e4-942b-fec431dc7356" />
+
+## Screenshots
+
+The control plane in its three per-account themes (Settings -> Theme):
+
+![Default theme: overview](docs/assets/default-overview.png)
+![Cozy Clown theme: overview](docs/assets/cozy-overview.png)
+![Obnoxious Clown theme: overview](docs/assets/obnoxious-overview.png)
+
+Obnoxious Clown on the blocking rules page, and the jester brand mark tinted per theme:
+
+![Obnoxious Clown theme: blocking rules](docs/assets/obnoxious-blockrules.png)
+![Jester hat brand mark tinted per theme](docs/assets/jester-brand-themes-v2.png)
 
 
 ---
@@ -60,28 +77,15 @@
 
 The repository now includes a Django control plane alongside the original nginx/shell deployment. The original redirector scripts remain intact; the panel is a separate service and does not put application logic into nginx.
 
-### Included
+Design notes worth knowing up front:
 
-- Atomic one-time administrator bootstrap through a high-entropy capability URL
-- Browser form and JSON automation using the same claim operation
-- Named operators, Administrator/Operator/Auditor roles, single-use invitations, revocation, and session invalidation
-- Append-only administrative audit events with request IDs
-- Asynchronous nginx JSON 404 ingestion with idempotent checkpoints and retention
-- Overview dashboard, filters, aggregated statistics, and cursor-paginated APIs
-- Panel, browser, and optional Telegram notifications through a transactional outbox
-- Liveness/readiness endpoints, startup checks, Docker deployment, and regression tests
-- Release gates: operator-controlled URLs under `/g/` that distribute keys, gate payload downloads behind verification, and proxy pwndrop content without exposing its location
-- Verification templates (base64 / XOR / AES-256-CBC) for decrypting dropper/loader submissions, with automatic screenshot extraction and an approve/deny queue
-- One-time and time-limited links, custom operator-chosen paths, per-agent link tagging
-- Operator IP banning with auto-ban on repeated suspicious activity
-- Per-agent C2 beacon URLs under `/a/` with independent UA validation and token rotation
-- Surface telemetry for hits, releases, holds, denials, expired links, bans, and suspicious events
-- Startup self-test suite (`manage.py selftest --strict` gates container boot)
-- Auto-decision rules: per-link JSON DSL; the first matching rule approves/denies a submission by regex-matching decoded fields, forbidding patterns, and requiring extracted images - no match stays manual
-- Telegram approvals: reply `approve <id>` / `deny <id>` / `pending` / `help` to the bot (only `TELEGRAM_CHAT_ID` is honored); the `telegram-worker` compose service runs the poller
-- Operator TOTP 2FA with single-use backup codes, a security enrollment page, and an administrator reset for lockouts; disabling 2FA invalidates sessions
+- Every release decision stays with a human operator: links can hold until approved, deny paths, and serve benevolent fallbacks.
+- The operator surface sits behind a per-deployment secret URL prefix; unknown URLs get the decoy page for everyone, signed in or not.
+- Accounts are named operators with roles, single-use invitations, TOTP 2FA with backup codes, and revocable API keys (session or `Authorization: ApiKey` for automation).
+- The panel is fully themeable per account (Default, Cozy Clown, Obnoxious Clown) with matching favicons, and has a separate touch-first mobile interface.
+- Telemetry, blocking decisions, and administrative actions are all auditable.
 
-These capabilities are built for authorized red-team engagements: every release decision stays with a human operator, and all telemetry stores hashed client addresses rather than raw IPs. Use only on infrastructure you are explicitly authorized to test.
+Use only on infrastructure you are explicitly authorized to test.
 
 ### Local development
 
@@ -123,11 +127,15 @@ docker compose --profile edge up -d --build
 
 The panel is served on the standard ports through the web tier: **http://localhost** and **https://localhost** (the latter uses an auto-generated self-signed certificate on first start; mount real certificates into `docker/certs` to replace it). Port 3000 is internal to the compose network.
 
-Out of the box the panel accepts **any** host and any client IP: `ALLOWED_HOSTS=*`, no `CSRF_TRUSTED_ORIGINS` entries (normal same-origin form posts pass CSRF checks), no `allow`/`deny` rules, and cookies not marked Secure (so plain-http browsing works from anywhere). Verified behavior: same-origin posts from arbitrary hosts/IPs succeed; cross-origin posts are still refused. Locking down is an explicit operator choice: list hostnames/IPs in `ALLOWED_HOSTS` in `.env`, uncomment the `allow`/`deny` rules in `docker/panel-web.conf`, or bind the published ports to a specific interface in `docker-compose.yml` — each has commented examples. When serving proper https, set `SESSION_COOKIE_SECURE=true` and `CSRF_COOKIE_SECURE=true`.
+Out of the box the panel accepts **any** host and any client IP: `ALLOWED_HOSTS=*`, no `CSRF_TRUSTED_ORIGINS` entries (normal same-origin form posts pass CSRF checks), no `allow`/`deny` rules, and cookies not marked Secure (so plain-http browsing works from anywhere). Verified behavior: same-origin posts from arbitrary hosts/IPs succeed; cross-origin posts are still refused. Locking down is an explicit operator choice: list hostnames/IPs in `ALLOWED_HOSTS` in `.env`, uncomment the `allow`/`deny` rules in `docker/panel-web.conf`, or bind the published ports to a specific interface in `docker-compose.yml` - each has commented examples. When serving proper https, set `SESSION_COOKIE_SECURE=true` and `CSRF_COOKIE_SECURE=true`.
 
-**Operator paths live under a secret prefix.** `start.sh` generates a random UUID (`OPERATOR_PREFIX` in `.env`) and mounts everything operator-facing behind it: `/panel/…`, `/api/v1/…`, `/m/…`, `/login/`, `/setup/…`, `/invite/…`, django-admin. There is nothing at `/panel/` or `/api` — anyone probing the plain paths (or any unknown URL outside the prefix, authenticated or not) gets the decoy page; only *inside* the prefix do signed-in operators see the panel's own 404. Public gate paths (`/g/…`, `/a/…`), `/health/`, and `/static/` stay at the root; URL reversal (`reverse`, `{% url %}`, login redirects) carries the prefix automatically. `start.sh` prints the full prefixed URLs for every interface address. Set `OPERATOR_PREFIX=` (empty) only for local development.
+**Operator paths live under a secret prefix.** `start.sh` generates a random UUID (`OPERATOR_PREFIX` in `.env`) and mounts everything operator-facing behind it: `/panel/…`, `/api/v1/…`, `/m/…`, `/login/`, `/setup/…`, `/invite/…`, django-admin. There is nothing at `/panel/` or `/api` - anyone probing the plain paths (or any unknown URL outside the prefix, authenticated or not) gets the decoy page; only *inside* the prefix do signed-in operators see the panel's own 404. Public gate paths (`/g/…`, `/a/…`), `/health/`, and `/static/` stay at the root; URL reversal (`reverse`, `{% url %}`, login redirects) carries the prefix automatically. `start.sh` prints the full prefixed URLs for every interface address. Set `OPERATOR_PREFIX=` (empty) only for local development.
 
 Unmatched paths behave like the edge: anonymous visitors to any unknown URL (including `/`) get the operator-selected default decoy page with its canary pixel and a tracked `not_found` event; signed-in operators get the real panel 404 page, and `/` takes them straight to the dashboard. Decoy pages are managed under **Decoy Pages** in the panel (and `/api/v1/decoys/`): pick any page shipped with the repo (Update Service, NYSM landing, maintenance, Crestfield example), upload your own HTML, or set a redirect URL; the default applies to 404s, gate denials, and banned visitors alike. Built-in pages are seeded automatically on first start.
+
+### Themes
+
+Each operator picks their skin on the Settings page; nobody else sees it. Default is the base terminal look. Cozy Clown is a warm harlequin palette with gently unsettling motion. Obnoxious Clown is the full nightmare: big-top stripes, dripping section labels, ticket-perforated metrics, the jester hat brand mark with star tips, a floating red balloon on the overview, blinking eyes in the sidebar footer, a flashlight cursor, music-box notifications, and clown vocabulary in the navigation (THE RING, THE AUDIENCE, BOUNCERS, THE CAGE, ...). All motion respects `prefers-reduced-motion`, and the browser tab's favicon follows the theme.
 
 With `--edge`, the redirector owns 80/443 instead; reach the panel via the commented `127.0.0.1:3000:3000` bind in `docker-compose.yml` or an SSH tunnel. Run migrations as a release step; the provided panel entrypoint does this before starting web workers.
 
@@ -240,13 +248,13 @@ Each operator can enable TOTP under `/panel/security/` (enrollment shows the sec
 
 **Auto-ban**: an IP that triggers `AUTO_BAN_THRESHOLD` (default 5) suspicious events within an hour is banned automatically and the nginx deny include is rewritten. Set `NGINX_BAN_INCLUDE` and `NGINX_AGENT_ROUTES_INCLUDE` to enable file sync; then reload nginx (`manage.py sync_nginx` reminds you). Banned IPs receive the default decoy page.
 
-**Blocking rules** (Blocking Rules in the panel, `/api/v1/block-rules/`): a firewall-style chain. Rules are regex conditions over `ip`, `cidr`, `ua`, `asn`, `isp`, `country`, `city`, combined with ALL / ANY / NONE logic and per-condition `negate`. The chain is evaluated **top to bottom, first match wins**: an **ALLOW** action stops the chain and lets the visitor through (place allow rules for trusted operators first to override later blocks), a **BLOCK** action serves the decoy, records a `blocked` Gate Event, and can auto-ban the IP. Rules live in **rulesets** — one "everything" chain by default, plus sets scoped to **404s only** or a **specific delivery link**; sets and rules are ordered by drag-and-drop in the panel (or `POST /api/v1/block-rules/reorder/`). Rulesets and rules **export/import as JSON** (panel buttons or `/api/v1/block-rules/export|import/`); imports always land disabled, name collisions get an "(imported)" suffix, and link-scoped sets re-attach by link path. ASN/ISP/geo come from best-effort enrichment (ip-api.com, cached per address; `IP_INTEL_ENABLED=false` keeps the panel offline) — missing intel makes intel conditions indeterminate and the rule will not fire. Eleven presets seed disabled on first start, including the three templates (block an IP/CIDR, block a region, allow a trusted operator). Use the Test page (or `POST /api/v1/block-rules/test/`) to dry-run an IP + UA against every rule before enabling — operators are not exempt from enabled rules.
+**Blocking rules** (Blocking Rules in the panel, `/api/v1/block-rules/`): a firewall-style chain. Rules are regex conditions over `ip`, `cidr`, `ua`, `asn`, `isp`, `country`, `city`, combined with ALL / ANY / NONE logic and per-condition `negate`. The chain is evaluated **top to bottom, first match wins**: an **ALLOW** action stops the chain and lets the visitor through (place allow rules for trusted operators first to override later blocks), a **BLOCK** action serves the decoy, records a `blocked` Gate Event, and can auto-ban the IP. Rules live in **rulesets** - one "everything" chain by default, plus sets scoped to **404s only** or a **specific delivery link**; sets and rules are ordered by drag-and-drop in the panel (or `POST /api/v1/block-rules/reorder/`). Rulesets and rules **export/import as JSON** (panel buttons or `/api/v1/block-rules/export|import/`); imports always land disabled, name collisions get an "(imported)" suffix, and link-scoped sets re-attach by link path. ASN/ISP/geo come from best-effort enrichment (ip-api.com, cached per address; `IP_INTEL_ENABLED=false` keeps the panel offline) - missing intel makes intel conditions indeterminate and the rule will not fire. Eleven presets seed disabled on first start, including the three templates (block an IP/CIDR, block a region, allow a trusted operator). Use the Test page (or `POST /api/v1/block-rules/test/`) to dry-run an IP + UA against every rule before enabling - operators are not exempt from enabled rules.
 
 **Agent channels**: each channel gets a unique `/a/<token>` path with its own UA regex. The panel writes exact-match nginx location blocks (proxied to `c2_backend`, non-matching UA → bare 404). Rotate a token to burn a deployed agent; unknown tokens get a bare 404.
 
 ### API and health
 
-The API is under `/api/v1/` and accepts two credentials: the operator session (browser) and **API keys** — `Authorization: ApiKey rofk_<secret>`. Keys act as their owner with the owner's roles (admin keys can do admin things), are shown once at creation and hashed at rest, can expire, and are revocable from the Security page, `POST /api/v1/apikeys/<id>/revoke/`, or `manage.py create_apikey <username>`. A key is its own credential and does not use TOTP. Everything the web UI can do is exposed: `404-events/`, `404-stats/`, `audit-events/`, `operators/` (+ `invitations/`, `<id>/reset-2fa/`, `<id>/revoke/`), `notification-preferences/`, `notifications/recent/`, `apikeys/`, `selftest/`, plus the gate surface:
+The API is under `/api/v1/` and accepts two credentials: the operator session (browser) and **API keys** - `Authorization: ApiKey rofk_<secret>`. Keys act as their owner with the owner's roles (admin keys can do admin things), are shown once at creation and hashed at rest, can expire, and are revocable from the Security page, `POST /api/v1/apikeys/<id>/revoke/`, or `manage.py create_apikey <username>`. A key is its own credential and does not use TOTP. Everything the web UI can do is exposed: `404-events/`, `404-stats/`, `audit-events/`, `operators/` (+ `invitations/`, `<id>/reset-2fa/`, `<id>/revoke/`), `notification-preferences/`, `notifications/recent/`, `apikeys/`, `selftest/`, plus the gate surface:
 
 | Endpoint | Purpose |
 |---|---|
@@ -272,7 +280,7 @@ Event and audit list endpoints use cursor pagination. Operator administration re
 
 The script creates `.env` with unique secrets on first run, builds and starts PostgreSQL, the panel, collector, and notification worker, waits for readiness, and prints the initial setup URL. Existing `.env` values are never replaced. To include the original redirector edge service after configuring its variables, run `./start.sh --edge`. If your filesystem does not preserve executable bits, use `bash start.sh` instead.
 
-To wipe everything and start clean — containers, volumes (database, certificates, logs), the generated `.env`, and local runtime directories — run `./start.sh --reset`. It asks for confirmation first; pass `--yes` to skip the prompt. Use this instead of manual cleanup: deleting `.env` while the Postgres volume survives leaves the old database holding the old password, and the panel will fail its healthcheck with authentication errors.
+To wipe everything and start clean - containers, volumes (database, certificates, logs), the generated `.env`, and local runtime directories - run `./start.sh --reset`. It asks for confirmation first; pass `--yes` to skip the prompt. Use this instead of manual cleanup: deleting `.env` while the Postgres volume survives leaves the old database holding the old password, and the panel will fail its healthcheck with authentication errors.
 
 ### Full test suite
 
@@ -286,7 +294,7 @@ The complete suite runs three isolated stages:
 2. **Functional tests:** 119 tests for Django views, workflows, management commands, permissions, retention, log rotation, every API endpoint, and the full gate surface (dispatch, one-time/expiry semantics, token and TOTP gates, submission approval and denial flows, auto-rule end-to-end, Telegram text commands and inline callbacks, Web Push delivery and pruning, undo/burn semantics, watermarks, decoy canaries, JA3/JA4 gating, mobile UI, deployment templates, domain pinning, pwndrop proxying, bans, auto-ban, agent rotation, two-factor login, security enrollment, notifications).
 3. **End-to-end tests:** 9 real-browser tests covering bootstrap, login/logout, navigation, charts, filtering, pagination, XSS safety, invitations, acceptance, revocation, notifications, all API operations, health checks, custom 404s, and mobile layouts.
 
-The test script builds `docker-compose.test.yml`, starts a disposable stack on port 3100, generates time-current nginx fixtures, and destroys the test database and containers afterward. It does not use the development or production database. The browser stage runs in its own container — Playwright, Chromium, and all of their system libraries live inside `docker/Dockerfile.browser`, so the host OS needs only Docker and curl. Nothing is pip-installed on the host. Set `KEEP_TEST_ENV=1` to retain the isolated stack for debugging.
+The test script builds `docker-compose.test.yml`, starts a disposable stack on port 3100, generates time-current nginx fixtures, and destroys the test database and containers afterward. It does not use the development or production database. The browser stage runs in its own container - Playwright, Chromium, and all of their system libraries live inside `docker/Dockerfile.browser`, so the host OS needs only Docker and curl. Nothing is pip-installed on the host. Set `KEEP_TEST_ENV=1` to retain the isolated stack for debugging.
 
 Individual stages are available as `./test.sh --unit`, `./test.sh --functional`, and `./test.sh --e2e`. If your filesystem does not preserve executable bits, use `bash test.sh --all` (or the corresponding stage flag).
 

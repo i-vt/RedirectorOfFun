@@ -39,7 +39,7 @@
       <div class="grid-3">
         <label><span>NAME</span><input class="field-input" name="set_name" maxlength="120" placeholder="404 probes only"></label>
         <label><span>SCOPE</span><select class="field-input" name="set_scope"><option value="all">Everything</option><option value="not_found">404s only</option><option value="link">Specific link</option></select></label>
-        <label><span>LINK (scope = link)</span><select class="field-input" name="set_link"><option value="">—</option>{% for link in links %}<option value="{{ link.pk }}">{{ link.path }}</option>{% endfor %}</select></label>
+        <label><span>LINK (scope = link)</span><select class="field-input" name="set_link"><option value="">-</option>{% for link in links %}<option value="{{ link.pk }}">{{ link.path }}</option>{% endfor %}</select></label>
       </div>
       <button class="button" type="submit">Create ruleset</button>
     </fieldset>

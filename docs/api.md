@@ -1,8 +1,21 @@
 # API Reference
 
-Session-authenticated REST API under `/api/v1/`. Authenticate as an operator
-via `/login/` (and `/login/totp/` when 2FA is enabled); the session cookie
-authenticates all requests. Anonymous requests are rejected.
+REST API under `/api/v1/` (behind the operator prefix in production). Two
+credential types:
+
+- Session cookie from `/login/` (+ `/login/totp/` when 2FA is enabled)
+- API keys: `Authorization: ApiKey rofk_<secret>` (CSRF-free; the key acts as
+  its owner with the owner's roles, is hashed at rest, shown once, revocable)
+
+Anonymous requests are rejected. Create keys on the Security page, via
+`POST /api/v1/apikeys/`, or `manage.py create_apikey <username>`.
+
+## API keys
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET/POST | `apikeys/` | List your keys (admins can `?all=1`) / provision (full key returned once) |
+| POST | `apikeys/<id>/revoke/` | Revoke (own keys; admins any) |
 
 ## Links
 
@@ -39,6 +52,19 @@ Writable fields include `path`, `kind`, `key_text`, `pwndrop_url`, `gate_type`,
 | GET | `hit-events/?category=suspicious` | Surface telemetry (cursor-paginated) |
 | GET | `gate-stats/` | 24h aggregates + pending counts |
 
+## Blocking rules
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET/POST | `block-rules/` | List / create rules |
+| GET/PATCH/DELETE | `block-rules/<id>/` | Read / update / delete (presets cannot be deleted) |
+| GET/POST | `block-rules/sets/` | List / create rulesets |
+| GET/PATCH/DELETE | `block-rules/sets/<id>/` | Manage a ruleset (deleting orphans its rules into the ungrouped chain) |
+| POST | `block-rules/reorder/` | `{"kind": "rule"|"set", "ids": [...]}` rewrites ordering |
+| GET | `block-rules/export/` | Download the full chain as JSON |
+| POST | `block-rules/import/` | Import a JSON export (lands disabled, `(imported)` suffix on collisions) |
+| POST | `block-rules/test/` | Dry-run `{"ip", "ua"}` against every rule |
+
 ## Web Push
 
 | Method | Path | Purpose |
@@ -47,10 +73,20 @@ Writable fields include `path`, `kind`, `key_text`, `pwndrop_url`, `gate_type`,
 | POST | `push/subscribe/` | Body: PushSubscription JSON (`endpoint`, `keys`) |
 | POST | `push/unsubscribe/` | Body: `{"endpoint"}` |
 
+## Operators, system
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `operators/` | List operators (admin) |
+| POST | `operators/invitations/` | Create an invitation, returns the acceptance URL (admin) |
+| POST | `operators/<id>/revoke/` | Deactivate an operator (admin) |
+| POST | `operators/<id>/reset-2fa/` | Clear their 2FA and invalidate sessions (admin) |
+| GET | `links/<id>/totp/` | Current TOTP codes for a time-gated link |
+| POST | `selftest/` | Run the startup check suite on demand |
+
 ## Existing endpoints
 
-`404-events/`, `404-stats/`, `audit-events/`, `operators/`,
-`operators/<id>/revoke/`, `notification-preferences/`,
+`404-events/`, `404-stats/`, `audit-events/`, `notification-preferences/`,
 `notifications/recent/?after=<id>`.
 
 ## Errors

@@ -68,3 +68,32 @@ nothing.
   per device. Select the "Web Push" channel in the preferences matrix.
 - **Telegram**: bot DMs; the only channel that also accepts *inbound*
   decisions (replies and inline buttons).
+
+## Blocking rules
+
+Blocking Rules is a firewall-style chain: rulesets evaluated top to bottom,
+first matching rule wins. An ALLOW rule stops the chain (use it for trusted
+operators so later block rules never touch them); a BLOCK rule serves the
+decoy, logs a `blocked` event, and can auto-ban the IP.
+
+- Rules are typed regex conditions: `ip`, `cidr`, `ua`, `asn`, `isp`,
+  `country`, `city`, combined with ALL / ANY / NONE logic plus per-condition
+  negation. ASN/ISP/geo conditions only fire when enrichment data exists for
+  the address (see deploy.md); a rule with unknown inputs never fires.
+- Sets default to one "everything" chain; additional sets can be scoped to
+  404s only or to a specific delivery link. Drag rules to reorder them inside
+  a set; drag set headers to reorder sets.
+- Export/Import as JSON from the page header; imports always land disabled.
+- Presets seed disabled on first start. Use the Test page (or
+  `POST /api/v1/block-rules/test/`) to dry-run any IP + user agent against the
+  whole chain before enabling anything - enabled rules apply to operators too.
+
+## Decoy pages and the public surface
+
+Anything outside the operator prefix (unknown URLs, `/`, `/panel/` when
+probed) returns the default decoy page - for anonymous visitors and signed-in
+operators alike. Only inside the prefix do operators get the panel's own 404.
+Pick the default page under Decoy Pages: any of the pages shipped with the
+repo, an uploaded HTML file, or a redirect to another site. Every served decoy
+carries a per-visitor canary pixel; a re-hit or a forged token shows up as a
+suspicious event.

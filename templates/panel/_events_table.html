@@ -5,24 +5,24 @@
   <td><span class="method">{{ event.method }}</span></td>
   <td class="path-cell" title="{{ event.path }}">{{ event.path }}</td>
   <td class="mono muted client-cell">
-    <span class="client-hash">{{ event.source_ip_hash|slice:":12"|default:"—" }}</span>
-    <span class="client-raw" style="display:none">{{ event.source_ip|default:"—" }}</span>
+    <span class="client-hash">{{ event.source_ip_hash|slice:":12"|default:"-" }}</span>
+    <span class="client-raw" style="display:none">{{ event.source_ip|default:"-" }}</span>
   </td>
   <td><span class="status-code">{{ event.status }}</span></td>
   <td><button class="text-button info-toggle" type="button" data-target="#event-detail-{{ event.pk }}">INFO</button></td>
 </tr>
 <tr class="event-detail" id="event-detail-{{ event.pk }}" style="display:none"><td colspan="6">
   <dl class="system-list" style="margin:0">
-    <div><dt>RAW IP</dt><dd class="mono">{{ event.source_ip|default:"—" }}</dd></div>
-    <div><dt>IP HASH</dt><dd class="mono">{{ event.source_ip_hash|default:"—" }}</dd></div>
-    <div><dt>USER AGENT</dt><dd class="mono" style="max-width:520px;overflow-wrap:anywhere">{{ event.user_agent|default:"—" }}</dd></div>
+    <div><dt>RAW IP</dt><dd class="mono">{{ event.source_ip|default:"-" }}</dd></div>
+    <div><dt>IP HASH</dt><dd class="mono">{{ event.source_ip_hash|default:"-" }}</dd></div>
+    <div><dt>USER AGENT</dt><dd class="mono" style="max-width:520px;overflow-wrap:anywhere">{{ event.user_agent|default:"-" }}</dd></div>
     {% with info=intel|get_item:event.source_ip %}
     {% if info %}
     <div><dt>ASN / ISP</dt><dd class="mono">AS{{ info.asn }} {{ info.org }}</dd></div>
-    <div><dt>GEO (INTEL)</dt><dd>{{ info.city }}{% if info.city and info.country_code %}, {% endif %}{{ info.country_code|default:"—" }}</dd></div>
+    <div><dt>GEO (INTEL)</dt><dd>{{ info.city }}{% if info.city and info.country_code %}, {% endif %}{{ info.country_code|default:"-" }}</dd></div>
     {% endif %}
     {% endwith %}
-    <div><dt>GEO</dt><dd>{{ event.city }}{% if event.city and event.country_code %}, {% endif %}{{ event.country_code|default:"—" }}</dd></div>
+    <div><dt>GEO</dt><dd>{{ event.city }}{% if event.city and event.country_code %}, {% endif %}{{ event.country_code|default:"-" }}</dd></div>
     <div><dt>REQUEST ID</dt><dd class="mono">{{ event.request_id }}</dd></div>
     <div><dt>INGESTED / UTC</dt><dd class="mono">{{ event.created_at|date:"Y-m-d H:i:s" }}</dd></div>
   </dl>
