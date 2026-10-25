@@ -405,7 +405,7 @@ def _fetch_pwndrop(url, timeout=None):
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise RuntimeError("pwndrop source must be an http(s) URL.")
     opener = urllib.request.build_opener(_NoRedirect)
-    request = urllib.request.Request(url, headers={"User-Agent": "redirector-control-plane/1.0"})
+    request = urllib.request.Request(url, headers={"User-Agent": settings.OUTBOUND_USER_AGENT})
     with opener.open(request, timeout=timeout or getattr(settings, "PWNDROP_TIMEOUT", 10)) as response:
         length = response.headers.get("Content-Length")
         max_bytes = getattr(settings, "PWNDROP_MAX_BYTES", 512 * 1024 * 1024)
@@ -426,7 +426,7 @@ def _fetch_pwndrop(url, timeout=None):
 def build_watermark(link):
     """Unique per-release marker; the exact value lands in the download HitEvent."""
     import secrets
-    return f"ROFWM:{link.pk}:{link.hit_count + 1}:{secrets.token_hex(8)}"
+    return f"{getattr(settings, 'WATERMARK_PREFIX', 'ROFWM')}:{link.pk}:{link.hit_count + 1}:{secrets.token_hex(8)}"
 
 
 def _mark_served(link):
@@ -534,6 +534,23 @@ def dispatch(request, path):
             if response is not None:
                 return response
         record_hit("not_found", request=request, path=path, status_code=404)
+        # Public responses are 200 decoys; the 404 semantics live in the
+        # analytics record, not in what the visitor sees.
+        try:
+            from analytics.models import NotFoundEvent
+            NotFoundEvent.objects.get_or_create(
+                request_id=getattr(request, "request_id", "")[:64] or "nofid-" + hashlib.sha256(path.encode()).hexdigest()[:56],
+                defaults={
+                    "occurred_at": timezone.now(),
+                    "method": request.method[:10].upper(),
+                    "path": path[:8192],
+                    "status": 404,
+                    "source_ip": ip or None,
+                    "source_ip_hash": hash_address(ip),
+                    "user_agent": request.META.get("HTTP_USER_AGENT", "")[:1000],
+                })
+        except Exception:
+            logger.exception("failed to write synthetic 404 record")
         return None
 
     decision = evaluate_blocking_rules(request, ip, is_404=False, link=link)
@@ -688,7 +705,7 @@ def _fetch_ip_intel(ip):
     fields = "status,message,countryCode,city,isp,org,as,query"
     url = f"http://ip-api.com/json/{ip}?fields={fields}"
     try:
-        request = urllib.request.Request(url, headers={"User-Agent": "redirector-control-plane/1.0"})
+        request = urllib.request.Request(url, headers={"User-Agent": settings.OUTBOUND_USER_AGENT})
         with urllib.request.urlopen(request, timeout=getattr(settings, "IP_INTEL_TIMEOUT", 2.5)) as response:
             payload = json.loads(response.read().decode())
     except (OSError, ValueError):

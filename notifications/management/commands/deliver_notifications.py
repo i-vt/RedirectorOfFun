@@ -66,7 +66,8 @@ class Command(BaseCommand):
         body = json.dumps(message).encode()
         request = urllib.request.Request(
             f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
-            data=body, headers={"Content-Type": "application/json"}, method="POST",
+            data=body, headers={"Content-Type": "application/json",
+                                "User-Agent": settings.OUTBOUND_USER_AGENT}, method="POST",
         )
         with urllib.request.urlopen(request, timeout=10) as response:
             if response.status != 200:

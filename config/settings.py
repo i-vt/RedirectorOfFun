@@ -157,6 +157,14 @@ PWNDROP_MAX_BYTES = int(os.getenv("PWNDROP_MAX_BYTES", str(512 * 1024 * 1024)))
 # cached in the database. Disable to keep the panel fully offline.
 IP_INTEL_ENABLED = env_bool("IP_INTEL_ENABLED", True)
 IP_INTEL_TIMEOUT = float(os.getenv("IP_INTEL_TIMEOUT", "2.5"))
+# Outbound fetches (pwndrop, intel, telegram) should not announce the project.
+OUTBOUND_USER_AGENT = os.getenv(
+    "OUTBOUND_USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+)
+# Prefix embedded in watermarked releases; change it per engagement so a
+# leaked sample cannot be attributed to the default marker format.
+WATERMARK_PREFIX = os.getenv("WATERMARK_PREFIX", "ROFWM")
 DECISION_UNDO_SECONDS = int(os.getenv("DECISION_UNDO_SECONDS", "10"))
 DECOY_CANARIES = env_bool("DECOY_CANARIES", True)
 REDIRECTOR_DOMAINS = [d.strip() for d in os.getenv("REDIRECTOR_DOMAINS", "").split(",") if d.strip()]

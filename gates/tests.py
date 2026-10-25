@@ -177,15 +177,17 @@ class PublicDispatchTests(TestCase):
         self.assertTrue(HitEvent.objects.filter(category="banned").exists())
 
     def test_untracked_path_returns_stock_404(self):
+        from analytics.models import NotFoundEvent
         response = self.client.get("/g/does/not/exist")
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
         self.assertTrue(HitEvent.objects.filter(category="not_found").exists())
+        self.assertTrue(NotFoundEvent.objects.filter(path="/g/does/not/exist").exists())
 
     def test_anonymous_untracked_path_gets_decoy(self):
         response = self.client.get("/definitely-not-real")
-        self.assertEqual(response.status_code, 404)
-        self.assertContains(response, "Update Service", status_code=404)
-        self.assertContains(response, "/g/canary/", status_code=404)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Update Service")
+        self.assertContains(response, "/g/canary/")
 
     def test_operator_untracked_path_gets_panel_404(self):
         operator = Operator.objects.create_user(username="op404", password="long-enough-password-123")
@@ -281,7 +283,7 @@ class PublicDispatchTests(TestCase):
     def test_agent_channel_hit_tracked(self):
         agent = AgentChannel.objects.create(label="agent-7")
         response = self.client.get(agent.path, HTTP_USER_AGENT="Beacon/1.0")
-        self.assertEqual(response.status_code, 404)  # no link; falls to stock 404
+        self.assertEqual(response.status_code, 200)  # no link; decoy at 200
         agent.refresh_from_db()
         self.assertEqual(agent.hits, 1)
         self.assertIsNotNone(agent.last_seen_at)
@@ -1092,20 +1094,20 @@ class DecoyPageTests(TestCase):
 
     def test_default_repo_decoy_is_served(self):
         response = self.public.get("/no-such-page")
-        self.assertContains(response, "Update Service", status_code=404)
+        self.assertContains(response, "Update Service")
 
     def test_operator_can_switch_default_to_repo_page(self):
         crestfield = DecoyPage.objects.get(template_key="crestfield")
         self.client.post(reverse("gate-decoy-default", args=[crestfield.pk]))
         response = self.public.get("/no-such-page")
-        self.assertContains(response, "CrestDesk", status_code=404)
-        self.assertNotContains(response, "All systems operational", status_code=404)
-        self.assertContains(response, "/g/canary/", status_code=404)
+        self.assertContains(response, "CrestDesk")
+        self.assertNotContains(response, "All systems operational")
+        self.assertContains(response, "/g/canary/")
         # nysm-landing is also selectable and distinct from the update-service page title
         landing = DecoyPage.objects.get(template_key="nysm-landing")
         self.client.post(reverse("gate-decoy-default", args=[landing.pk]))
         response = self.public.get("/no-such-page")
-        self.assertContains(response, "Service Portal", status_code=404)
+        self.assertContains(response, "Service Portal")
 
     def test_uploaded_html_page_with_canary_injection(self):
         html = b"<html><body><h1>Customer Portal</h1></body></html>"
@@ -1113,8 +1115,8 @@ class DecoyPageTests(TestCase):
         DecoyPage.objects.exclude(pk=page.pk).update(is_default=False)
         page.html_file.save("portal.html", ContentFile(html), save=True)
         response = self.public.get("/no-such-page")
-        self.assertContains(response, "Customer Portal", status_code=404)
-        self.assertContains(response, "/g/canary/", status_code=404)
+        self.assertContains(response, "Customer Portal")
+        self.assertContains(response, "/g/canary/")
 
     def test_redirect_decoy_sends_visitor_away(self):
         page = DecoyPage.objects.create(kind="redirect", name="ms",
@@ -1135,7 +1137,7 @@ class DecoyPageTests(TestCase):
         self.assertNotEqual(new_default.pk, default.pk)
         self.assertTrue(new_default.active)
         response = self.public.get("/no-such-page")
-        self.assertContains(response, "/g/canary/", status_code=404)
+        self.assertContains(response, "/g/canary/")
 
     def test_builtin_pages_cannot_be_deleted(self):
         builtin = DecoyPage.objects.get(template_key="crestfield")
@@ -1330,7 +1332,7 @@ class BlockingRuleFlowTests(TestCase):
         BlockingRule.objects.create(
             name="off", logic="any", conditions=[{"type": "ua", "pattern": r"(?i)^curl"}], enabled=False)
         response = self.public.get("/probe-path", HTTP_USER_AGENT="curl/8.0")
-        self.assertContains(response, "Update Service", status_code=404)  # plain 404 decoy
+        self.assertContains(response, "Update Service")  # plain 404 decoy
         self.assertFalse(HitEvent.objects.filter(category="blocked").exists())
 
     def test_panel_pages_render(self):
@@ -1471,6 +1473,52 @@ class RuleChainSemanticsTests(TestCase):
         self.assertEqual(BlockingRule.objects.get(pk=r2.pk).order, 0)
 
 
+@tag("functional")
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class FingerprintHygieneTests(TestCase):
+    def test_request_id_header_only_on_operator_paths(self):
+        public = self.client.get("/definitely-not-real")
+        self.assertNotIn("X-Request-ID", public.headers)
+        operator = Operator.objects.create_user(username="reqidop", password="long-enough-password-123")
+        self.client.force_login(operator)
+        panel = self.client.get("/panel/")
+        self.assertIn("X-Request-ID", panel.headers)
+
+    def test_outbound_user_agent_is_generic(self):
+        from django.conf import settings as dj_settings
+        self.assertIn("Mozilla/5.0", dj_settings.OUTBOUND_USER_AGENT)
+        self.assertNotIn("redirector", dj_settings.OUTBOUND_USER_AGENT.lower())
+
+    def test_pwndrop_fetch_uses_outbound_user_agent(self):
+        with mock.patch("urllib.request.Request") as req:
+            with mock.patch("urllib.request.build_opener") as opener:
+                opener.return_value.open.return_value.__enter__.return_value.headers.get_content_type.return_value = "application/octet-stream"
+                opener.return_value.open.return_value.__enter__.return_value.headers.get.return_value = "4"
+                opener.return_value.open.return_value.__enter__.return_value.read.side_effect = [b"data", b""]
+                services._fetch_pwndrop("http://10.0.0.5/f.bin")
+            headers = req.call_args[1]["headers"]
+            self.assertEqual(headers["User-Agent"], dj_settings_for_test().OUTBOUND_USER_AGENT)
+
+    def test_watermark_prefix_configurable(self):
+        link = DeliveryLink.objects.create(path="/g/wmp/1", kind="key", key_text="K", watermark=True)
+        with override_settings(WATERMARK_PREFIX="OPSPEC"):
+            marker = services.build_watermark(link)
+        self.assertTrue(marker.startswith("OPSPEC:"))
+
+    def test_untracked_path_writes_synthetic_404_record(self):
+        from analytics.models import NotFoundEvent
+        self.client.get("/no/such/place", HTTP_USER_AGENT="curl/8.0", REMOTE_ADDR="203.0.113.66")
+        event = NotFoundEvent.objects.get(path="/no/such/place")
+        self.assertEqual(event.status, 404)
+        self.assertEqual(event.source_ip, "203.0.113.66")
+        self.assertEqual(event.user_agent, "curl/8.0")
+
+
+def dj_settings_for_test():
+    from django.conf import settings
+    return settings
+
+
 @tag("unit")
 class BasePathCustomizationTests(TestCase):
     def test_settings_normalize_bases(self):
@@ -1500,7 +1548,7 @@ class CustomBasePathTests(TestCase):
         self.assertContains(response, "KEY")
         # the default /g/ base no longer routes
         stale = self.client.get("/g/drop1")
-        self.assertEqual(stale.status_code, 404)
+        self.assertEqual(stale.status_code, 200)
 
     def test_canary_follows_the_custom_base(self):
         response = self.client.get("/gx7q/canary/deadbeef.gif")
@@ -1747,10 +1795,10 @@ class OperatorPrefixTests(TestCase):
     def test_unprefixed_operator_paths_are_gone(self):
         for path in ("/panel/", "/login/", "/api/v1/links/", "/api", "/m/"):
             response = self.client.get(path)
-            self.assertEqual(response.status_code, 404, path)
+            self.assertEqual(response.status_code, 200, path)  # decoy at 200
         # and unknown paths present the decoy to anonymous visitors
         response = self.client.get("/panel/")
-        self.assertContains(response, "Update Service", status_code=404)
+        self.assertContains(response, "Update Service")
 
     def test_outside_prefix_is_decoy_even_for_authenticated_operators(self):
         from accounts.models import Operator
@@ -1758,7 +1806,7 @@ class OperatorPrefixTests(TestCase):
         self.client.force_login(operator)
         for path in ("/api", "/api/v1/links/", "/panel/", "/login/"):
             response = self.client.get(path)
-            self.assertContains(response, "Update Service", status_code=404, msg_prefix=path)
+            self.assertContains(response, "Update Service", msg_prefix=path)
         # inside the prefix, operators still get the helpful panel 404
         response = self.client.get("/testprefix/panel/no-such-page/")
         self.assertContains(response, "Nothing lives at this address", status_code=404)

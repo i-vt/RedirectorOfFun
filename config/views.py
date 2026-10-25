@@ -18,10 +18,10 @@ def not_found(request, exception):
         return response
     prefix = getattr(settings, "OPERATOR_PREFIX", "")
     if prefix and not request.path.startswith(f"/{prefix}/"):
-        return decoy_response(request, status=404)
-    if request.user.is_authenticated:
+        return decoy_response(request)
+    if request.user.is_authenticated and (not prefix or request.path.startswith(f"/{prefix}/")):
         return render(request, "404.html", status=404)
-    return decoy_response(request, status=404)
+    return decoy_response(request)
 
 
 def root(request):
