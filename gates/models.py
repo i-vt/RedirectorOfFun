@@ -554,6 +554,21 @@ class GateConfig(models.Model):
         return cls.objects.get_or_create(key="main")[0]
 
 
+class UsedGateCode(models.Model):
+    """Tracks consumed gate codes so a TOTP code is single-use per link."""
+
+    link = models.ForeignKey("DeliveryLink", on_delete=models.CASCADE, related_name="used_codes")
+    code = models.CharField(max_length=16)
+    used_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["link", "code"], name="unique_gate_code_per_link")]
+        ordering = ["-used_at"]
+
+    def __str__(self):
+        return f"{self.link.path}:{self.code}"
+
+
 class HitEvent(models.Model):
     """Unified tracking for everything that touches the public surface."""
 

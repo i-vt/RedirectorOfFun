@@ -45,11 +45,16 @@ the HitEvent detail.
 
 ## Gate types
 
+> TOTP codes are single-use per link: the first accepted code is recorded,
+> a replay is rejected and logged as a suspicious event, and records prune
+> after three windows. The code format (8-hex truncated HMAC vs 6-digit
+> decimal) is an operator setting under Settings -> Gate codes.
+
 | Gate | Client presents | Failure response |
 |---|---|---|
 | `none` | path only | hold response |
 | `token` | `?t=` or `X-Gate-Token` header | hold response + suspicious event |
-| `totp` | time-based code (`?t=` or header) | hold response + suspicious event |
+| `totp` | time-based code (`?t=` or header), single-use per link | hold response + suspicious event |
 | `submission` | POST body (cipher template) | hold response; undecryptable → suspicious |
 
 Fingerprint requirements (JA3/JA4) compose with the gate type: the gate must

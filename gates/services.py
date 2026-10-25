@@ -310,19 +310,35 @@ def handle_submission(link, request):
     return hold_response(link, request)
 
 
-def gate_passed(link, request) -> bool:
+def gate_passed(link, request) -> tuple:
+    """Returns (passed, reason). Reason explains a failure when there is one."""
     if link.gate_type == "none":
-        return True
+        return True, None
     presented = client_presented_token(request)
     if link.gate_type == "token":
-        return bool(link.gate_token) and presented == link.gate_token
+        ok = bool(link.gate_token) and presented == link.gate_token
+        return ok, None if ok else "token mismatch"
     if link.gate_type == "totp":
-        return verify_totp(link.totp_secret, presented, window_seconds=link.totp_window)
+        if not verify_totp(link.totp_secret, presented, window_seconds=link.totp_window):
+            return False, "code mismatch"
+        # A gate code is single-use per link: the first claim wins, replays
+        # are rejected and flagged as suspicious. The inner savepoint keeps a
+        # rejected insert from poisoning the surrounding transaction.
+        from django.db import IntegrityError, transaction
+        from .models import UsedGateCode
+        horizon = timezone.now() - timezone.timedelta(seconds=max(link.totp_window, 1) * 3)
+        UsedGateCode.objects.filter(link=link, used_at__lt=horizon).delete()
+        try:
+            with transaction.atomic():
+                UsedGateCode.objects.create(link=link, code=presented)
+        except IntegrityError:
+            return False, "totp code replay"
+        return True, None
     if link.gate_type == "submission":
         # POST bodies are the submission itself (validated during handling);
         # GETs pass through to the operator-approval check below.
-        return True
-    return False
+        return True, None
+    return False, "unknown gate"
 
 
 def evaluate_auto_rules(link, submission):
@@ -603,9 +619,10 @@ def dispatch(request, path):
 
     record_hit("hit", request=request, path=normalized, link=link)
 
-    if not gate_passed(link, request):
+    passed, gate_reason = gate_passed(link, request)
+    if not passed:
         record_hit("suspicious", request=request, path=normalized, link=link, status_code=403,
-                   detail={"reason": f"gate '{link.gate_type}' not satisfied"})
+                   detail={"reason": gate_reason or f"gate '{link.gate_type}' not satisfied"})
         return hold_response(link, request)
 
     if (link.ja3_fingerprint or link.ja4_fingerprint) and not fingerprint_passed(link, request):

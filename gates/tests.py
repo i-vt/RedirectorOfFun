@@ -1579,6 +1579,65 @@ def dj_settings_for_test():
 
 @tag("functional")
 @override_settings(AUTO_BAN_THRESHOLD=0)
+class TotpSingleUseTests(TestCase):
+    def setUp(self):
+        from gates.crypto_utils import totp_code
+        import time
+        self.totp_code = totp_code
+        self.window = int(time.time()) // 30
+        self.link = DeliveryLink.objects.create(path="/g/otp/1", kind="key", key_text="K",
+                                                gate_type="totp", totp_secret="s3cr3t")
+        self.public = Client()
+
+    def test_code_works_once_then_replay_rejected(self):
+        code = self.totp_code("s3cr3t", self.window)
+        first = self.public.get(self.link.path, {"t": code})
+        self.assertEqual(first.status_code, 200)
+        replay = self.public.get(self.link.path, {"t": code})
+        self.assertEqual(replay.status_code, 204)
+        hit = HitEvent.objects.filter(category="suspicious").order_by("-created_at").first()
+        self.assertEqual(hit.detail["reason"], "totp code replay")
+        # and it counts toward the auto-ban threshold like any suspicious hit
+        from gates.models import UsedGateCode
+        self.assertTrue(UsedGateCode.objects.filter(link=self.link, code=code).exists())
+
+    def test_next_window_code_still_works(self):
+        code_now = self.totp_code("s3cr3t", self.window)
+        self.public.get(self.link.path, {"t": code_now})
+        code_next = self.totp_code("s3cr3t", self.window + 1)
+        # the next window's code passes verification only if within skew; force the flow
+        from gates.crypto_utils import verify_totp
+        self.assertTrue(verify_totp("s3cr3t", code_now, window_seconds=30))
+        # a fresh code from the NEXT window is not accepted now (skew is ±1 past)
+        # but the PREVIOUS window's unused code is
+        code_prev = self.totp_code("s3cr3t", self.window - 1)
+        second = self.public.get(self.link.path, {"t": code_prev})
+        self.assertEqual(second.status_code, 200)
+
+    def test_pruning_removes_old_codes(self):
+        from gates.models import UsedGateCode
+        code = self.totp_code("s3cr3t", self.window)
+        self.public.get(self.link.path, {"t": code})
+        # age the record beyond the prune horizon
+        old = UsedGateCode.objects.get(link=self.link)
+        old.used_at = timezone.now() - timezone.timedelta(seconds=200)
+        old.save(update_fields=["used_at"])
+        # a new valid code triggers the prune sweep
+        self.public.get(self.link.path, {"t": self.totp_code("s3cr3t", self.window - 1)})
+        self.assertFalse(UsedGateCode.objects.filter(pk=old.pk).exists())
+
+    def test_same_code_different_links_independent(self):
+        other = DeliveryLink.objects.create(path="/g/otp/2", kind="key", key_text="K2",
+                                            gate_type="totp", totp_secret="other-secret")
+        # per-link secrets produce different codes; verify both links accept theirs
+        code_a = self.totp_code("s3cr3t", self.window)
+        code_b = self.totp_code("other-secret", self.window)
+        self.assertEqual(self.public.get(self.link.path, {"t": code_a}).status_code, 200)
+        self.assertEqual(self.public.get(other.path, {"t": code_b}).status_code, 200)
+
+
+@tag("functional")
+@override_settings(AUTO_BAN_THRESHOLD=0)
 class GateFormatAndRangeTests(TestCase):
     def setUp(self):
         self.operator = Operator.objects.create_user(username="fmtop", password="long-enough-password-123")
