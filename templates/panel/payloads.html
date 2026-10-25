@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load ui_icons %}
+{% load gate_extras %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading"><div><span class="section-label">FILE MANAGER</span><h2>Payloads</h2><p>Every file the gate system holds: payloads, benevolent fallbacks, uploaded decoys - with the gate intel (hostnames, screenshots, hashed IPs) each link collected. Replace swaps a payload without changing its URL.</p></div></div>
+
+  {% if file_links %}
+  <div class="table-wrap"><table><thead><tr><th>FILE</th><th>LINK</th><th>SIZE</th><th>USES</th><th>GATE INTEL</th><th>ACTIONS</th></tr></thead><tbody>
+    {% for link in file_links %}
+    {% with info=intel|get_item:link.pk %}
+    <tr>
+      <td class="mono">{{ link.payload.name|basename }}</td>
+      <td class="path-cell mono"><a href="{% url 'gate-link-detail' link.pk %}">{{ link.path }}</a></td>
+      <td class="mono muted">{{ link.payload_size|default:"?" }} B</td>
+      <td class="mono">{{ link.hit_count }}</td>
+      <td>{% if info %}<span class="status-badge warn">{{ info.count }} SUB</span> <span class="mono muted">{{ info.hostname|default:"-" }} · {{ info.ip_hash }} · {{ info.images }} img</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+      <td>
+        <form method="post" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center">{% csrf_token %}
+          <input type="hidden" name="link_id" value="{{ link.pk }}">
+          <input type="hidden" name="action" value="replace">
+          <label class="text-button" style="cursor:pointer">{% icon "cycle" %}REPLACE<input type="file" name="payload" style="display:none" onchange="this.form.requestSubmit()"></label>
+        </form>
+        <form method="post" style="display:inline" data-confirm="Clear the payload from {{ link.path }}? The link stays live.">{% csrf_token %}
+          <input type="hidden" name="link_id" value="{{ link.pk }}"><input type="hidden" name="action" value="clear">
+          <button class="text-button" type="submit">{% icon "trash" %}CLEAR</button>
+        </form>
+      </td>
+    </tr>
+    {% endwith %}
+    {% endfor %}
+  </tbody></table></div>
+  {% else %}<div class="empty-state"><strong>No payloads yet</strong><p>Quick drop a file from the Links page, or attach one to a link.</p></div>{% endif %}
+
+  {% if benevolent_links %}
+  <div class="panel-heading" style="margin-top:24px"><div><span class="section-label">BENEVOLENT FALLBACKS</span><h3>Deny-response files</h3></div></div>
+  <div class="table-wrap"><table><thead><tr><th>FILE</th><th>LINK</th><th>SIZE</th><th></th></tr></thead><tbody>
+    {% for link in benevolent_links %}
+    <tr>
+      <td class="mono">{{ link.benevolent_file.name|basename }}</td>
+      <td class="path-cell mono"><a href="{% url 'gate-link-detail' link.pk %}">{{ link.path }}</a></td>
+      <td class="mono muted">{{ link.benevolent_file_size|default:"?" }} B</td>
+      <td><form method="post" style="display:inline" data-confirm="Clear the benevolent file from {{ link.path }}?">{% csrf_token %}<input type="hidden" name="link_id" value="{{ link.pk }}"><input type="hidden" name="action" value="clear_benevolent"><button class="text-button" type="submit">{% icon "trash" %}CLEAR</button></form></td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% endif %}
+
+  {% if decoys %}
+  <div class="panel-heading" style="margin-top:24px"><div><span class="section-label">DECOYS</span><h3>Uploaded decoy pages</h3><p>Managed under Decoy Pages.</p></div></div>
+  <div class="table-wrap"><table><thead><tr><th>FILE</th><th>DECOY</th><th>SIZE</th><th>STATUS</th></tr></thead><tbody>
+    {% for page in decoys %}
+    <tr>
+      <td class="mono">{{ page.html_file.name|basename }}</td>
+      <td><a href="{% url 'gate-decoys' %}">{{ page.name }}</a></td>
+      <td class="mono muted">{{ page.html_file_size|default:"?" }} B</td>
+      <td>{% if page.is_default %}<span class="status-badge good">DEFAULT</span>{% elif page.active %}<span class="status-badge">ACTIVE</span>{% else %}<span class="status-badge">INACTIVE</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% endif %}
+</section>
+{% endblock %}

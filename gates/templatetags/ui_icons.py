@@ -10,6 +10,7 @@ _ICONS = {
     "overview": '<circle cx="8" cy="8" r="6"/><path d="M8 8l3.2-3.4M8 4.6v.9M3.6 8h.9"/>',
     "events": '<path d="M3 13V7M3 13h12M3 7h12M7 7v6M11 7v6M15 7v6M15 3v10M3 3h12"/>',
     "links": '<path d="M6 9.5a3.5 3.5 0 0 1 0-2L8 5a3 3 0 0 1 4.2 0l.8.8a3 3 0 0 1 0 4.2L11 12a3 3 0 0 1-4.2 0"/><path d="M8 6.5a3.5 3.5 0 0 1 0 2L6 11a3 3 0 0 1-4.2 0"/>',
+    "payloads": '<path d="M8 2.2l5.2 2.6v6.4L8 13.8l-5.2-2.6V4.8z"/><path d="M2.8 4.8L8 7.4l5.2-2.6M8 7.4v6.4M5.4 3.5l5.2 2.6"/>',
     "approvals": '<circle cx="8" cy="8" r="6.5"/><path d="M5.2 8.4l2 2 3.6-4"/>',
     "operators": '<circle cx="8" cy="5.4" r="2.6"/><path d="M2.8 13.4c.6-2.4 2.6-3.6 5.2-3.6s4.6 1.2 5.2 3.6"/>',
     "bans": '<circle cx="8" cy="8" r="6.4"/><path d="M3.6 3.6l8.8 8.8"/>',

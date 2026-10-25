@@ -52,8 +52,18 @@ class DeliveryLinkSerializer(serializers.ModelSerializer):
                   "expected_fields", "auto_rules", "placeholder", "on_deny", "requires_approval",
                   "approval_status", "one_time", "max_uses", "expires_at", "active", "hit_count",
                   "domain", "ja3_fingerprint", "ja4_fingerprint", "watermark",
+                  "payload", "payload_size", "benevolent_file",
                   "created_at", "updated_at"]
-        read_only_fields = ["approval_status", "hit_count", "created_at", "updated_at"]
+        read_only_fields = ["approval_status", "hit_count", "payload_size", "created_at", "updated_at"]
+        extra_kwargs = {"payload": {"required": False}, "benevolent_file": {"required": False}}
+
+    payload_size = serializers.SerializerMethodField()
+
+    def get_payload_size(self, obj):
+        try:
+            return obj.payload.size if obj.payload else None
+        except (OSError, ValueError):
+            return None
 
     def validate_path(self, value):
         from django.core.exceptions import ValidationError as DjangoValidationError

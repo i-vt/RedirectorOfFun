@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% load ui_icons %}
+{% load gate_extras %}
+{% load static %}
+{% block head %}<script defer src="{% static 'js/chart.umd.min.js' %}"></script><script defer src="{% static 'js/link_chart.js' %}"></script>{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">
@@ -20,8 +23,12 @@
     <div class="stat-card"><span class="section-label">DOMAIN</span><strong class="mono">{{ link.domain|default:"default" }}</strong></div>
     <div class="stat-card"><span class="section-label">FINGERPRINTS</span><strong class="mono">{{ link.ja3_fingerprint|slice:":10"|default:"-" }} {{ link.ja4_fingerprint|slice:":10"|default:"-" }}</strong></div>
     <div class="stat-card"><span class="section-label">WATERMARK</span><strong>{{ link.watermark|yesno:"ON,off" }}</strong></div>
+    <div class="stat-card"><span class="section-label">PAYLOAD FILE</span><strong class="mono" style="font-size:.72rem;word-break:break-all">{% if link.payload %}{{ link.payload.name|basename }}{% else %}-{% endif %}</strong></div>
   </div>
-  <p class="muted" style="font-size:.7rem"><a href="{% url 'm-link' link.pk %}">Open in mobile UI →</a></p>
+  <p class="muted" style="font-size:.7rem"><a href="{% url 'm-link' link.pk %}">Open in mobile UI →</a> · <a href="{% url 'gate-payloads' %}">Manage payloads →</a></p>
+  <div class="panel-heading"><div><span class="section-label">PAYLOAD TELEMETRY</span><h2>Downloads / 14 days</h2></div><a class="text-link" href="{% url 'gate-payloads' %}">ALL PAYLOADS →</a></div>
+  <div class="chart-wrap"><canvas id="payload-chart" aria-label="Line chart of hits on this link over 14 days" role="img"></canvas></div>
+  {{ series_json|json_script:"payload-series" }}
   {% if link.requires_approval %}
   <div class="panel-heading"><div><span class="section-label">VERIFICATION GATE</span><h2>Operator decision</h2></div></div>
   {% with sub=link.submissions.first %}

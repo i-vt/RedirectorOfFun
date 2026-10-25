@@ -33,6 +33,15 @@ def get_item(mapping, key):
 
 
 @register.filter
+def basename(value):
+    """File name without the storage directory ('payloads/x.bin' -> 'x.bin')."""
+    try:
+        return str(value).rsplit("/", 1)[-1]
+    except (AttributeError, IndexError):
+        return value
+
+
+@register.filter
 def json_compact(value):
     """One-line JSON for table cells."""
     try:

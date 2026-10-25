@@ -5,8 +5,69 @@
   <div class="panel-heading">
     <div><span class="section-label">RELEASE GATES</span><h2>Delivery links</h2><p>Operator-controlled URLs under <code>/g/</code>: key distribution, gated payload downloads, and pwndrop proxies.</p></div>
     <div><a class="button" href="{% url 'gate-link-create' %}">{% icon "plus" %}New link</a>
+      <button class="button secondary" type="button" id="quick-drop-open">{% icon "upload" %}Quick drop</button>
       {% if pending_count %}<span class="status-badge warn">{{ pending_count }} AWAITING APPROVAL</span>{% else %}<span class="status-badge good">NO PENDING</span>{% endif %}</div>
   </div>
+  <div id="quick-drop-modal" class="rof-modal-overlay" hidden>
+    <div class="rof-modal-card" role="dialog" aria-modal="true" aria-labelledby="quick-drop-title">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div><span class="section-label">ONE-STEP DELIVERY</span><h2 id="quick-drop-title">Quick drop</h2><p>Drop a file, get a URL. The link is live immediately; gate it later if you need to.</p></div>
+        <button class="text-button" type="button" id="quick-drop-close">[ CLOSE ]</button>
+      </div>
+      <form id="quick-drop-form" enctype="multipart/form-data" style="margin-top:10px">
+        <label><span class="section-label">LABEL (optional)</span><input class="field-input" name="name" maxlength="120" placeholder="Q4 update package"></label>
+        <div class="drop-zone" id="quick-drop-zone" style="margin-top:12px">Drop a file here, or click to choose<input type="file" name="file" id="quick-drop-file" style="display:none"></div>
+        <p class="mono muted" id="quick-drop-chosen" style="font-size:.68rem;margin-top:8px"></p>
+        <button class="button" type="button" id="quick-drop-go">{% icon "upload" %}Drop it</button>
+        <button class="button secondary" type="button" id="quick-drop-cancel">Cancel</button>
+      </form>
+      <div id="quick-drop-result" class="panel" style="margin-top:14px;padding:14px" hidden>
+        <span class="section-label">LIVE</span>
+        <div class="copy-row" style="margin-top:8px"><input id="quick-drop-url" class="field-input mono" readonly><button class="button secondary" type="button" data-copy="#quick-drop-url">Copy</button></div>
+      </div>
+    </div>
+  </div>
+  <script>
+  (() => {
+    const modal = document.getElementById("quick-drop-modal");
+    const zone = document.getElementById("quick-drop-zone");
+    const fileInput = document.getElementById("quick-drop-file");
+    const chosen = document.getElementById("quick-drop-chosen");
+    const form = document.getElementById("quick-drop-form");
+    const result = document.getElementById("quick-drop-result");
+    const urlField = document.getElementById("quick-drop-url");
+    const open = () => { modal.hidden = false; result.hidden = true; };
+    const close = () => { modal.hidden = true; };
+    document.getElementById("quick-drop-open").addEventListener("click", open);
+    [document.getElementById("quick-drop-close"), document.getElementById("quick-drop-cancel")].forEach(b => b.addEventListener("click", close));
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+    zone.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", () => { chosen.textContent = fileInput.files[0] ? fileInput.files[0].name + " (" + fileInput.files[0].size + " B)" : ""; });
+    zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("dragging"); });
+    zone.addEventListener("dragleave", () => zone.classList.remove("dragging"));
+    zone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      zone.classList.remove("dragging");
+      if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        chosen.textContent = e.dataTransfer.files[0].name + " (" + e.dataTransfer.files[0].size + " B)";
+      }
+    });
+    document.getElementById("quick-drop-go").addEventListener("click", async () => {
+      if (!fileInput.files.length) { chosen.textContent = "Pick or drop a file first."; return; }
+      const data = new FormData(form);
+      const response = await fetch("{% url 'gate-link-quick-drop' %}", {
+        method: "POST", body: data,
+        headers: { "X-CSRFToken": document.querySelector('meta[name="csrf-token"]').content },
+      });
+      if (!response.ok) { chosen.textContent = "Drop failed."; return; }
+      const body = await response.json();
+      urlField.value = location.origin + body.path;
+      result.hidden = false;
+      setTimeout(() => location.reload(), 2500);
+    });
+  })();
+  </script>
   <form class="filter-bar" method="get" action="{% url 'gate-links' %}" hx-get="{% url 'gate-links' %}" hx-target="#links-table" hx-trigger="submit, keyup changed delay:450ms from:#filter-label, change from:#filter-kind">
     <label><span>LABEL CONTAINS</span><input id="filter-label" class="field-input" type="search" name="label" value="{{ request.GET.label }}" maxlength="120"></label>
     <label><span>KIND</span><select id="filter-kind" class="field-input" name="kind"><option value="">All kinds</option><option value="key" {% if request.GET.kind == 'key' %}selected{% endif %}>Key</option><option value="file" {% if request.GET.kind == 'file' %}selected{% endif %}>File</option><option value="proxy" {% if request.GET.kind == 'proxy' %}selected{% endif %}>Proxy</option></select></label>

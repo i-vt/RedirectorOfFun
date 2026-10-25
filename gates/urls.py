@@ -5,6 +5,8 @@ from . import views
 urlpatterns = [
     path("links/", views.links_view, name="gate-links"),
     path("links/new/", views.link_create, name="gate-link-create"),
+    path("links/quick-drop/", views.link_quick_drop, name="gate-link-quick-drop"),
+    path("payloads/", views.payloads_view, name="gate-payloads"),
     path("links/<int:pk>/", views.link_detail, name="gate-link-detail"),
     path("links/<int:pk>/edit/", views.link_update, name="gate-link-edit"),
     path("links/<int:pk>/toggle/", views.link_toggle, name="gate-link-toggle"),

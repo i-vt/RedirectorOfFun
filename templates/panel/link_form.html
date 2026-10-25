@@ -35,10 +35,16 @@
       <legend>CONTENT</legend>
       <label><span>KEY TEXT (kind = key)</span><textarea class="field-input mono" name="key_text" rows="4">{{ link.key_text }}</textarea></label>
       <label><span>PWNDROP SOURCE URL (kind = proxy - fetched server-side, location never exposed)</span><input class="field-input mono" name="pwndrop_url" value="{{ link.pwndrop_url }}" placeholder="http://10.0.0.5:8080/files/payload.bin"></label>
-      <label><span>PAYLOAD FILE (kind = file)</span><input class="field-input" type="file" name="payload">{% if link.payload %}<small class="muted">current: {{ link.payload.name }}</small>{% endif %}</label>
+      <label><span>PAYLOAD FILE (kind = file)</span>
+        <div class="drop-zone" data-file-input="payload-input">Drop a file here, or click to choose<input class="field-input" type="file" name="payload" id="payload-input" style="display:none"></div>
+        <small class="mono muted" id="payload-input-chosen" style="font-size:.68rem">{% if link.payload %}current: {{ link.payload.name }}{% endif %}</small>
+      </label>
       <div class="grid-2">
         <label><span>DENY RESPONSE TEXT (on_deny = benevolent)</span><textarea class="field-input mono" name="benevolent_text" rows="3">{{ link.benevolent_text }}</textarea></label>
-        <label><span>DENY RESPONSE FILE</span><input class="field-input" type="file" name="benevolent_file">{% if link.benevolent_file %}<small class="muted">current: {{ link.benevolent_file.name }}</small>{% endif %}</label>
+        <label><span>DENY RESPONSE FILE</span>
+          <div class="drop-zone" data-file-input="benevolent-input">Drop a file here, or click to choose<input class="field-input" type="file" name="benevolent_file" id="benevolent-input" style="display:none"></div>
+          <small class="mono muted" id="benevolent-input-chosen" style="font-size:.68rem">{% if link.benevolent_file %}current: {{ link.benevolent_file.name }}{% endif %}</small>
+        </label>
       </div>
     </fieldset>
     <fieldset>
@@ -82,5 +88,29 @@
     </fieldset>
     <button class="button" type="submit">Save link</button>
   </form>
+  <script>
+  (() => {
+    document.querySelectorAll(".drop-zone[data-file-input]").forEach((zone) => {
+      const input = document.getElementById(zone.dataset.fileInput);
+      const chosen = document.getElementById(zone.dataset.fileInput + "-chosen");
+      if (!input) return;
+      const describe = () => {
+        if (!chosen) return;
+        chosen.textContent = input.files.length
+          ? "selected: " + input.files[0].name + " (" + input.files[0].size + " B)"
+          : chosen.textContent;
+      };
+      zone.addEventListener("click", () => input.click());
+      input.addEventListener("change", describe);
+      zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("dragging"); });
+      zone.addEventListener("dragleave", () => zone.classList.remove("dragging"));
+      zone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        zone.classList.remove("dragging");
+        if (e.dataTransfer.files.length) { input.files = e.dataTransfer.files; describe(); }
+      });
+    });
+  })();
+  </script>
 </section>
 {% endblock %}

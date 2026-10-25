@@ -29,7 +29,12 @@ Writable fields include `path`, `kind`, `key_text`, `pwndrop_url`, `gate_type`,
 `gate_token`, `totp_secret`, `totp_window`, `cipher`, `cipher_key`, `cipher_iv`,
 `expected_fields`, `auto_rules`, `placeholder`, `on_deny`,
 `requires_approval`, `one_time`, `max_uses`, `expires_at`, `active`, `domain`,
-`ja3_fingerprint`, `ja4_fingerprint`, `watermark`.
+`ja3_fingerprint`, `ja4_fingerprint`, `watermark`, `payload`, `benevolent_file`.
+
+`payload` and `benevolent_file` are file fields: send them as multipart form data
+when writing; reads return the file URL (or `null`). Responses also include a
+read-only `payload_size` in bytes (`null` when no payload is attached or the
+file is missing from storage).
 
 ## Submissions
 

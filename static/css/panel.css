@@ -101,3 +101,10 @@ table code{color:var(--s-accent)}
 .jester-star-tip.t1 { left: -1px; top: 19px; }
 .jester-star-tip.t2 { left: 24px; top: 7px; }
 .jester-star-tip.t3 { left: 29px; top: 19px; }
+
+/* Shared modal shell (quick drop and friends) + drag-and-drop zones */
+.rof-modal-overlay{position:fixed;inset:0;background:rgba(4,8,14,.78);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px}
+.rof-modal-overlay[hidden]{display:none}
+.rof-modal-card{background:var(--s-surface);border:var(--c-panel-border);border-radius:12px;padding:22px;max-width:560px;width:100%;max-height:88vh;overflow-y:auto}
+.drop-zone{border:2px dashed var(--s-border);border-radius:10px;padding:28px;text-align:center;color:var(--s-muted);font-size:.75rem;transition:border-color .15s ease,background .15s ease;cursor:pointer}
+.drop-zone.dragging{border-color:var(--s-accent);background:oklch(.82 .13 215/.06);color:var(--s-text)}
