@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.http import FileResponse, HttpResponseForbidden, JsonResponse
+from django.http import FileResponse, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -16,7 +16,7 @@ from notifications.services import notify
 from .models import (
     AgentChannel, BannedIP, BlockingRule, BUILTIN_DECOYS, DecoyPage, DeliveryLink,
     HitEvent, LureSite, RuleSet, seed_blocking_rule_presets, Submission,
-    SubmissionImage, validate_auto_rules,
+    SubmissionImage, validate_auto_rules, validate_header_contract,
 )
 from .link_templates import LINK_TEMPLATES
 from . import services
@@ -74,6 +74,8 @@ def _render_link_form(request, link, title):
         "placeholders": DeliveryLink.PLACEHOLDER_CHOICES, "denies": DeliveryLink.DENY_CHOICES,
         "base_path": _base_path(),
         "expected_fields_csv": ", ".join(link.expected_fields or []),
+        "allowed_uas_csv": ", ".join(link.allowed_uas or []),
+        "allowed_ips_csv": ", ".join(link.allowed_ips or []),
         "domains": getattr(settings, "REDIRECTOR_DOMAINS", []),
         "templates": LINK_TEMPLATES,
     })
@@ -131,6 +133,26 @@ def _link_from_post(request, link):
     link.ja3_fingerprint = request.POST.get("ja3_fingerprint", "").strip()[:64]
     link.ja4_fingerprint = request.POST.get("ja4_fingerprint", "").strip()[:64]
     link.watermark = request.POST.get("watermark") == "on"
+    link.allowed_uas = _split_csv(request.POST.get("allowed_uas", ""))
+    link.allowed_ips = _split_csv(request.POST.get("allowed_ips", ""))
+    raw_contract = request.POST.get("header_contract", "").strip()
+    if raw_contract:
+        try:
+            link.header_contract = json.loads(raw_contract)
+        except json.JSONDecodeError as exc:
+            raise ValidationError({"header_contract": [f"invalid JSON: {exc}"]})
+        try:
+            validate_header_contract(link.header_contract)
+        except ValidationError as exc:
+            raise ValidationError({"header_contract": exc.messages})
+    else:
+        link.header_contract = []
+    link.replay_dedupe = request.POST.get("replay_dedupe") == "on"
+    from django.utils.dateparse import parse_time
+    link.active_window_start = parse_time(request.POST.get("active_window_start", "").strip() or "") \
+        if request.POST.get("active_window_start", "").strip() else None
+    link.active_window_end = parse_time(request.POST.get("active_window_end", "").strip() or "") \
+        if request.POST.get("active_window_end", "").strip() else None
     link.one_time = request.POST.get("one_time") == "on"
     max_uses = request.POST.get("max_uses", "0").strip()
     link.max_uses = int(max_uses) if max_uses.isdigit() else 0
@@ -169,7 +191,28 @@ def link_detail(request, pk):
         "hits": link.hit_events.all()[:30], "is_administrator": is_administrator(request.user),
         "undo_seconds": services_undo_window(), "series_json": series,
         "intel_images": intel_qs[:24], "intel_total": intel_qs.count(),
+        "public_url": request.build_absolute_uri(link.path),
     })
+
+
+@login_required
+def link_qr(request, pk):
+    """QR code (SVG) for a link's public URL - scan-to-visit from a phone."""
+    link = get_object_or_404(DeliveryLink, pk=pk)
+    return _qr_svg_response(request.build_absolute_uri(link.path))
+
+
+@login_required
+def lure_qr(request, pk):
+    site = get_object_or_404(LureSite, pk=pk)
+    return _qr_svg_response(request.build_absolute_uri(site.public_path))
+
+
+def _qr_svg_response(text):
+    import qrcode
+    import qrcode.image.svg
+    image = qrcode.make(text, image_factory=qrcode.image.svg.SvgPathImage, box_size=8)
+    return HttpResponse(image.to_string(), content_type="image/svg+xml")
 
 
 @login_required

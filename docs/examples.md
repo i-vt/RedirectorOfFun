@@ -56,3 +56,22 @@ Operator-to-regex mapping used by the builder:
 
 Values are regex-escaped automatically; CIDR conditions only offer is/is-not
 (network membership instead of regex).
+
+## Vendor/scanner IP feeds
+
+`import_ip_feed` pulls a remote IP/CIDR feed into a blocking ruleset (plain
+text or CSV, `#` comments allowed). The ruleset's rules are replaced on every
+run, so it is safe to cron:
+
+```bash
+# refresh twice a day on the host
+17 */12 * * *  cd /opt/rof && docker compose exec -T panel \
+  python manage.py import_ip_feed --url https://example.org/vendor-ranges.txt
+```
+
+Options: `--name` to choose the ruleset (default "Vendor feed blocklist"),
+`--disabled` to import without enabling, `--action allow` for allow-list feeds.
+A JSON body in the rof-blocking-rules export format is imported through the
+normal importer instead (name-colliding sets get an `(imported)` suffix).
+Point it at your own curated list or a vendor-range feed you trust; pair the
+set with `country`/`asn`/`isp` conditions for enrichment-based filtering.

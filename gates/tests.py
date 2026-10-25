@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import time
+from datetime import time as datetime_time
 from unittest import mock
 
 from cryptography.hazmat.primitives import padding as sym_padding
@@ -2492,3 +2493,166 @@ class GateIntelTests(TestCase):
         # anonymous callers get nothing
         anon = self.public.get(entry["images"][0]["url"])
         self.assertIn(anon.status_code, (401, 403))
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class GateHardeningTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="ghop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _key_link(self, path="/g/h/one", **kwargs):
+        kwargs.setdefault("placeholder", "blank")
+        return DeliveryLink.objects.create(path=path, kind="key", key_text="SEKRET", **kwargs)
+
+    # ── IP / UA gating (no visitor-provided data needed) ────────────────────
+    def test_allowed_ips_gate(self):
+        self._key_link(allowed_ips=["10.8.0.0/16"])
+        held = self.public.get("/g/h/one")
+        self.assertEqual(held.status_code, 204)
+        hit = HitEvent.objects.get(category="suspicious")
+        self.assertEqual(hit.detail["reason"], "ip outside allow-list")
+        DeliveryLink.objects.all().update(allowed_ips=["127.0.0.0/8"])
+        self.assertEqual(self.public.get("/g/h/one").status_code, 200)
+
+    def test_allowed_uas_gate(self):
+        self._key_link(allowed_uas=[r"^MyAgent/\d+$"])
+        held = self.public.get("/g/h/one", HTTP_USER_AGENT="curl/8.0")
+        self.assertEqual(held.status_code, 204)
+        ok = self.public.get("/g/h/one", HTTP_USER_AGENT="MyAgent/3")
+        self.assertEqual(ok.status_code, 200)
+        self.assertIn(b"SEKRET", ok.content)
+
+    # ── Malleable header contract ───────────────────────────────────────────
+    def test_header_contract_exact_and_missing(self):
+        self._key_link(header_contract=[{"name": "X-Api-Version", "value": "2.1"}])
+        self.assertEqual(self.public.get("/g/h/one").status_code, 204)  # missing
+        self.assertEqual(self.public.get("/g/h/one", HTTP_X_API_VERSION="2.0").status_code, 204)  # wrong
+        ok = self.public.get("/g/h/one", HTTP_X_API_VERSION="2.1")
+        self.assertEqual(ok.status_code, 200)
+
+    def test_header_contract_regex_fullmatch(self):
+        self._key_link(header_contract=[{"name": "Accept-Language", "pattern": r"en-.."}])
+        self.assertEqual(self.public.get("/g/h/one", HTTP_ACCEPT_LANGUAGE="xen-USx").status_code, 204)
+        self.assertEqual(self.public.get("/g/h/one", HTTP_ACCEPT_LANGUAGE="en-US").status_code, 200)
+
+    def test_header_contract_runs_before_token_check(self):
+        # A contract failure must not reveal whether the gate token was right.
+        self._key_link(gate_type="token", gate_token="tok",
+                       header_contract=[{"name": "X-C2", "value": "yes"}])
+        held = self.public.get("/g/h/one?t=tok")
+        self.assertEqual(held.status_code, 204)
+        self.assertEqual(HitEvent.objects.get(category="suspicious").detail["reason"],
+                         "contract header missing: X-C2")
+
+    def test_contract_validation_rejects_bad_shapes(self):
+        from gates.models import validate_header_contract
+        for bad in ([{"name": "X"}], [{"name": "X", "value": "1", "pattern": "2"}],
+                    [{"pattern": "1"}], [{"name": "Bad Header", "value": "1"}], "nope"):
+            with self.assertRaises(ValidationError, msg=str(bad)):
+                validate_header_contract(bad)
+
+    # ── Replay dedupe ───────────────────────────────────────────────────────
+    def test_replay_dedupe_refuses_verbatim_repeat(self):
+        self._key_link(gate_type="token", gate_token="tok", replay_dedupe=True)
+        first = self.public.get("/g/h/one?t=tok")
+        self.assertEqual(first.status_code, 200)
+        repeat = self.public.get("/g/h/one?t=tok")
+        self.assertEqual(repeat.status_code, 204)
+        hit = HitEvent.objects.filter(category="suspicious").latest("created_at")
+        self.assertEqual(hit.detail["reason"], "replayed request")
+        # a different query string is a different request
+        varied = self.public.get("/g/h/one?t=tok&r=2")
+        self.assertEqual(varied.status_code, 200)
+
+    def test_replay_dedupe_off_by_default(self):
+        self._key_link(gate_type="token", gate_token="tok")
+        self.assertEqual(self.public.get("/g/h/one?t=tok").status_code, 200)
+        self.assertEqual(self.public.get("/g/h/one?t=tok").status_code, 200)
+
+    # ── Time-window availability ────────────────────────────────────────────
+    def test_active_window_blocks_outside_hours(self):
+        now = timezone.now()
+        self._key_link(
+            active_window_start=(now + timezone.timedelta(hours=1)).time(),
+            active_window_end=(now + timezone.timedelta(hours=2)).time())
+        response = self.public.get("/g/h/one")
+        self.assertEqual(response.status_code, 410)  # looks expired, like RedGuard
+        link2 = self._key_link(path="/g/h/two",
+                               active_window_start=datetime_time(0, 0),
+                               active_window_end=datetime_time(23, 59))
+        self.assertTrue(link2.in_active_window)
+        self.assertEqual(self.public.get("/g/h/two").status_code, 200)
+
+    def test_active_window_crosses_midnight(self):
+        link = self._key_link(active_window_start=datetime_time(22, 0),
+                              active_window_end=datetime_time(2, 0))
+        real_now = timezone.now()
+        with mock.patch("gates.models.timezone") as mocked:
+            mocked.now.return_value = real_now.replace(hour=23, minute=30)
+            self.assertTrue(link.in_active_window)
+            mocked.now.return_value = real_now.replace(hour=1, minute=30)
+            self.assertTrue(link.in_active_window)
+            mocked.now.return_value = real_now.replace(hour=12, minute=0)
+            self.assertFalse(link.in_active_window)
+
+    # ── QR codes ────────────────────────────────────────────────────────────
+    def test_qr_requires_login_and_renders_svg(self):
+        link = self._key_link()
+        anon = self.public.get(reverse("gate-link-qr", args=[link.pk]))
+        self.assertEqual(anon.status_code, 302)
+        response = self.client.get(reverse("gate-link-qr", args=[link.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("image/svg+xml", response["Content-Type"])
+        self.assertIn(b"<svg", response.content)
+
+    # ── Geo conditions via stored intel ─────────────────────────────────────
+    def test_country_condition_uses_stored_intel(self):
+        IPIntel.objects.create(ip="127.0.0.1", country_code="US", org="Test ISP", asn="AS1")
+        BlockingRule.objects.create(
+            name="block US", logic="any", enabled=True,
+            conditions=[{"type": "country", "pattern": "^US$"}])
+        response = self.public.get("/g/h/nowhere")
+        self.assertContains(response, "Update Service")
+        self.assertTrue(HitEvent.objects.filter(category="blocked").exists())
+
+    # ── Vendor feed import ──────────────────────────────────────────────────
+    def test_import_ip_feed_replaces_ruleset(self):
+        from django.core.management import call_command
+        feed = b"# vendor ranges\n203.0.113.0/24\n198.51.100.7\ntext,203.0.113.0/24,extra\n\nbad-entry\n"
+        with mock.patch("urllib.request.urlopen") as fetch:
+            handle = mock.MagicMock()
+            handle.read.return_value = feed
+            handle.__enter__.return_value = handle
+            handle.__exit__.return_value = False
+            fetch.return_value = handle
+            call_command("import_ip_feed", url="https://feeds.example/vendors.txt")
+            call_command("import_ip_feed", url="https://feeds.example/vendors.txt")
+        ruleset = RuleSet.objects.get(name="Vendor feed blocklist")
+        self.assertTrue(ruleset.enabled)
+        rules = list(ruleset.rules.all())
+        self.assertEqual(len(rules), 1)
+        patterns = {c["pattern"] for c in rules[0].conditions}
+        self.assertEqual(patterns, {"203.0.113.0/24", "198.51.100.7/32"})
+
+    # ── API parity ──────────────────────────────────────────────────────────
+    def test_api_roundtrip_network_profile(self):
+        _, raw = APIKey.create(operator=self.operator, name="ci")
+        response = self.client.post("/api/v1/links/", data={
+            "path": "/g/h/api", "kind": "key", "key_text": "K", "gate_type": "none",
+            "cipher": "none", "placeholder": "blank", "on_deny": "not_found",
+            "allowed_uas": ["^Agent"], "allowed_ips": ["127.0.0.0/8"],
+            "header_contract": [{"name": "X-C2", "pattern": "^ok"}],
+            "replay_dedupe": True,
+            "active_window_start": "00:00", "active_window_end": "23:59",
+        }, content_type="application/json", HTTP_AUTHORIZATION=f"ApiKey {raw}")
+        self.assertEqual(response.status_code, 201, response.content)
+        link = DeliveryLink.objects.get(path="/g/h/api")
+        self.assertTrue(link.replay_dedupe)
+        self.assertEqual(link.header_contract[0]["name"], "X-C2")
+        held = self.public.get("/g/h/api", HTTP_USER_AGENT="curl/8.0", HTTP_X_C2="ok")
+        self.assertEqual(held.status_code, 204)  # UA blocked before anything else
+        ok = self.public.get("/g/h/api", HTTP_USER_AGENT="Agent/1", HTTP_X_C2="ok")
+        self.assertEqual(ok.status_code, 200)

@@ -80,3 +80,19 @@ curl -sI -H "X-JA4-Fingerprint: <expected>" https://updates.example.com/g/<path>
   spoofs headers still hits the normal gate logic.
 - Keep the front layer's existence non-obvious: it presents the same decoy
   behavior as the edge for non-gate paths.
+
+## JARM randomization (edge layer)
+
+JA3/JA4 gates validate the *client*; the redirector's own TLS fingerprint
+(JARM) is fixed per OpenResty/nginx build and config, which makes a deployment
+scannable across engagements. RedGuard-style rotation belongs at the edge -
+nothing in the Django layer can influence it. Practical options:
+
+- Rebuild or reconfigure the TLS stack per deployment (different cipher list,
+  TLS version floor, ALPN order) so the JARM changes every time.
+- Put a rotating TLS terminator in front (a small pool of OpenResty builds or
+  a CDN front) and fail2ban-style switch on a schedule.
+- Track your current JARM (`jarm scan <domain>`) in pre-flight checks; if it
+  lands on a public blocklist, rotate before the op starts.
+
+Treat JARM like the randomized gate/agent bases: per-deployment, never shared.

@@ -86,6 +86,20 @@
         <label><span>EXPIRES AT (ISO, optional)</span><input class="field-input" type="datetime-local" name="expires_at" value="{{ link.expires_at|date:'Y-m-d\TH:i' }}"></label>
       </div>
     </fieldset>
+    <fieldset>
+      <legend>NETWORK PROFILE (malleable contract - requests that don't match are dropped before any gate check)</legend>
+      <div class="grid-2">
+        <label><span>ALLOWED SOURCE IPs / CIDRs (comma separated, empty = any)</span><input class="field-input mono" name="allowed_ips" value="{{ allowed_ips_csv }}" placeholder="203.0.113.0/24, 198.51.100.7"></label>
+        <label><span>ALLOWED UA PATTERNS (comma separated regex, empty = any)</span><input class="field-input mono" name="allowed_uas" value="{{ allowed_uas_csv }}" placeholder="^Mozilla/5.0.*Chrome/, ^MyAgent/\d"></label>
+      </div>
+      <label><span>HEADER CONTRACT (JSON - exact "value" or regex "pattern" per header)</span><textarea class="field-input mono" name="header_contract" rows="3" placeholder='[{"name":"X-Api-Version","value":"2.1"},{"name":"Accept-Language","pattern":"^en-US"}]'>{{ link.header_contract|as_json }}</textarea></label>
+      <div class="grid-3">
+        <label><span>SERVE AFTER (UTC, optional)</span><input class="field-input mono" type="time" name="active_window_start" value="{{ link.active_window_start|time:'H:i' }}"></label>
+        <label><span>SERVE UNTIL (UTC, optional)</span><input class="field-input mono" type="time" name="active_window_end" value="{{ link.active_window_end|time:'H:i' }}"></label>
+        <label class="check" style="align-self:end"><input type="checkbox" name="replay_dedupe" {% if link.replay_dedupe %}checked{% endif %}> <span>REFUSE REPLAYED REQUESTS (verbatim repeats are held)</span></label>
+      </div>
+      <p class="muted" style="font-size:.68rem">Time window: both empty = always available; windows may cross midnight (22:00-02:00). Outside the window the link looks expired (410).</p>
+    </fieldset>
     <button class="button" type="submit">Save link</button>
   </form>
   <script>

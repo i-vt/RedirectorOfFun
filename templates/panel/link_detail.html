@@ -26,6 +26,17 @@
     <div class="stat-card"><span class="section-label">PAYLOAD FILE</span><strong class="mono" style="font-size:.72rem;word-break:break-all">{% if link.payload %}{{ link.payload.name|basename }}{% else %}-{% endif %}</strong></div>
   </div>
   <p class="muted" style="font-size:.7rem"><a href="{% url 'm-link' link.pk %}">Open in mobile UI →</a> · <a href="{% url 'gate-payloads' %}">Manage payloads →</a></p>
+  <details style="margin-bottom:10px">
+    <summary class="text-button" style="cursor:pointer">{% icon "intel" %} QR / SHARE</summary>
+    <div style="display:flex;gap:16px;align-items:center;margin-top:10px">
+      <img src="{% url 'gate-link-qr' link.pk %}" alt="QR code for {{ link.path }}" style="width:150px;height:150px;background:#fff;border-radius:8px;padding:8px">
+      <div>
+        <div class="copy-row"><input id="share-url" class="field-input mono" readonly value="{{ public_url }}"><button class="button secondary" type="button" data-copy="#share-url">Copy</button></div>
+        <p class="muted" style="font-size:.68rem;margin-top:6px">Scan to open the link on a phone. The QR carries the absolute URL of this gate.</p>
+        <p class="muted" style="font-size:.68rem"><a href="{% url 'gate-link-qr' link.pk %}" download="qr.svg">Download SVG</a></p>
+      </div>
+    </div>
+  </details>
   <div class="panel-heading"><div><span class="section-label">PAYLOAD TELEMETRY</span><h2>Downloads / 14 days</h2></div><a class="text-link" href="{% url 'gate-payloads' %}">ALL PAYLOADS →</a></div>
   <div class="chart-wrap"><canvas id="payload-chart" aria-label="Line chart of hits on this link over 14 days" role="img"></canvas></div>
   {{ series_json|json_script:"payload-series" }}

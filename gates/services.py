@@ -24,7 +24,7 @@ from .crypto_utils import (
 )
 from .models import (
     AgentChannel, BannedIP, BlockingRule, BUILTIN_DECOYS, DecoyPage, DeliveryLink,
-    HitEvent, IPIntel, LureSite, Submission, SubmissionImage,
+    HitEvent, IPIntel, LureSite, SeenRequest, Submission, SubmissionImage,
 )
 
 logger = logging.getLogger(__name__)
@@ -370,8 +370,57 @@ def handle_submission(link, request):
     return hold_response(link, request)
 
 
+def _request_digest(request, path):
+    """Stable digest of a request for replay dedupe: method, path, query, UA,
+    and a body hash (bodies can be large, so the body joins as its digest)."""
+    body = b""
+    try:
+        if request.method in {"POST", "PUT", "PATCH"}:
+            body = request.body or b""
+    except Exception:  # noqa: BLE001 - unreadable body hashes as empty
+        body = b""
+    material = "|".join([
+        request.method, path,
+        request.META.get("QUERY_STRING", ""),
+        request.META.get("HTTP_USER_AGENT", "")[:300],
+    ]).encode() + b"|" + hashlib.sha256(body).digest()
+    return hashlib.sha256(material).hexdigest()
+
+
 def gate_passed(link, request) -> tuple:
-    """Returns (passed, reason). Reason explains a failure when there is one."""
+    """Returns (passed, reason). Reason explains a failure when there is one.
+
+    Network-profile checks (IP allow-list, UA pinning, header contract) run
+    before any credential check: they need nothing from the visitor beyond
+    the request itself, and a mismatch must not reveal which gate failed."""
+    if link.allowed_ips:
+        ip = client_ip(request)
+        if not ip or not any(_cidr_matches(entry, ip) for entry in link.allowed_ips):
+            return False, "ip outside allow-list"
+    if link.allowed_uas:
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        matched_any = False
+        for pattern in link.allowed_uas:
+            try:
+                if _compiled_pattern(pattern).search(ua[:1000]):
+                    matched_any = True
+                    break
+            except re.error:
+                continue
+        if not matched_any:
+            return False, "user-agent outside allow-list"
+    for rule in link.header_contract or []:
+        presented = request.headers.get(str(rule.get("name", "")), "")
+        if not presented:
+            return False, f"contract header missing: {rule.get('name')}"
+        if "value" in rule and presented != str(rule["value"]):
+            return False, f"contract header mismatch: {rule.get('name')}"
+        if "pattern" in rule:
+            try:
+                if not _compiled_pattern(str(rule["pattern"])).fullmatch(presented[:1000]):
+                    return False, f"contract header mismatch: {rule.get('name')}"
+            except re.error:
+                return False, f"contract header invalid: {rule.get('name')}"
     if link.gate_type == "none":
         return True, None
     presented = client_presented_token(request)
@@ -700,6 +749,19 @@ def dispatch(request, path):
         record_hit("suspicious", request=request, path=normalized, link=link, status_code=403,
                    detail={"reason": "JA3/JA4 fingerprint mismatch"})
         return hold_response(link, request)
+
+    if link.replay_dedupe:
+        digest = _request_digest(request, normalized)
+        horizon = timezone.now() - timezone.timedelta(days=7)
+        SeenRequest.objects.filter(link=link, created_at__lt=horizon).delete()
+        from django.db import IntegrityError, transaction
+        try:
+            with transaction.atomic():
+                SeenRequest.objects.create(link=link, digest=digest)
+        except IntegrityError:
+            record_hit("suspicious", request=request, path=normalized, link=link,
+                       status_code=403, detail={"reason": "replayed request"})
+            return hold_response(link, request)
 
     if link.gate_type == "submission" and request.method == "POST":
         return handle_submission(link, request)

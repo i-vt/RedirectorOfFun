@@ -29,7 +29,17 @@ Writable fields include `path`, `kind`, `key_text`, `pwndrop_url`, `gate_type`,
 `gate_token`, `totp_secret`, `totp_window`, `cipher`, `cipher_key`, `cipher_iv`,
 `expected_fields`, `auto_rules`, `placeholder`, `on_deny`,
 `requires_approval`, `one_time`, `max_uses`, `expires_at`, `active`, `domain`,
-`ja3_fingerprint`, `ja4_fingerprint`, `watermark`, `payload`, `benevolent_file`.
+`ja3_fingerprint`, `ja4_fingerprint`, `watermark`, `payload`, `benevolent_file`,
+`allowed_uas`, `allowed_ips`, `header_contract`, `replay_dedupe`,
+`active_window_start`, `active_window_end`.
+
+Network profile fields: `allowed_ips` is a JSON list of IPs/CIDRs (empty = any),
+`allowed_uas` a JSON list of UA regex patterns, `header_contract` a malleable
+profile contract (`[{"name": "X-Api-Version", "value": "2.1"}]` for exact match
+or `"pattern"` for a regex fullmatch) enforced before any credential check,
+`replay_dedupe` refuses verbatim repeats of previously accepted requests, and
+`active_window_start`/`active_window_end` (`"HH:MM"`, UTC) limit serving to a
+daily window that may cross midnight.
 
 `payload` and `benevolent_file` are file fields: send them as multipart form data
 when writing; reads return the file URL (or `null`). Responses also include a

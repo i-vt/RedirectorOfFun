@@ -7,3 +7,4 @@ whitenoise>=6.9,<7
 argon2-cffi>=23.1,<26
 cryptography>=43,<46
 pywebpush>=2.0,<3
+qrcode>=7.4,<8

@@ -28,6 +28,7 @@
       <td>{% if site.active %}<span class="status-badge good">LIVE</span>{% else %}<span class="status-badge">OFFLINE</span>{% endif %}</td>
       <td>
         <a class="text-button" href="{% url 'gate-lure-edit' site.pk %}">{% icon "settings" %}EDIT</a>
+        <a class="text-button" href="{% url 'gate-lure-qr' site.pk %}" target="_blank" rel="noopener">{% icon "intel" %}QR</a>
         <form method="post" action="{% url 'gate-lure-toggle' site.pk %}" style="display:inline">{% csrf_token %}<button class="text-button" type="submit">{{ site.active|yesno:"TAKE OFFLINE,BRING LIVE" }}</button></form>
       </td>
     </tr>

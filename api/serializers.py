@@ -53,6 +53,8 @@ class DeliveryLinkSerializer(serializers.ModelSerializer):
                   "expected_fields", "auto_rules", "placeholder", "on_deny", "requires_approval",
                   "approval_status", "one_time", "max_uses", "expires_at", "active", "hit_count",
                   "domain", "ja3_fingerprint", "ja4_fingerprint", "watermark",
+                  "allowed_uas", "allowed_ips", "header_contract", "replay_dedupe",
+                  "active_window_start", "active_window_end",
                   "payload", "payload_size", "benevolent_file",
                   "created_at", "updated_at"]
         read_only_fields = ["approval_status", "hit_count", "payload_size", "created_at", "updated_at"]
@@ -80,6 +82,33 @@ class DeliveryLinkSerializer(serializers.ModelSerializer):
         from gates.models import validate_auto_rules
         try:
             validate_auto_rules(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages)
+        return value
+
+    def validate_header_contract(self, value):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from gates.models import validate_header_contract
+        try:
+            validate_header_contract(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages)
+        return value
+
+    def validate_allowed_uas(self, value):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from gates.models import validate_regex_list
+        try:
+            validate_regex_list(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages)
+        return value
+
+    def validate_allowed_ips(self, value):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from gates.models import validate_cidr_list
+        try:
+            validate_cidr_list(value)
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages)
         return value

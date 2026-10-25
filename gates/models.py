@@ -25,6 +25,65 @@ def validate_redirector_domain(value):
         raise ValidationError(f"Domain '{value}' is not in the configured REDIRECTOR_DOMAINS list.")
 
 
+def validate_regex_list(value):
+    """JSON list of valid regular expressions (per-link UA pinning)."""
+    import re
+    from django.core.exceptions import ValidationError
+    if value in (None, ""):
+        return
+    if not isinstance(value, list):
+        raise ValidationError("Expected a JSON list of regex patterns.")
+    for index, pattern in enumerate(value):
+        if not isinstance(pattern, str) or not pattern:
+            raise ValidationError(f"Entry {index}: pattern must be a non-empty string.")
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ValidationError(f"Entry {index}: invalid regex: {exc}")
+
+
+def validate_cidr_list(value):
+    """JSON list of IPs or CIDR ranges (per-link IP allow-listing)."""
+    import ipaddress
+    from django.core.exceptions import ValidationError
+    if value in (None, ""):
+        return
+    if not isinstance(value, list):
+        raise ValidationError("Expected a JSON list of IPs/CIDRs.")
+    for index, entry in enumerate(value):
+        try:
+            ipaddress.ip_network(str(entry), strict=False)
+        except ValueError:
+            raise ValidationError(f"Entry {index}: '{entry}' is not an IP or CIDR range.")
+
+
+def validate_header_contract(value):
+    """Malleable-profile header contract: [{"name", "value"|"pattern"}].
+
+    Every listed header must be present; 'value' demands an exact match,
+    'pattern' a regex search hit."""
+    import re
+    from django.core.exceptions import ValidationError
+    if value in (None, ""):
+        return
+    if not isinstance(value, list):
+        raise ValidationError("Expected a JSON list of header rules.")
+    for index, rule in enumerate(value):
+        if not isinstance(rule, dict) or not rule.get("name"):
+            raise ValidationError(f"Header {index}: needs at least 'name'.")
+        if not str(rule["name"]).strip() or any(c in str(rule["name"]) for c in ' \t\r\n:'):
+            raise ValidationError(f"Header {index}: invalid header name.")
+        has_value = "value" in rule
+        has_pattern = "pattern" in rule
+        if has_value == has_pattern:
+            raise ValidationError(f"Header {index}: set exactly one of 'value' or 'pattern'.")
+        if has_pattern:
+            try:
+                re.compile(str(rule["pattern"]))
+            except re.error as exc:
+                raise ValidationError(f"Header {index}: invalid regex: {exc}")
+
+
 def validate_auto_rules(value):
     """Validate the auto-decision DSL stored on DeliveryLink.auto_rules.
 
@@ -143,6 +202,18 @@ class DeliveryLink(models.Model):
                                        help_text="Require this JA4 hash (X-JA4-Fingerprint header).")
     watermark = models.BooleanField(default=False,
                                     help_text="Append a unique per-release marker to served content so leaks trace back to this link and use.")
+    allowed_uas = models.JSONField(default=list, blank=True, validators=[validate_regex_list],
+                                   help_text="JSON list of UA regex patterns; empty = any. Requests whose User-Agent matches none are turned away silently.")
+    allowed_ips = models.JSONField(default=list, blank=True, validators=[validate_cidr_list],
+                                   help_text="JSON list of IPs/CIDRs allowed to see this link; empty = any.")
+    header_contract = models.JSONField(default=list, blank=True, validators=[validate_header_contract],
+                                       help_text='Malleable-profile contract: [{"name": "X-Api-Version", "value": "2.1"}] exact or {"name": ..., "pattern": "regex"}. Requests missing or mismatching a header are dropped.')
+    replay_dedupe = models.BooleanField(default=False,
+                                        help_text="Refuse a request that repeats an earlier accepted request verbatim (method + path + query + UA + body).")
+    active_window_start = models.TimeField(null=True, blank=True,
+                                           help_text="Serve only after this UTC time of day (both window fields empty = always).")
+    active_window_end = models.TimeField(null=True, blank=True,
+                                         help_text="Serve only before this UTC time of day; windows may cross midnight (22:00-02:00).")
     approval_status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
     decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="gate_decisions")
     decided_at = models.DateTimeField(null=True, blank=True)
@@ -187,7 +258,18 @@ class DeliveryLink(models.Model):
 
     @property
     def available(self):
-        return self.active and not self.expired and not self.uses_exhausted
+        return self.active and not self.expired and self.in_active_window and not self.uses_exhausted
+
+    @property
+    def in_active_window(self):
+        """Recurring daily availability window (UTC). Empty window = always."""
+        if not self.active_window_start or not self.active_window_end:
+            return True
+        now = timezone.now().time()
+        start, end = self.active_window_start, self.active_window_end
+        if start <= end:
+            return start <= now <= end
+        return now >= start or now <= end  # window crosses midnight
 
     def register_release(self):
         """Atomically count a release and enforce one-time/use limits.
@@ -705,6 +787,22 @@ class UsedGateCode(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["link", "code"], name="unique_gate_code_per_link")]
         ordering = ["-used_at"]
+
+
+class SeenRequest(models.Model):
+    """Digest of a request that already passed a replay-dedupe link's gate.
+
+    A verbatim repeat of an accepted request (same method, path, query, UA
+    and body) is refused: scanners replaying captured traffic stand out,
+    while the real agent's requests keep varying."""
+
+    link = models.ForeignKey("DeliveryLink", on_delete=models.CASCADE, related_name="seen_requests")
+    digest = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["link", "digest"], name="unique_request_digest_per_link")]
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.link.path}:{self.code}"
