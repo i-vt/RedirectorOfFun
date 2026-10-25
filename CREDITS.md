@@ -13,4 +13,4 @@ No external photography, tracking scripts, third-party fonts, or remote assets a
 
 ## Assets
 
-- Brand mark and Obnoxious Clown favicon: original jester-hat artwork drawn for this project (star-tipped horns); shape takes loose inspiration from the Noun Project jester-hat icon 146101 (CC BY) but shares no geometry with it.
+- Brand mark and Obnoxious Clown favicon: built on the Noun Project "Jester Hat" icon (icon 146101, CC BY 3.0 - https://thenounproject.com/icon/jester-hat-146101/), recolored per theme via CSS masking; the Obnoxious Clown variant adds star tips. Stars are original work.

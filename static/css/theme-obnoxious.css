@@ -15,6 +15,21 @@
   --p-text: oklch(.92 .02 330);
   --p-muted: oklch(.74 .05 340);
   --p-dim: oklch(.6 .07 345);
+  /* The s- and c- aliases are computed at :root and inherit resolved, so
+     they must be set directly or the accent chain stays on the base palette. */
+  --s-bg: oklch(.07 .02 345);
+  --s-surface: oklch(.13 .05 348);
+  --s-border: oklch(.3 .09 350);
+  --s-accent: oklch(.66 .24 22);
+  --s-positive: oklch(.82 .22 145);
+  --s-warning: oklch(.85 .18 70);
+  --s-danger: oklch(.7 .26 18);
+  --s-text: oklch(.92 .02 330);
+  --s-muted: oklch(.74 .05 340);
+  --s-dim: oklch(.6 .07 345);
+  --c-button-bg: oklch(.66 .24 22);
+  --c-button-text: oklch(.07 .02 345);
+  --c-panel-border: 1px solid oklch(.3 .09 350);
   --c-focus: 0 0 0 3px oklch(.82 .22 145/.4);
 }
 
@@ -182,7 +197,7 @@
   .theme-obnoxious .environment { animation: tube-flicker 7s linear infinite; }
   .theme-obnoxious .status-dot { animation: none; box-shadow: 0 0 12px oklch(.66 .24 22/.8); }
   .theme-obnoxious .circus-balloon { animation: balloon-float 5s ease-in-out infinite; }
-  .theme-obnoxious .brand-mark.jester { transform-origin: 50% 100%; animation: jester-bow 9s ease-in-out infinite; }
+  .theme-obnoxious .brand-mark.jester-mask { transform-origin: 50% 100%; animation: jester-bow 9s ease-in-out infinite; }
   .theme-obnoxious .primary-nav a:hover { transform-origin: top center; animation: pendulum .75s ease-in-out; transform: none; }
   .theme-obnoxious .mission-strip { transform: rotate(-.5deg); }
   .theme-obnoxious .empty-state p { animation: slow-drift 34s ease-in-out infinite alternate; display: inline-block; }

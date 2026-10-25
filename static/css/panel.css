@@ -82,3 +82,22 @@ table code{color:var(--s-accent)}
 .icon-inline{margin-right:4px}
 .button .icon{margin-right:6px}
 .text-button .icon{vertical-align:-1px}
+
+/* ── Brand mark: jester hat silhouette, tinted by each theme's accent ── */
+.brand-mark.jester-mask {
+  display: inline-block;
+  width: 38px; height: 38px;
+  background: var(--s-accent);
+  -webkit-mask: url("/static/img/jester-hat.png") center / contain no-repeat;
+  mask: url("/static/img/jester-hat.png") center / contain no-repeat;
+  position: relative;
+}
+.brand-mark.jester-mask .jester-star-tip {
+  position: absolute;
+  width: 10px; height: 10px;
+  background: var(--s-positive);
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+.jester-star-tip.t1 { left: -3px; top: 17px; }
+.jester-star-tip.t2 { left: 15px; top: 0px; }
+.jester-star-tip.t3 { left: 32px; top: 18px; }

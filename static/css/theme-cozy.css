@@ -14,6 +14,21 @@
   --p-text: oklch(.91 .02 330);
   --p-muted: oklch(.72 .05 340);
   --p-dim: oklch(.58 .06 345);
+  /* The s- and c- aliases are computed at :root and inherit resolved, so
+     they must be set directly or the accent chain stays on the base palette. */
+  --s-bg: oklch(.1 .02 340);
+  --s-surface: oklch(.145 .045 347);
+  --s-border: oklch(.27 .07 352);
+  --s-accent: oklch(.62 .21 22);
+  --s-positive: oklch(.78 .2 145);
+  --s-warning: oklch(.82 .17 65);
+  --s-danger: oklch(.68 .24 18);
+  --s-text: oklch(.91 .02 330);
+  --s-muted: oklch(.72 .05 340);
+  --s-dim: oklch(.58 .06 345);
+  --c-button-bg: oklch(.62 .21 22);
+  --c-button-text: oklch(.1 .02 340);
+  --c-panel-border: 1px solid oklch(.27 .07 352);
   --c-focus: 0 0 0 3px oklch(.62 .21 22/.35);
 }
 
@@ -39,7 +54,7 @@
       oklch(.62 .21 22/.028) 0 6px, transparent 6px 18px);
 }
 
-.theme-cozy .brand-mark { transform: rotate(45deg); transform-origin: center; }
+.theme-cozy .brand-mark { transform-origin: center; }
 .theme-cozy .brand-dot { fill: oklch(.78 .2 145); }
 .theme-cozy .brand strong { letter-spacing: .06em; }
 
