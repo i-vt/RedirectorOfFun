@@ -18,12 +18,12 @@
         </select></label>
       </div>
       <div class="grid-2">
-        <label><span>BUILT-IN PAGE</span><select class="field-input" name="template_key">
+        <label data-show-when="kind:template"><span>BUILT-IN PAGE</span><select class="field-input" name="template_key">
           {% for key, meta in builtin.items %}<option value="{{ key }}">{{ meta.label }}</option>{% endfor %}
         </select></label>
-        <label><span>UPLOADED HTML FILE (kind = upload)</span><input class="field-input" type="file" name="html_file" accept=".html,.htm"></label>
+        <label data-show-when="kind:upload"><span>UPLOADED HTML FILE (kind = upload)</span><input class="field-input" type="file" name="html_file" accept=".html,.htm"></label>
       </div>
-      <label><span>REDIRECT URL (kind = redirect)</span><input class="field-input mono" name="redirect_url" placeholder="https://www.microsoft.com/"></label>
+      <label data-show-when="kind:redirect"><span>REDIRECT URL (kind = redirect)</span><input class="field-input mono" name="redirect_url" placeholder="https://www.microsoft.com/"></label>
       <button class="button" type="submit">{% icon "decoys" %}Add decoy page</button>
     </fieldset>
   </form>

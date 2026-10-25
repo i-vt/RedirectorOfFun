@@ -1,0 +1,41 @@
+(() => {
+  // Progressive disclosure for mutually exclusive options:
+  //   <label data-show-when="gate_type:token">…</label>     shown only when the
+  //   named control's value matches (pipe for several: "kind:file|proxy").
+  //   data-also-when="cipher:aes256"                        second condition (AND).
+  //   data-dim-when="kind:file"                             greyed + inert unless the
+  //                                                         named control matches.
+  // Excluded fields stay submitted (values survive an accidental toggle), they
+  // are simply out of the way until the compatible option is selected.
+  const currentValue = (control) => {
+    if (control.type === "checkbox") return control.checked ? "on" : "off";
+    return control.value;
+  };
+  const matches = (el, spec) => {
+    const idx = spec.indexOf(":");
+    if (idx === -1) return true;
+    const control = el.closest("form")?.querySelector(`[name="${spec.slice(0, idx)}"]`)
+      || document.querySelector(`[name="${spec.slice(0, idx)}"]`);
+    if (!control) return true;
+    return spec.slice(idx + 1).split("|").includes(currentValue(control));
+  };
+  const refresh = () => {
+    document.querySelectorAll("[data-show-when]").forEach((el) => {
+      const show = matches(el, el.dataset.showWhen)
+        && (!el.dataset.alsoWhen || matches(el, el.dataset.alsoWhen));
+      el.classList.toggle("field-hidden", !show);
+    });
+    document.querySelectorAll("[data-dim-when]").forEach((el) => {
+      const dim = !matches(el, el.dataset.dimWhen);
+      el.classList.toggle("field-dimmed", dim);
+      el.inert = dim;
+    });
+    document.querySelectorAll("[data-feature-when]").forEach((el) => {
+      el.classList.toggle("field-featured", matches(el, el.dataset.featureWhen));
+    });
+  };
+  document.addEventListener("change", refresh);
+  document.addEventListener("input", refresh);
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", refresh);
+  else refresh();
+})();

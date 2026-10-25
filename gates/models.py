@@ -142,6 +142,7 @@ class DeliveryLink(models.Model):
         ("token", "Static shared token"),
         ("totp", "Time-based code (TOTP-style)"),
         ("submission", "Requires encrypted info submission"),
+        ("network", "IP / User-Agent only (network profile)"),
     ]
     CIPHER_CHOICES = [
         ("none", "None"),
@@ -229,6 +230,17 @@ class DeliveryLink(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.gate_type == "network" and not self.allowed_uas and not self.allowed_ips:
+            raise ValidationError(
+                {"allowed_uas": "The IP/User-Agent gate needs at least one allow-list "
+                                "(allowed IPs or UA patterns)."})
+        if self.gate_type == "network" and self.header_contract:
+            raise ValidationError(
+                {"header_contract": "Header contracts already apply on their own; the "
+                                    "network gate is IP/UA only - pick 'No gate' to combine."})
 
     def __str__(self):
         return f"{self.path} ({self.kind})"

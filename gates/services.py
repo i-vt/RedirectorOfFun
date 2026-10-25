@@ -421,7 +421,9 @@ def gate_passed(link, request) -> tuple:
                     return False, f"contract header mismatch: {rule.get('name')}"
             except re.error:
                 return False, f"contract header invalid: {rule.get('name')}"
-    if link.gate_type == "none":
+    if link.gate_type in ("none", "network"):
+        # Network gate: the profile checks above (IP / UA allow-lists) ARE the
+        # gate; nothing further is requested from the visitor.
         return True, None
     presented = client_presented_token(request)
     if link.gate_type == "token":

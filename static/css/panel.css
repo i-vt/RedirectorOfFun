@@ -128,3 +128,11 @@ table code{color:var(--s-accent)}
 .lightbox-overlay[hidden]{display:none}
 .lightbox-overlay img{max-width:94vw;max-height:86vh;border-radius:10px;border:var(--c-panel-border);object-fit:contain}
 .lightbox-caption{color:var(--s-muted);font-size:.72rem}
+
+/* Progressive disclosure: mutually exclusive fields */
+.field-hidden{display:none!important}
+.field-dimmed{opacity:.38;pointer-events:none;filter:grayscale(.4);transition:opacity .15s ease}
+label,.field-group{transition:opacity .15s ease}
+.grid-2:has(> .field-hidden){grid-template-columns:1fr}
+.grid-3:has(> .field-hidden){grid-template-columns:1fr}
+fieldset.field-featured{border-color:var(--s-accent);box-shadow:0 0 0 1px var(--s-accent) inset}

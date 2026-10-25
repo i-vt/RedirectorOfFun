@@ -2656,3 +2656,70 @@ class GateHardeningTests(TestCase):
         self.assertEqual(held.status_code, 204)  # UA blocked before anything else
         ok = self.public.get("/g/h/api", HTTP_USER_AGENT="Agent/1", HTTP_X_C2="ok")
         self.assertEqual(ok.status_code, 200)
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class NetworkGateAndFormUxTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="uxop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def test_network_gate_passes_on_profile_alone(self):
+        DeliveryLink.objects.create(
+            path="/g/n/one", kind="key", key_text="K", placeholder="blank",
+            gate_type="network", allowed_uas=[r"^MyAgent/"], allowed_ips=["127.0.0.0/8"])
+        # right UA + IP: no token, no code - the profile is the credential
+        ok = self.public.get("/g/n/one", HTTP_USER_AGENT="MyAgent/1.2")
+        self.assertEqual(ok.status_code, 200)
+        # wrong UA: held, nothing served
+        held = self.public.get("/g/n/one", HTTP_USER_AGENT="curl/8.0")
+        self.assertEqual(held.status_code, 204)
+
+    def test_network_gate_requires_an_allowlist(self):
+        link = DeliveryLink(path="/g/n/empty", kind="key", key_text="K", gate_type="network")
+        with self.assertRaises(ValidationError):
+            link.full_clean()
+        link.allowed_ips = ["10.0.0.0/8"]
+        link.full_clean()  # one allow-list is enough
+
+    def test_network_gate_rejects_header_contract_combo(self):
+        link = DeliveryLink(path="/g/n/mix", kind="key", key_text="K", gate_type="network",
+                            allowed_ips=["10.0.0.0/8"],
+                            header_contract=[{"name": "X", "value": "1"}])
+        with self.assertRaises(ValidationError):
+            link.full_clean()
+
+    def test_network_gate_via_form(self):
+        response = self.client.post(reverse("gate-link-create"), {
+            "path": "/g/n/form", "kind": "key", "key_text": "K", "gate_type": "network",
+            "cipher": "none", "placeholder": "blank", "on_deny": "not_found",
+            "allowed_uas": "^MyAgent", "active": "on",
+        })
+        self.assertRedirects(response, reverse("gate-link-detail", args=[DeliveryLink.objects.get(path="/g/n/form").pk]))
+        self.assertEqual(self.public.get("/g/n/form", HTTP_USER_AGENT="MyAgent/9").status_code, 200)
+
+    def test_form_marks_mutually_exclusive_fields(self):
+        response = self.client.get(reverse("gate-link-create"))
+        for marker in ('data-show-when="kind:key"', 'data-show-when="kind:file"',
+                       'data-show-when="kind:proxy"', 'data-show-when="gate_type:token"',
+                       'data-show-when="gate_type:totp"', 'data-show-when="gate_type:submission"',
+                       'data-also-when="cipher:aes256"', 'data-show-when="on_deny:benevolent"',
+                       'data-feature-when="gate_type:network"'):
+            self.assertContains(response, marker)
+        self.assertContains(response, "IP / User-Agent only")
+
+    def test_decoy_form_hides_irrelevant_kinds(self):
+        response = self.client.get(reverse("gate-decoys"))
+        self.assertContains(response, 'data-show-when="kind:template"')
+        self.assertContains(response, 'data-show-when="kind:upload"')
+        self.assertContains(response, 'data-show-when="kind:redirect"')
+
+    def test_conditional_fields_assets_loaded(self):
+        response = self.client.get(reverse("gate-link-create"))
+        self.assertContains(response, "js/conditional_fields.js")
+        css = open("static/css/panel.css").read()
+        self.assertIn(".field-hidden", css)
+        self.assertIn(".field-dimmed", css)
+        self.assertIn(".field-featured", css)

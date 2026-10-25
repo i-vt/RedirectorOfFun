@@ -33,13 +33,13 @@
     </fieldset>
     <fieldset>
       <legend>CONTENT</legend>
-      <label><span>KEY TEXT (kind = key)</span><textarea class="field-input mono" name="key_text" rows="4">{{ link.key_text }}</textarea></label>
-      <label><span>PWNDROP SOURCE URL (kind = proxy - fetched server-side, location never exposed)</span><input class="field-input mono" name="pwndrop_url" value="{{ link.pwndrop_url }}" placeholder="http://10.0.0.5:8080/files/payload.bin"></label>
-      <label><span>PAYLOAD FILE (kind = file)</span>
+      <label data-show-when="kind:key"><span>KEY TEXT (kind = key)</span><textarea class="field-input mono" name="key_text" rows="4">{{ link.key_text }}</textarea></label>
+      <label data-show-when="kind:proxy"><span>PWNDROP SOURCE URL (kind = proxy - fetched server-side, location never exposed)</span><input class="field-input mono" name="pwndrop_url" value="{{ link.pwndrop_url }}" placeholder="http://10.0.0.5:8080/files/payload.bin"></label>
+      <label data-show-when="kind:file"><span>PAYLOAD FILE (kind = file)</span>
         <div class="drop-zone" data-file-input="payload-input">Drop a file here, or click to choose<input class="field-input" type="file" name="payload" id="payload-input" style="display:none"></div>
         <small class="mono muted" id="payload-input-chosen" style="font-size:.68rem">{% if link.payload %}current: {{ link.payload.name }}{% endif %}</small>
       </label>
-      <div class="grid-2">
+      <div class="grid-2" data-show-when="on_deny:benevolent">
         <label><span>DENY RESPONSE TEXT (on_deny = benevolent)</span><textarea class="field-input mono" name="benevolent_text" rows="3">{{ link.benevolent_text }}</textarea></label>
         <label><span>DENY RESPONSE FILE</span>
           <div class="drop-zone" data-file-input="benevolent-input">Drop a file here, or click to choose<input class="field-input" type="file" name="benevolent_file" id="benevolent-input" style="display:none"></div>
@@ -51,19 +51,20 @@
       <legend>GATE</legend>
       <div class="grid-2">
         <label><span>GATE TYPE</span><select class="field-input" name="gate_type">{% for value, label in gates %}<option value="{{ value }}" {% if link.gate_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-        <label><span>STATIC TOKEN (gate = token, sent as ?t= or X-Gate-Token)</span><input class="field-input mono" name="gate_token" value="{{ link.gate_token }}"></label>
+        <label data-show-when="gate_type:token"><span>STATIC TOKEN (gate = token, sent as ?t= or X-Gate-Token)</span><input class="field-input mono" name="gate_token" value="{{ link.gate_token }}"></label>
       </div>
-      <div class="grid-2">
+      <p class="muted" style="font-size:.68rem;margin-top:-4px" data-show-when="gate_type:network">IP/UA gate: no credentials at all - the NETWORK PROFILE section below decides who may even attempt the link.</p>
+      <div class="grid-2" data-show-when="gate_type:totp">
         <label><span>TOTP SECRET (gate = totp)</span><input class="field-input mono" name="totp_secret" value="{{ link.totp_secret }}"></label>
         <label><span>TOTP WINDOW (SECONDS)</span><input class="field-input" type="number" min="5" name="totp_window" value="{{ link.totp_window|default:30 }}"></label>
       </div>
-      <div class="grid-3">
+      <div class="grid-3" data-show-when="gate_type:submission">
         <label><span>DECODE/DECRYPT TEMPLATE (gate = submission)</span><select class="field-input" name="cipher">{% for value, label in ciphers %}<option value="{{ value }}" {% if link.cipher == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-        <label><span>KEY (xor / aes256)</span><input class="field-input mono" name="cipher_key" value="{{ link.cipher_key }}"></label>
-        <label><span>IV (aes256, hex)</span><input class="field-input mono" name="cipher_iv" value="{{ link.cipher_iv }}"></label>
+        <label data-show-when="gate_type:submission" data-also-when="cipher:xor|aes256"><span>KEY (xor / aes256)</span><input class="field-input mono" name="cipher_key" value="{{ link.cipher_key }}"></label>
+        <label data-show-when="gate_type:submission" data-also-when="cipher:aes256"><span>IV (aes256, hex)</span><input class="field-input mono" name="cipher_iv" value="{{ link.cipher_iv }}"></label>
       </div>
-      <label><span>EXPECTED JSON FIELDS (comma separated)</span><input class="field-input mono" name="expected_fields" value="{{ expected_fields_csv }}" placeholder="hostname, username, screenshot"></label>
-      <label><span>AUTO-DECISION RULES (JSON, optional - first match decides; no match stays manual)</span><textarea class="field-input mono" name="auto_rules" rows="4" placeholder='[{"action":"approve","when":{"fields_match":{"hostname":"^corp-laptop-\\d+$"},"forbid":["vmware|vbox|sandbox"],"require_images":true}}]'>{{ link.auto_rules|as_json }}</textarea></label>
+      <label data-show-when="gate_type:submission"><span>EXPECTED JSON FIELDS (comma separated)</span><input class="field-input mono" name="expected_fields" value="{{ expected_fields_csv }}" placeholder="hostname, username, screenshot"></label>
+      <label data-show-when="gate_type:submission"><span>AUTO-DECISION RULES (JSON, optional - first match decides; no match stays manual)</span><textarea class="field-input mono" name="auto_rules" rows="4" placeholder='[{"action":"approve","when":{"fields_match":{"hostname":"^corp-laptop-\\d+$"},"forbid":["vmware|vbox|sandbox"],"require_images":true}}]'>{{ link.auto_rules|as_json }}</textarea></label>
     </fieldset>
     <fieldset>
       <legend>RELEASE RULES</legend>
@@ -86,7 +87,7 @@
         <label><span>EXPIRES AT (ISO, optional)</span><input class="field-input" type="datetime-local" name="expires_at" value="{{ link.expires_at|date:'Y-m-d\TH:i' }}"></label>
       </div>
     </fieldset>
-    <fieldset>
+    <fieldset data-feature-when="gate_type:network">
       <legend>NETWORK PROFILE (malleable contract - requests that don't match are dropped before any gate check)</legend>
       <div class="grid-2">
         <label><span>ALLOWED SOURCE IPs / CIDRs (comma separated, empty = any)</span><input class="field-input mono" name="allowed_ips" value="{{ allowed_ips_csv }}" placeholder="203.0.113.0/24, 198.51.100.7"></label>
