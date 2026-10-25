@@ -1,0 +1,31 @@
+{
+  "format": "rof-blocking-rules",
+  "version": 1,
+  "sets": [
+    {
+      "name": "soc override",
+      "scope": "all",
+      "enabled": true,
+      "order": 0,
+      "rules": [
+        {
+          "name": "allow the SOC laptop",
+          "action": "allow",
+          "logic": "all",
+          "conditions": [{"type": "ip", "pattern": "^203\\.0\\.113\\.10$"}],
+          "enabled": false,
+          "order": 0
+        },
+        {
+          "name": "block everything else",
+          "action": "block",
+          "logic": "any",
+          "conditions": [{"type": "ua", "pattern": ".*"}],
+          "enabled": false,
+          "order": 1
+        }
+      ]
+    }
+  ],
+  "loose_rules": []
+}

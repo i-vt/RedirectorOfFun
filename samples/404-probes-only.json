@@ -1,0 +1,34 @@
+{
+  "format": "rof-blocking-rules",
+  "version": 1,
+  "sets": [
+    {
+      "name": "404 probes only",
+      "scope": "not_found",
+      "enabled": true,
+      "order": 0,
+      "rules": [
+        {
+          "name": "known scanner fingerprints",
+          "action": "block",
+          "logic": "any",
+          "conditions": [{"type": "ua", "pattern": "(?i)(sqlmap|nmap|nikto|masscan|nuclei|acunetix|nessus|wpscan)"}],
+          "enabled": false,
+          "order": 0
+        },
+        {
+          "name": "non-browser probes",
+          "action": "block",
+          "logic": "all",
+          "conditions": [
+            {"type": "ua", "pattern": "^(?!.*Mozilla).*$"},
+            {"type": "ip", "pattern": "^(?!127\\.).*$"}
+          ],
+          "enabled": false,
+          "order": 1
+        }
+      ]
+    }
+  ],
+  "loose_rules": []
+}

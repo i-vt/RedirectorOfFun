@@ -1,0 +1,36 @@
+{
+  "format": "rof-blocking-rules",
+  "version": 1,
+  "sets": [
+    {
+      "name": "payload link guard",
+      "scope": "link",
+      "link_path": "/g/drop/example",
+      "enabled": true,
+      "order": 0,
+      "rules": [
+        {
+          "name": "only the customer's ASN",
+          "action": "block",
+          "logic": "all",
+          "conditions": [
+            {"type": "asn", "pattern": "^(?!1234$).*$"},
+            {"type": "ua", "pattern": ".*"}
+          ],
+          "enabled": false,
+          "order": 0
+        }
+      ]
+    }
+  ],
+  "loose_rules": [
+    {
+      "name": "virustotal anywhere",
+      "action": "block",
+      "logic": "any",
+      "conditions": [{"type": "ua", "pattern": "(?i)virustotal"}],
+      "enabled": false,
+      "order": 0
+    }
+  ]
+}

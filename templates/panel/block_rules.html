@@ -6,11 +6,49 @@
   <div class="panel-heading">
     <div><span class="section-label">EDGE DEFENSE</span><h2>Blocking rules</h2><p>Rulesets are evaluated top to bottom; the first matching rule wins. An ALLOW rule stops the chain, so place allow rules (trusted operators) before block rules to override them. Drag rows to reorder; drag set headers to reorder sets.</p></div>
     <div>
+      <button class="button" type="button" id="quick-rule-open">{% icon "plus" %}Quick rule generator</button>
       <a class="button secondary" href="{% url 'gate-block-rule-test' %}">{% icon "flask" %}Test rules</a>
       <a class="button secondary" href="{% url 'gate-block-rules-export' %}">{% icon "download" %}Export JSON</a>
       <form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="seed_presets"><button class="button secondary" type="submit">Ensure presets</button></form>
     </div>
   </div>
+
+  <div id="quick-rule-modal" class="modal-overlay" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="quick-rule-title">
+      <div class="panel-heading">
+        <div><span class="section-label">RULE BUILDER</span><h2 id="quick-rule-title">Quick rule generator</h2><p>Answer the questions; the rule writes itself. Each row is one match: what to check, how to compare, and against what.</p></div>
+        <button class="text-button" type="button" id="quick-rule-close">[ CLOSE ]</button>
+      </div>
+      <div class="grid-2" style="margin-top:10px">
+        <label><span>RULE NAME</span><input class="field-input" id="qr-name" placeholder="Block VT + AWS scanners"></label>
+        <label><span>ACTION</span><select class="field-input" id="qr-action"><option value="block">Block</option><option value="allow">Allow</option></select></label>
+      </div>
+      <div class="grid-2" style="margin-top:10px">
+        <label><span>RULESET</span><select class="field-input" id="qr-ruleset"><option value="">Ungrouped (after all sets)</option>{% for s in rule_sets %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select></label>
+        <label><span>COMBINE CONDITIONS WITH</span><select class="field-input" id="qr-logic"><option value="all">AND (all must match)</option><option value="any">OR (any matches)</option><option value="xor">XOR (exactly one matches)</option></select></label>
+      </div>
+      <div id="qr-conditions" style="margin-top:14px"></div>
+      <button class="button secondary" type="button" id="qr-add-condition" style="margin-top:10px">{% icon "plus" %}Add condition</button>
+      <div class="panel" style="margin-top:14px;padding:14px">
+        <span class="section-label">LIVE PREVIEW</span>
+        <div id="qr-regex-preview" class="mono muted" style="font-size:.72rem;margin-top:8px"></div>
+        <pre class="mono" id="qr-json-preview" style="font-size:.68rem;max-height:140px;overflow:auto;margin-top:8px"></pre>
+      </div>
+      <div class="row" style="margin-top:14px;display:flex;gap:10px">
+        <button class="button" type="button" id="qr-create">{% icon "check" %}Create rule</button>
+        <button class="button secondary" type="button" id="quick-rule-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <style>
+    .modal-overlay { position: fixed; inset: 0; background: rgba(4, 8, 14, .78); z-index: 200;
+                     display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .modal-overlay[hidden] { display: none; }
+    .modal-card { background: var(--s-surface); border: var(--c-panel-border); border-radius: 12px;
+                  padding: 22px; max-width: 860px; width: 100%; max-height: 88vh; overflow-y: auto; }
+    .qr-cond-row { display: grid; grid-template-columns: 130px 170px 1fr 34px; gap: 8px; margin-top: 8px; align-items: end; }
+    .qr-cond-row label { font-size: .56rem; color: var(--s-muted); letter-spacing: .1em; }
+  </style>
 
   <form method="post" class="stacked-form">
     {% csrf_token %}
@@ -116,6 +154,110 @@
 </style>
 <script>
 (() => {
+  // ── Quick rule generator modal ────────────────────────────────────────────
+  const modal = document.getElementById("quick-rule-modal");
+  const openBtn = document.getElementById("quick-rule-open");
+  const closeBtn = document.getElementById("quick-rule-close");
+  const cancelBtn = document.getElementById("quick-rule-cancel");
+  const condBox = document.getElementById("qr-conditions");
+  const addBtn = document.getElementById("qr-add-condition");
+  const createBtn = document.getElementById("qr-create");
+  const TYPES = ["ip", "cidr", "ua", "asn", "isp", "country", "city"];
+  const OPS = [
+    { id: "starts", label: "starts with", needs: true },
+    { id: "contains", label: "contains", needs: true },
+    { id: "is", label: "is", needs: true },
+    { id: "isnot", label: "is not", needs: true },
+    { id: "notcontains", label: "doesn't contain", needs: true },
+    { id: "ends", label: "ends with", needs: true },
+    { id: "anything", label: "is anything", needs: false },
+    { id: "notempty", label: "is not empty", needs: false },
+    { id: "empty", label: "is empty", needs: false },
+  ];
+  const CIDR_OPS = OPS.filter(o => ["is", "isnot"].includes(o.id));
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const build = (op, value) => {
+    switch (op) {
+      case "starts": return "^" + esc(value);
+      case "contains": return esc(value);
+      case "is": return "^" + esc(value) + "$";
+      case "isnot": return "^" + esc(value) + "$";
+      case "notcontains": return esc(value);
+      case "ends": return esc(value) + "$";
+      case "anything": return ".*";
+      case "notempty": return ".+";
+      case "empty": return "^$";
+    }
+    return esc(value);
+  };
+
+  const addRow = () => {
+    const row = document.createElement("div");
+    row.className = "qr-cond-row";
+    row.innerHTML = `
+      <label>TYPE<select class="field-input qr-type">${TYPES.map(t => `<option>${t}</option>`).join("")}</select></label>
+      <label>OPERATOR<select class="field-input qr-op">${OPS.map(o => `<option value="${o.id}">${o.label}</option>`).join("")}</select></label>
+      <label>VALUE<input class="field-input mono qr-value" placeholder="e.g. 16509 or virustotal"></label>
+      <button class="text-button qr-remove" type="button" title="Remove">✕</button>`;
+    row.querySelector(".qr-remove").addEventListener("click", () => { row.remove(); preview(); });
+    row.querySelector(".qr-type").addEventListener("change", () => {
+      const type = row.querySelector(".qr-type").value;
+      const opSel = row.querySelector(".qr-op");
+      const allowed = type === "cidr" ? CIDR_OPS : OPS;
+      opSel.innerHTML = allowed.map(o => `<option value="${o.id}">${o.label}</option>`).join("");
+      preview();
+    });
+    row.querySelector(".qr-op").addEventListener("change", () => {
+      const op = OPS.find(o => o.id === row.querySelector(".qr-op").value);
+      row.querySelector(".qr-value").style.visibility = op && op.needs ? "" : "hidden";
+      preview();
+    });
+    row.querySelector(".qr-value").addEventListener("input", preview);
+    condBox.appendChild(row);
+  };
+
+  const preview = () => {
+    const conditions = [];
+    const regexes = [];
+    condBox.querySelectorAll(".qr-cond-row").forEach(row => {
+      const type = row.querySelector(".qr-type").value;
+      const opId = row.querySelector(".qr-op").value;
+      const op = OPS.find(o => o.id === opId);
+      const value = row.querySelector(".qr-value").value;
+      if (op && op.needs && !value.trim()) return;  // skip empty rows entirely
+      const condition = { type, pattern: build(opId, value.trim()) };
+      if (opId === "isnot" || opId === "notcontains") condition.negate = true;
+      conditions.push(condition);
+      regexes.push(`${type} ${op ? op.label : opId} "${value}" -> ${condition.pattern}${condition.negate ? " (negated)" : ""}`);
+    });
+    document.getElementById("qr-regex-preview").textContent = regexes.join("   ");
+    document.getElementById("qr-json-preview").textContent = JSON.stringify(conditions, null, 1);
+    return conditions;
+  };
+
+  openBtn.addEventListener("click", () => { modal.hidden = false; if (!condBox.children.length) addRow(); preview(); });
+  [closeBtn, cancelBtn].forEach(b => b.addEventListener("click", () => { modal.hidden = true; }));
+  modal.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
+  addBtn.addEventListener("click", () => { addRow(); preview(); });
+  ["qr-logic", "qr-name", "qr-action", "qr-ruleset"].forEach(id =>
+    document.getElementById(id).addEventListener("change", preview));
+
+  createBtn.addEventListener("click", () => {
+    const conditions = preview();
+    if (!conditions.length) {
+      document.getElementById("qr-regex-preview").textContent = "Add at least one condition with a value first.";
+      return;
+    }
+    const form = document.querySelector(".stacked-form");
+    form.querySelector('input[name="name"]').value = document.getElementById("qr-name").value;
+    form.querySelector('select[name="ruleset"]').value = document.getElementById("qr-ruleset").value;
+    form.querySelector('select[name="action"]').value = document.getElementById("qr-action").value;
+    form.querySelector('select[name="logic"]').value = document.getElementById("qr-logic").value;
+    form.querySelector('textarea[name="conditions"]').value = JSON.stringify(conditions);
+    modal.hidden = true;
+    form.requestSubmit();
+  });
+
   const csrf = document.querySelector('meta[name="csrf-token"]').content;
   const postOrder = (kind, ids) => fetch("{% url 'gate-block-rules-reorder' %}", {
     method: "POST",

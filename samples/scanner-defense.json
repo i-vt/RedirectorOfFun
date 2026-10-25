@@ -1,0 +1,42 @@
+{
+  "format": "rof-blocking-rules",
+  "version": 1,
+  "sets": [
+    {
+      "name": "scanner defense",
+      "scope": "all",
+      "enabled": true,
+      "order": 0,
+      "rules": [
+        {
+          "name": "VirusTotal egress",
+          "action": "block",
+          "logic": "any",
+          "conditions": [{"type": "ua", "pattern": "(?i)virustotal"}],
+          "enabled": false,
+          "order": 0
+        },
+        {
+          "name": "cloud scanners on AWS",
+          "action": "block",
+          "logic": "all",
+          "conditions": [
+            {"type": "asn", "pattern": "^(16509|14618)$"},
+            {"type": "ua", "pattern": "(?i)(bot|scanner|curl|wget|python-requests|go-http-client)"}
+          ],
+          "enabled": false,
+          "order": 1
+        },
+        {
+          "name": "scripting user agents",
+          "action": "block",
+          "logic": "any",
+          "conditions": [{"type": "ua", "pattern": "(?i)^(curl|wget|python-requests|go-http-client|libwww-perl)"}],
+          "enabled": false,
+          "order": 2
+        }
+      ]
+    }
+  ],
+  "loose_rules": []
+}

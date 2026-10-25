@@ -492,6 +492,7 @@ class BlockingRule(models.Model):
         ("all", "ALL conditions match (AND)"),
         ("any", "ANY condition matches (OR)"),
         ("not", "NONE of the conditions match (NOT)"),
+        ("xor", "EXACTLY ONE condition matches (XOR)"),
     ]
     ACTION_CHOICES = [("block", "Block"), ("allow", "Allow")]
 

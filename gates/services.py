@@ -820,12 +820,15 @@ def rule_matches(rule, *, ip, user_agent, intel):
         # A determined match decides the rule; unknowns cannot confirm a
         # non-match.
         return any(results), fired
-    # all / not need every condition evaluable: "all matched" and "none
-    # matched" are both unprovable while any input is unknown.
+    # all / not / xor need every condition evaluable: "all matched", "none
+    # matched", and "exactly one matched" are all unprovable while any input
+    # is unknown.
     if undetermined:
         return False, fired
     if rule.logic == "all":
         return all(results), fired
+    if rule.logic == "xor":
+        return sum(1 for m in results if m) == 1, fired
     return not any(results), fired
 
 

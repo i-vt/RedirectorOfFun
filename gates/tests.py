@@ -1472,6 +1472,64 @@ class RuleChainSemanticsTests(TestCase):
         self.assertEqual(BlockingRule.objects.get(pk=r1.pk).order, 1)
         self.assertEqual(BlockingRule.objects.get(pk=r2.pk).order, 0)
 
+    def test_xor_logic(self):
+        rule = BlockingRule.objects.create(name="xor", ruleset=self.ruleset, logic="xor",
+                                           conditions=[
+                                               {"type": "ua", "pattern": "(?i)virustotal"},
+                                               {"type": "asn", "pattern": "^16509$"},
+                                           ])
+        # exactly one matched
+        matched, _ = services.rule_matches(rule, ip="1.1.1.1", user_agent="virustotal",
+                                           intel=IPIntel(ip="1.1.1.1", asn="133480"))
+        self.assertTrue(matched)
+        # both matched
+        matched, _ = services.rule_matches(rule, ip="1.1.1.1", user_agent="virustotal",
+                                           intel=IPIntel(ip="1.1.1.1", asn="16509"))
+        self.assertFalse(matched)
+        # neither matched
+        matched, _ = services.rule_matches(rule, ip="1.1.1.1", user_agent="Mozilla",
+                                           intel=IPIntel(ip="1.1.1.1", asn="133480"))
+        self.assertFalse(matched)
+        # unknown intel makes the rule indeterminate even with a UA match
+        matched, _ = services.rule_matches(rule, ip="1.1.1.1", user_agent="virustotal",
+                                           intel=None)
+        self.assertFalse(matched)
+
+    def test_xor_accepted_by_model_validation(self):
+        rule = BlockingRule(name="xor ok", ruleset=self.ruleset, logic="xor",
+                            conditions=[{"type": "ip", "pattern": ".*"}])
+        rule.full_clean()
+
+
+@tag("functional")
+class QuickRuleGeneratorTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="qrgop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+
+    def test_page_has_generator_modal(self):
+        response = self.client.get(reverse("gate-block-rules"))
+        self.assertContains(response, "quick-rule-modal")
+        self.assertContains(response, "Quick rule generator")
+        self.assertContains(response, "starts with")
+        self.assertContains(response, "XOR (exactly one matches)")
+
+    def test_samples_import_cleanly(self):
+        import json as _json
+        from pathlib import Path
+        from django.conf import settings as dj_settings
+        # the link-scoped sample references this path
+        DeliveryLink.objects.create(path="/g/drop/example", kind="key", key_text="K")
+        sample_dir = Path(dj_settings.BASE_DIR) / "samples"
+        for sample in sorted(sample_dir.glob("*.json")):
+            payload = _json.loads(sample.read_text())
+            sets_created, rules_created, errors = services.import_blocking_rules(payload)
+            self.assertEqual(errors, [], sample.name)
+            self.assertGreaterEqual(sets_created + rules_created, 1, sample.name)
+            # every imported rule is disabled on import
+            self.assertFalse(BlockingRule.objects.filter(enabled=True).exists())
+
 
 @tag("functional")
 @override_settings(AUTO_BAN_THRESHOLD=0)
