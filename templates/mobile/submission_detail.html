@@ -17,7 +17,7 @@
 {% if s.status == 'pending' %}
 <div class="row">
   <form method="post" style="flex:1">{% csrf_token %}<input type="hidden" name="action" value="approve"><button class="btn primary" type="submit" style="width:100%">Approve &amp; release</button></form>
-  <form method="post" style="flex:1" onsubmit="return confirm('Deny this submission?')">{% csrf_token %}<input type="hidden" name="action" value="deny"><button class="btn danger" type="submit" style="width:100%">Deny</button></form>
+  <form method="post" style="flex:1" data-confirm="Deny this submission?">{% csrf_token %}<input type="hidden" name="action" value="deny"><button class="btn danger" type="submit" style="width:100%">Deny</button></form>
 </div>
 {% else %}
 <div class="row">

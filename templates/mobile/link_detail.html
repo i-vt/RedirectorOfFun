@@ -15,7 +15,7 @@
 
 <div class="row">
   <form method="post" style="flex:1">{% csrf_token %}<input type="hidden" name="action" value="toggle"><button class="btn secondary" type="submit" style="width:100%">{{ link.active|yesno:"Deactivate,Activate" }}</button></form>
-  <form method="post" style="flex:1" onsubmit="return confirm('BURN this link? It deactivates, denies everyone, and bans all visitor IPs except the approved target. This cannot be undone.')">{% csrf_token %}<input type="hidden" name="action" value="burn"><button class="btn danger" type="submit" style="width:100%">Burn link</button></form>
+  <form method="post" style="flex:1" data-confirm="BURN this link? It deactivates, denies everyone, and bans all visitor IPs except the approved target. This cannot be undone.">{% csrf_token %}<input type="hidden" name="action" value="burn"><button class="btn danger" type="submit" style="width:100%">Burn link</button></form>
 </div>
 
 {% if submissions %}

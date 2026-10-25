@@ -18,6 +18,14 @@
     </form></section>
     <section class="panel compact-panel"><span class="section-label">BROWSER PERMISSION</span><h3>Desktop notifications</h3><p>Browser alerts require a user gesture. Panel notifications work without this permission.</p><button id="browser-permission" class="button secondary full" type="button">Enable browser notifications</button><small id="browser-permission-state" class="form-note">Checking browser support…</small></section>
     <section class="panel compact-panel"><span class="section-label">WEB PUSH</span><h3>Push when the panel is closed</h3><p>Web Push (VAPID) notifies this device even when no panel tab is open. Configure <code>VAPID_*</code> keys first (<code>manage.py vapid_keys</code>).</p><button id="webpush-subscribe" class="button secondary full" type="button">Enable web push on this device</button><small id="webpush-state" class="form-note">Not subscribed.</small></section>
+    <section class="panel compact-panel"><span class="section-label">CONFIRMATIONS</span><h3>Action dialogs</h3><p>Destruction dialogs show once per action if you tick "don't ask me again". Reset that memory here.</p><button class="button secondary full" type="button" id="reset-confirmations">Reset saved confirmations</button></section>
+    <script>
+    document.getElementById("reset-confirmations")?.addEventListener("click", (event) => {
+      localStorage.removeItem("rdr-no-confirm");
+      event.target.textContent = "Confirmations reset";
+      setTimeout(() => { event.target.textContent = "Reset saved confirmations"; }, 1500);
+    });
+    </script>
     <script>
     (() => {
       const button = document.getElementById("webpush-subscribe");

@@ -13,7 +13,7 @@
     <div class="row btn-row">
       <a class="btn secondary" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="{% url 'm-submission' s.pk %}">Review</a>
       <form method="post" action="{% url 'm-submission' s.pk %}">{% csrf_token %}<input type="hidden" name="action" value="approve"><button class="btn primary" type="submit">Approve</button></form>
-      <form method="post" action="{% url 'm-submission' s.pk %}" onsubmit="return confirm('Deny this submission?')">{% csrf_token %}<input type="hidden" name="action" value="deny"><button class="btn danger" type="submit">Deny</button></form>
+      <form method="post" action="{% url 'm-submission' s.pk %}" data-confirm="Deny this submission?">{% csrf_token %}<input type="hidden" name="action" value="deny"><button class="btn danger" type="submit">Deny</button></form>
     </div>
   </div>
   {% endfor %}

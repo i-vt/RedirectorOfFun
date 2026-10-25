@@ -45,6 +45,7 @@
     .pager a{color:var(--accent);text-decoration:none;padding:12px}
     .toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:10px 16px;z-index:9;font-size:.85rem}
   </style>
+  <script defer src="{% static 'js/app.js' %}"></script>
   <script>
     function post(url, data){const token=document.querySelector('meta[name=csrf-token]').content;
       return fetch(url,{method:"POST",headers:{"X-CSRFToken":token,"Content-Type":"application/json"},body:JSON.stringify(data||{})}).then(r=>location.reload());}

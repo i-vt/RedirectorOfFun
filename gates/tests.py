@@ -1636,6 +1636,35 @@ class TotpSingleUseTests(TestCase):
         self.assertEqual(self.public.get(other.path, {"t": code_b}).status_code, 200)
 
 
+@tag("unit")
+class ConfirmDialogTests(TestCase):
+    def test_no_native_confirm_left_in_app_js(self):
+        import os
+        from django.conf import settings as dj_settings
+        js = open(os.path.join(dj_settings.BASE_DIR, "static/js/app.js")).read()
+        self.assertNotIn("window.confirm", js)
+        self.assertIn("confirm-overlay", js)
+        self.assertIn("rdr-no-confirm", js)
+
+    def test_mobile_templates_use_data_confirm(self):
+        import os
+        from django.conf import settings as dj_settings
+        for name in ["submissions.html", "submission_detail.html", "link_detail.html"]:
+            path = os.path.join(dj_settings.BASE_DIR, "templates", "mobile", name)
+            text = open(path).read()
+            self.assertNotIn("onsubmit", text, name)
+            if name != "submissions.html":
+                self.assertIn("data-confirm", text, name)
+
+    def test_settings_page_has_reset_control(self):
+        operator = Operator.objects.create_user(username="cfop", password="long-enough-password-123")
+        client = Client()
+        client.force_login(operator)
+        response = client.get(reverse("settings"))
+        self.assertContains(response, "reset-confirmations")
+        self.assertContains(response, "rdr-no-confirm")
+
+
 @tag("functional")
 @override_settings(AUTO_BAN_THRESHOLD=0)
 class GateFormatAndRangeTests(TestCase):

@@ -31,9 +31,84 @@
     }
   });
 
+  // Styled confirm dialogs: every data-confirm form gets a themed modal
+  // instead of a native popup, with a per-message "don't ask again" memory.
+  const NO_CONFIRM_KEY = "rdr-no-confirm";
+  const noConfirmList = () => {
+    try { return JSON.parse(localStorage.getItem(NO_CONFIRM_KEY) || "[]"); } catch { return []; }
+  };
+  const isNoConfirm = (message) => noConfirmList().includes(message);
+  const rememberNoConfirm = (message) => {
+    const list = noConfirmList();
+    if (!list.includes(message)) {
+      list.push(message);
+      localStorage.setItem(NO_CONFIRM_KEY, JSON.stringify(list));
+    }
+  };
+  window.clearNoConfirm = () => localStorage.removeItem(NO_CONFIRM_KEY);
+
+  let confirmOverlay = null;
+  function ensureConfirmOverlay() {
+    if (confirmOverlay) return confirmOverlay;
+    const style = document.createElement("style");
+    style.textContent = `
+      .confirm-overlay{position:fixed;inset:0;background:rgba(4,8,14,.72);z-index:400;display:flex;align-items:center;justify-content:center;padding:18px}
+      .confirm-overlay[hidden]{display:none}
+      .confirm-card{background:var(--s-surface,var(--surface,#161b22));border:var(--c-panel-border,1px solid var(--border,#30363d));border-radius:10px;padding:22px;max-width:420px;width:100%;color:var(--s-text,var(--text,#e6edf3));font-family:inherit}
+      .confirm-card .confirm-title{font-size:.62rem;letter-spacing:.16em;color:var(--s-accent,var(--accent,#3fb68b));margin-bottom:10px}
+      .confirm-card p{margin:0 0 14px;font-size:.85rem;line-height:1.5}
+      .confirm-card label{display:flex;align-items:center;gap:8px;font-size:.72rem;color:var(--s-muted,var(--muted,#8b949e));margin-bottom:14px}
+      .confirm-card .confirm-actions{display:flex;gap:10px;justify-content:flex-end}
+      .confirm-card .confirm-actions button{min-height:40px;padding:8px 18px;border-radius:6px;border:1px solid var(--s-border,var(--border,#30363d));background:transparent;color:var(--s-text,var(--text,#e6edf3));font:inherit;cursor:pointer}
+      .confirm-card .confirm-actions .confirm-yes{background:var(--c-button-bg,var(--accent,#3fb68b));color:var(--c-button-text,#04140d);border-color:transparent;font-weight:600}
+      @media (max-width:600px){.confirm-card{max-width:100%;padding:16px}.confirm-card .confirm-actions button{flex:1;min-height:48px}}
+    `;
+    document.head.appendChild(style);
+    const overlay = document.createElement("div");
+    overlay.className = "confirm-overlay";
+    overlay.hidden = true;
+    overlay.innerHTML = `
+      <div class="confirm-card" role="alertdialog" aria-modal="true">
+        <div class="confirm-title">CONFIRM ACTION</div>
+        <p class="confirm-message"></p>
+        <label><input type="checkbox" class="confirm-skip"> Don't ask me again for this action</label>
+        <div class="confirm-actions">
+          <button type="button" class="confirm-no">Cancel</button>
+          <button type="button" class="confirm-yes">Confirm</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    confirmOverlay = overlay;
+    return overlay;
+  }
+
   document.addEventListener("submit", (event) => {
-    const message = event.target.dataset.confirm;
-    if (message && !window.confirm(message)) event.preventDefault();
+    const form = event.target;
+    const message = form.dataset && form.dataset.confirm;
+    if (!message) return;
+    if (form.dataset.confirmed === "1") {
+      delete form.dataset.confirmed;
+      return;
+    }
+    if (isNoConfirm(message)) return;
+    event.preventDefault();
+    const overlay = ensureConfirmOverlay();
+    overlay.querySelector(".confirm-message").textContent = message;
+    const skip = overlay.querySelector(".confirm-skip");
+    skip.checked = false;
+    overlay.hidden = false;
+    const no = overlay.querySelector(".confirm-no");
+    const yes = overlay.querySelector(".confirm-yes");
+    const cleanup = () => { overlay.hidden = true; no.onclick = yes.onclick = overlay.onclick = null; };
+    no.onclick = () => cleanup();
+    overlay.onclick = (e) => { if (e.target === overlay) cleanup(); };
+    yes.onclick = () => {
+      if (skip.checked) rememberNoConfirm(message);
+      cleanup();
+      form.dataset.confirmed = "1";
+      form.requestSubmit();
+    };
+    yes.focus();
   });
 
   document.addEventListener("htmx:configRequest", (event) => {
