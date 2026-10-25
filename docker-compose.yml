@@ -48,12 +48,19 @@ services:
       #   - "203.0.113.10:443:443"
       # or use the commented allow/deny rules in docker/panel-web.conf.
     volumes:
-      # Holds the auto-generated self-signed certificate on first start;
-      # mount real certificates over it (fullchain.pem + privkey.pem) for
-      # a trusted https:// name.
+      # Holds the certificate in use. With PANEL_DOMAIN set, these are links
+      # into the persisted letsencrypt store; otherwise a generated
+      # self-signed pair. Reset wipes this directory.
       - ./docker/certs:/etc/nginx/certs
+      # Let's Encrypt account + certificate store (persisted across resets so
+      # a reset does not re-request and burn rate limits).
+      - ./docker/letsencrypt:/etc/letsencrypt
       # 404 telemetry for the collector (see panel-web.conf).
       - nginx-logs:/var/log/nginx
+    environment:
+      PANEL_DOMAIN: ${PANEL_DOMAIN:-}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-}
+      HSTS_MAX_AGE: ${HSTS_MAX_AGE:-}
     depends_on:
       panel:
         condition: service_healthy

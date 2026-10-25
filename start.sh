@@ -86,7 +86,7 @@ if [[ $RESET -eq 1 ]]; then
     exit 1
   fi
   rm -f .env
-  rm -rf var staticfiles .test-runtime
+  rm -rf var staticfiles .test-runtime docker/certs
   echo "Reset complete."
 fi
 
