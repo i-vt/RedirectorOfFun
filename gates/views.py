@@ -162,10 +162,38 @@ def link_detail(request, pk):
     for offset in range(13, -1, -1):
         day = (now - timedelta(days=offset)).date().isoformat()
         series.append({"day": day, "count": daily.get(day, 0)})
+    intel_qs = SubmissionImage.objects.filter(
+        submission__link=link).select_related("submission").order_by("-created_at")
     return render(request, "panel/link_detail.html", {
         "title": f"Link {link.path}", "link": link, "submissions": submissions,
         "hits": link.hit_events.all()[:30], "is_administrator": is_administrator(request.user),
         "undo_seconds": services_undo_window(), "series_json": series,
+        "intel_images": intel_qs[:24], "intel_total": intel_qs.count(),
+    })
+
+
+@login_required
+def intel_gallery(request):
+    """Every image the gates received, as a filterable visual gallery."""
+    images = SubmissionImage.objects.select_related("submission__link").order_by("-created_at")
+    link_q = request.GET.get("link", "").strip()
+    field_q = request.GET.get("field", "").strip()
+    if link_q:
+        images = images.filter(submission__link__path__icontains=link_q[:200])
+    if field_q:
+        images = images.filter(field_name__icontains=field_q[:120])
+    from datetime import timedelta
+    day_ago = timezone.now() - timedelta(hours=24)
+    stats = {
+        "total": SubmissionImage.objects.count(),
+        "last_24h": SubmissionImage.objects.filter(created_at__gte=day_ago).count(),
+        "links": SubmissionImage.objects.values("submission__link").distinct().count(),
+    }
+    paginator = Paginator(images, 48)
+    page = paginator.get_page(request.GET.get("page"))
+    return render(request, "panel/intel.html", {
+        "title": "Gate Intel", "page": page, "images": page.object_list,
+        "stats": stats, "link_q": link_q, "field_q": field_q,
     })
 
 

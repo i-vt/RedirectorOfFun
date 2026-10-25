@@ -4,7 +4,7 @@ from analytics.models import NotFoundEvent
 from audit.models import AuditEvent
 from gates.models import (
     AgentChannel, BannedIP, BlockingRule, DecoyAsset, DecoyPage, DeliveryLink, HitEvent,
-    LureFile, LureSite, RuleSet, Submission,
+    LureFile, LureSite, RuleSet, Submission, SubmissionImage,
 )
 from notifications.models import NotificationOutbox, NotificationPreference, PushSubscription
 
@@ -85,8 +85,20 @@ class DeliveryLinkSerializer(serializers.ModelSerializer):
         return value
 
 
+class SubmissionImageSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SubmissionImage
+        fields = ["id", "field_name", "content_type", "url", "created_at"]
+
+    def get_url(self, obj):
+        from django.urls import reverse
+        return reverse("api-submission-image", args=[obj.pk])
+
+
 class SubmissionSerializer(serializers.ModelSerializer):
-    images = serializers.StringRelatedField(many=True, read_only=True)
+    images = SubmissionImageSerializer(many=True, read_only=True)
     note = serializers.CharField(max_length=4000, required=False, allow_blank=True)
 
     class Meta:

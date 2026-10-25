@@ -117,3 +117,14 @@ table code{color:var(--s-accent)}
 .file-list a:hover{color:var(--s-text);background:oklch(.82 .13 215/.05)}
 .file-list a.active{color:var(--s-accent);border-color:var(--s-border);background:oklch(.82 .13 215/.07)}
 .code-editor{width:100%;min-height:440px;background:var(--s-surface);color:var(--s-text);border:var(--c-panel-border);border-radius:8px;padding:12px;font-family:"JetBrains Mono",monospace;font-size:.78rem;line-height:1.55;tab-size:2;white-space:pre;overflow:auto}
+
+/* Gate intel galleries + lightbox */
+.intel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.intel-card{border:var(--c-panel-border);border-radius:10px;overflow:hidden;background:var(--s-surface)}
+.intel-card img{width:100%;height:140px;object-fit:cover;display:block;cursor:zoom-in;background:#0b0f16}
+.intel-card .intel-meta{padding:8px 10px;font-size:.66rem;line-height:1.5}
+.intel-card .intel-meta .mono{font-size:.64rem}
+.lightbox-overlay{position:fixed;inset:0;background:rgba(3,6,10,.92);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:10px}
+.lightbox-overlay[hidden]{display:none}
+.lightbox-overlay img{max-width:94vw;max-height:86vh;border-radius:10px;border:var(--c-panel-border);object-fit:contain}
+.lightbox-caption{color:var(--s-muted);font-size:.72rem}

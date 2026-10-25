@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% load ui_icons %}
+{% load gate_extras %}
+{% load static %}
+{% block head %}<script defer src="{% static 'js/lightbox.js' %}"></script>{% endblock %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">GATE INTEL</span><h2>Received imagery</h2><p>Every base64 image the gates decoded from submissions - screenshots, webcam grabs, proof shots. Click any card for full size.</p></div>
+  </div>
+  <div class="stat-grid" style="margin-bottom:14px">
+    <div class="stat-card"><span class="section-label">TOTAL IMAGES</span><strong class="mono">{{ stats.total }}</strong></div>
+    <div class="stat-card"><span class="section-label">LAST 24H</span><strong class="mono">{{ stats.last_24h }}</strong></div>
+    <div class="stat-card"><span class="section-label">LINKS WITH IMAGERY</span><strong class="mono">{{ stats.links }}</strong></div>
+  </div>
+  <form class="filter-bar" method="get" action="{% url 'gate-intel' %}">
+    <label><span>LINK PATH CONTAINS</span><input class="field-input mono" type="search" name="link" value="{{ link_q }}" maxlength="200" placeholder="/g/…"></label>
+    <label><span>FIELD NAME</span><input class="field-input mono" type="search" name="field" value="{{ field_q }}" maxlength="120" placeholder="screenshot"></label>
+    <button class="button secondary" type="submit">Apply filters</button>
+  </form>
+  {% if images %}
+  <div class="intel-grid" style="margin-top:14px">
+    {% for img in images %}
+    <figure class="intel-card">
+      <img src="{% url 'gate-submission-image' img.pk %}" alt="{{ img.field_name }}" loading="lazy"
+           data-lightbox data-caption="{{ img.field_name }} · {{ img.submission.link.path }} · {{ img.submission.created_at|date:'Y-m-d H:i' }} UTC">
+      <figcaption class="intel-meta">
+        <div><strong>{{ img.field_name }}</strong> <span class="status-badge {% if img.submission.status == 'approved' %}good{% elif img.submission.status == 'pending' %}warn{% endif %}">{{ img.submission.status|upper }}</span></div>
+        <div class="mono muted"><a href="{% url 'gate-link-detail' img.submission.link.pk %}">{{ img.submission.link.path }}</a></div>
+        <div class="mono muted">{{ img.submission.decoded_json|get_item:"hostname"|default:"-" }} · {{ img.submission.client_ip_hash|slice:":10"|default:"-" }}</div>
+        <div class="mono muted">{{ img.submission.created_at|date:"Y-m-d H:i:s" }} UTC</div>
+      </figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+  {% if page.paginator.num_pages > 1 %}<nav class="pagination" aria-label="Gallery pages"><span>PAGE {{ page.number }} / {{ page.paginator.num_pages }}</span><div>{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&link={{ link_q|urlencode }}&field={{ field_q|urlencode }}">← Previous</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}&link={{ link_q|urlencode }}&field={{ field_q|urlencode }}">Next →</a>{% endif %}</div></nav>{% endif %}
+  {% else %}
+  <div class="empty-state"><strong>No imagery yet</strong><p>When a submission carries base64 images (screenshot fields and friends), they land here as soon as the gate decodes them.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

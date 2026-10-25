@@ -14,7 +14,7 @@ from audit.services import record_event
 from gates import services as gate_services
 from gates.models import (
     AgentChannel, BannedIP, BlockingRule, DecoyPage, DeliveryLink, HitEvent, LureSite,
-    RuleSet, Submission,
+    RuleSet, Submission, SubmissionImage,
 )
 from notifications.models import NotificationOutbox, NotificationPreference, PushSubscription
 from .pagination import AuditCursorPagination, EventCursorPagination, HitCursorPagination, OperatorPagination
@@ -515,6 +515,17 @@ class BlockingRuleTest(APIView):
                       "city": intel.city} if intel else None,
             "matched": matched,
         })
+
+
+class SubmissionImageView(APIView):
+    """Raw bytes of a decoded submission image, for API key consumers."""
+
+    def get(self, request, pk):
+        from django.http import FileResponse
+        image = get_object_or_404(SubmissionImage, pk=pk)
+        if not image.image:
+            return Response({"detail": "Image not stored."}, status=status.HTTP_404_NOT_FOUND)
+        return FileResponse(image.image.open("rb"), content_type=image.content_type)
 
 
 class DecoyPageSetDefault(APIView):

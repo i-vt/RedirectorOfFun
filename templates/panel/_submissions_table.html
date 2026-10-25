@@ -6,7 +6,7 @@
   <td class="path-cell mono"><a href="{% url 'gate-link-detail' sub.link.pk %}">{{ sub.link.path }}</a></td>
   <td>{% if sub.status == 'pending' %}<span class="status-badge warn">PENDING</span>{% elif sub.status == 'approved' %}<span class="status-badge good">APPROVED</span>{% else %}<span class="status-badge bad">DENIED</span>{% endif %}</td>
   <td class="mono muted">{{ sub.decoded_json.keys|join:", "|truncatechars:60|default:"-" }}</td>
-  <td>{% for img in sub.images.all %}<a href="{% url 'gate-submission-image' img.pk %}" target="_blank" rel="noopener"><img src="{% url 'gate-submission-image' img.pk %}" alt="{{ img.field_name }}" style="max-height:64px;border-radius:6px;border:1px solid #30363d"></a>{% empty %}-{% endfor %}</td>
+  <td>{% for img in sub.images.all %}<img src="{% url 'gate-submission-image' img.pk %}" alt="{{ img.field_name }}" loading="lazy" data-lightbox data-caption="{{ img.field_name }} · {{ sub.link.path }} · {{ sub.created_at|date:'Y-m-d H:i' }} UTC" style="max-height:64px;border-radius:6px;border:1px solid #30363d;cursor:zoom-in">{% empty %}-{% endfor %}</td>
   <td>{% if sub.status == 'pending' %}
     <form method="post" action="{% url 'gate-submission-decide' sub.pk 'approve' %}" style="display:inline">{% csrf_token %}<button class="button" type="submit">{% icon "check" %}Approve</button></form>
     <form method="post" action="{% url 'gate-submission-decide' sub.pk 'deny' %}" style="display:inline" data-confirm="Deny this submission?">{% csrf_token %}<button class="button secondary" type="submit">{% icon "x" %}Deny</button></form>

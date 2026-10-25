@@ -7,6 +7,7 @@ urlpatterns = [
     path("links/new/", views.link_create, name="gate-link-create"),
     path("links/quick-drop/", views.link_quick_drop, name="gate-link-quick-drop"),
     path("payloads/", views.payloads_view, name="gate-payloads"),
+    path("intel/", views.intel_gallery, name="gate-intel"),
     path("lures/", views.lures_view, name="gate-lures"),
     path("lures/<int:pk>/", views.lure_edit, name="gate-lure-edit"),
     path("lures/<int:pk>/toggle/", views.lure_toggle, name="gate-lure-toggle"),

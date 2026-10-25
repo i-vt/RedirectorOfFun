@@ -16,6 +16,7 @@ urlpatterns = [
     path("submissions/<int:pk>/note/", views.SubmissionNote.as_view(), name="api-submission-note"),
     path("submissions/<int:pk>/undo/", views.SubmissionUndo.as_view(), name="api-submission-undo"),
     path("submissions/<int:pk>/<str:verdict>/", views.SubmissionDecide.as_view(), name="api-submission-decide"),
+    path("submissions/image/<int:pk>/", views.SubmissionImageView.as_view(), name="api-submission-image"),
     path("bans/", views.BannedIPList.as_view(), name="api-bans"),
     path("bans/<int:pk>/", views.BannedIPDetail.as_view(), name="api-ban-detail"),
     path("agents/", views.AgentChannelList.as_view(), name="api-agents"),
