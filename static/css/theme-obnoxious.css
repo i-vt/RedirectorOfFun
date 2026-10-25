@@ -190,3 +190,9 @@
   .theme-obnoxious .circus-eyes i + i { animation-delay: 4.2s; }
   .theme-obnoxious .button.wobble { animation: clown-nod .5s ease-out; }
 }
+
+/* Star tips on the jester hat pick up the theme's positive color. */
+.theme-obnoxious .brand-mark .jester-star {
+  fill: var(--s-positive);
+  stroke: none;
+}

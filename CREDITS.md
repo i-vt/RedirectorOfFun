@@ -10,3 +10,7 @@ The control plane uses the following open-source packages and bundled assets:
 - JetBrains Mono - SIL Open Font License 1.1, https://www.jetbrains.com/lp/mono/
 
 No external photography, tracking scripts, third-party fonts, or remote assets are required at runtime. The interface fonts and JavaScript libraries are bundled locally.
+
+## Assets
+
+- Brand mark and Obnoxious Clown favicon: original jester-hat artwork drawn for this project (star-tipped horns); shape takes loose inspiration from the Noun Project jester-hat icon 146101 (CC BY) but shares no geometry with it.
