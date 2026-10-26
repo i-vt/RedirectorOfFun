@@ -1,15 +1,22 @@
-# OpenResty front layer for JA3/JA4 fingerprinting
+# JA3/JA4 fingerprint gating
 
-Stock nginx cannot compute TLS ClientHello fingerprints. This setup places an
-OpenResty instance (or a lua-capable stream layer) in front - or on the same
-box as the edge - that computes JA3/JA4 and injects them as headers before
-proxying to the panel and C2 paths.
+**This page tells you how to gate links by the visitor's TLS fingerprint.**
+Stock nginx cannot compute ClientHello fingerprints. You need a front layer
+(OpenResty or HAProxy) that computes JA3/JA4 and adds them as headers.
+
+```mermaid
+flowchart LR
+    V[Visitor] -->|TLS ClientHello| F[Front layer<br/>computes JA3 / JA4]
+    F -->|X-JA4-Fingerprint header| N[nginx edge]
+    N --> P[Panel gate]
+    P -->|match| OK[Release]
+    P -->|missing or wrong| HOLD[Held view]
+```
 
 ## Option A: OpenResty with lua-resty-openssl (recommended)
 
-Install OpenResty and `lua-resty-openssl`. The TLS ClientHello is available in
-the `ssl_client_hello_by_lua_block` phase; compute JA4 (and JA3 if legacy
-tooling requires it) and stash it in a per-session variable.
+Install OpenResty and `lua-resty-openssl`. Compute the fingerprint in the
+`ssl_client_hello_by_lua_block` phase and store it in a variable.
 
 ```nginx
 # /etc/openresty/conf.d/fingerprint.conf
@@ -42,15 +49,14 @@ server {
 }
 ```
 
-JA4 (Cloudflare/Salesforce, 2023) is preferred over JA3: it is sortable,
-includes TLS version and ALPN, and degrades gracefully across extensions.
-Reference: <https://github.com/FoxIO-LLC/ja4>.
+JA4 is preferred over JA3: it is sortable, it includes the TLS version and
+ALPN, and it degrades gracefully. Reference: <https://github.com/FoxIO-LLC/ja4>.
 
 ## Option B: HAProxy with fingerprint ACLs
 
-HAProxy 2.8+ can match ClientHello fingerprints natively in the TLS
-handshake (`ssl_fc_ja4_hash`, `ssl_fc_ja3_hash` with the right build), which
-makes it the cheapest path if you prefer not to run Lua:
+HAProxy 2.8+ matches ClientHello fingerprints natively
+(`ssl_fc_ja4_hash`, `ssl_fc_ja3_hash` with the right build). This is the
+cheapest path if you prefer not to run Lua:
 
 ```
 frontend edge
@@ -60,39 +66,42 @@ frontend edge
     default_backend nginx_edge
 ```
 
-## Panel side
+## On the panel side
 
-Once the headers arrive, set `ja3_fingerprint` / `ja4_fingerprint` on a link.
-The gate requires an exact match; a missing header fails closed, so removing
-the front layer (or an attacker bypassing it) silently denies rather than
-downgrading. Confirm the header path works with:
+Set `ja3_fingerprint` / `ja4_fingerprint` on the link (in the collapsed
+FINGERPRINTS & WATERMARKING section of the link form). The gate requires an
+exact match. A missing header fails closed: if the front layer is absent or
+bypassed, the link denies instead of downgrading.
+
+Test the header path:
 
 ```bash
 curl -sI -H "X-JA4-Fingerprint: <expected>" https://updates.example.com/g/<path>
 ```
 
-## Notes
+> [!WARNING]
+> The front layer must overwrite these headers on every request. If a
+> client-supplied value reaches the panel, the gate is spoofable.
 
-- Fingerprints change when the beacon's TLS stack changes (library upgrades,
-  different transport profiles in RCM). Treat them like UAs: verify per build,
-  expect rotation.
-- Rate-limit the fingerprint endpoint like any other gate path; a scanner that
-  spoofs headers still hits the normal gate logic.
-- Keep the front layer's existence non-obvious: it presents the same decoy
-  behavior as the edge for non-gate paths.
+> [!NOTE]
+> Fingerprints change when the beacon's TLS stack changes. Verify them per
+> build. Expect rotation.
 
-## JARM randomization (edge layer)
+Keep the front layer quiet: it must show the same decoy behavior as the edge
+for non-gate paths.
 
-JA3/JA4 gates validate the *client*; the redirector's own TLS fingerprint
-(JARM) is fixed per OpenResty/nginx build and config, which makes a deployment
-scannable across engagements. RedGuard-style rotation belongs at the edge -
-nothing in the Django layer can influence it. Practical options:
+## JARM rotation (edge layer)
 
-- Rebuild or reconfigure the TLS stack per deployment (different cipher list,
-  TLS version floor, ALPN order) so the JARM changes every time.
-- Put a rotating TLS terminator in front (a small pool of OpenResty builds or
-  a CDN front) and fail2ban-style switch on a schedule.
-- Track your current JARM (`jarm scan <domain>`) in pre-flight checks; if it
+JA3/JA4 checks the client. The redirector's own TLS fingerprint (JARM) is
+fixed per build and config, so a deployment is scannable across engagements.
+Rotation is an edge-layer task; the panel cannot change it.
+
+- Rebuild or reconfigure the TLS stack per deployment (cipher list, TLS
+  version floor, ALPN order) so the JARM changes every time.
+- Or put a rotating TLS terminator in front (a pool of OpenResty builds, or a
+  CDN front) and switch on a schedule.
+- Track your current JARM (`jarm scan <domain>`) in pre-flight checks. If it
   lands on a public blocklist, rotate before the op starts.
 
-Treat JARM like the randomized gate/agent bases: per-deployment, never shared.
+Treat JARM like the randomized gate and agent bases: per deployment, never
+shared.

@@ -3077,3 +3077,33 @@ class ServeAsFilenameTests(TestCase):
         _, raw = APIKey.create(operator=self.operator, name="ci")
         detail = self.client.get(f"/api/v1/links/{link.pk}/", HTTP_AUTHORIZATION=f"ApiKey {raw}")
         self.assertEqual(detail.json()["serve_as"], "report.pdf.exe")
+
+
+class DocsQualityTests(TestCase):
+    """Docs stay BLUF-shaped and diagram-rich (STE-style controlled language)."""
+
+    def _docs(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent
+        return list((root / "docs").glob("*.md")) + [root / "README.md", root / "SETUP.md"]
+
+    def test_every_doc_opens_with_a_bluf_line(self):
+        for doc in self._docs():
+            head = doc.read_text()[:600]
+            self.assertRegex(head, r"\*\*[^*]{20,}\*\*", doc.name)
+
+    def test_docs_have_diagrams(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent
+        mermaid_docs = [d for d in self._docs() if "```mermaid" in d.read_text()]
+        self.assertGreaterEqual(len(mermaid_docs), 6)
+        # pre-rendered copies exist for offline readers
+        diagrams = list((root / "docs" / "assets" / "diagrams").glob("*.svg"))
+        self.assertGreaterEqual(len(diagrams), 10)
+
+    def test_ste_banned_words_absent(self):
+        banned = ["utilize", "utilise", "leverage", "facilitate"]
+        for doc in self._docs():
+            body = doc.read_text().lower()
+            for word in banned:
+                self.assertNotIn(word, body, f"{doc.name}: '{word}'")

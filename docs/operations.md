@@ -1,99 +1,78 @@
-# Operations Guide
+# Operations
 
-Daily operation of the RedirectorOfFun control plane: gates, approvals, and
-incident response. Read `deploy.md` for installation.
+**This page tells you how to run the control plane each day and how to react
+when something burns.** Install first: see [deploy.md](deploy.md).
 
 ## The morning loop
 
-1. Open `/panel/` - the gate strip shows pending approvals, releases in the
-   last 24h, and suspicious events.
-2. Work the approval queue at `/panel/submissions/`:
-   - `j` / `k` move between submissions, `a` approve, `d` deny, `u` undo
-     (within `DECISION_UNDO_SECONDS`, before any release).
-   - Expand a row to see decoded JSON, extracted screenshots, and add an
-     operator note (notes are shared between operators and visible on mobile).
-3. Phone-only? Use `/m/` (mobile UI) or reply to the Telegram bot:
-   `approve 42`, `deny 42`, `pending`. Notifications carry inline buttons.
+```mermaid
+flowchart LR
+    A[Open the panel] --> B{Pending<br/>approvals?}
+    B -->|yes| C[Work the queue]
+    B -->|no| D[Check suspicious<br/>events]
+    C --> D
+    D --> E[Check releases<br/>and 404 volume]
+```
 
-## Approving safely
+1. Open the panel. The gate strip shows pending approvals, releases in the
+   last 24 hours, and suspicious events.
+2. Work the approval queue. Use the keyboard: `j` / `k` move, `a` approve,
+   `d` deny, `u` undo.
+3. Expand a row to see the decoded JSON and the extracted screenshots.
+4. Check Gate Intel for imagery from the last day.
 
-- The decoded JSON + screenshot is your evidence. Check hostname against the
-  customer's naming convention, look for VM artifacts, timezone mismatches.
-- `forbid` patterns in auto-rules are the safety net; a rule never fires when a
-  forbidden value is present anywhere in the submission.
-- Deny sends whatever the link's `on_deny` says: 404, decoy, or your
-  benevolent response. Configure `benevolent_text` / `benevolent_file` per link
-  *before* the engagement.
+On a phone, use the mobile UI (`/m/`) or reply to the Telegram bot:
+`approve 42`, `deny 42`, `pending`.
 
-## Releasing
+## How a submission becomes a release
 
-After approval the next visit to the link serves the content and starts the
-download automatically. One-time links die after their first release; watch
-the `download` / `key_served` events for the confirmation.
+```mermaid
+sequenceDiagram
+    participant Ag as Agent
+    participant G as Gate
+    participant Op as Operator
+    Ag->>G: POST encrypted package
+    G->>G: Decrypt · validate fields · extract images
+    G-->>Op: Notification (panel · push · Telegram)
+    Note over G: Link held: blank / decoy / redirect
+    Op->>G: Approve
+    Ag->>G: GET the link
+    G-->>Ag: Content released
+```
 
-With `watermark` enabled, every release carries a unique marker
-(`ROFWM:<link>:<use>:<hex>`); the exact value is in the download HitEvent. If
-a sample shows up in a sandbox report, grep the marker against your events to
-identify which link and release leaked it.
+## Approve safely
 
-## Incident response: burn notice
+- The decoded JSON and the screenshots are your evidence. Check the hostname
+  against the naming convention. Look for VM artifacts and timezone
+  mismatches.
+- `forbid` patterns in auto-rules are the safety net. A rule never fires when
+  a forbidden value is present.
+- Deny sends the response you set on the link: 404, decoy, or your benevolent
+  content. Configure the benevolent response before the engagement.
 
-When a link is discovered mid-engagement, open its detail page (or mobile
-view) and hit **Burn notice**. It:
+## When a link is blown
 
-1. Deactivates the link and flips it to the deny response.
-2. Bans every raw IP that hit the link, **except** the approved target's
-   address (taken from the approved submission).
-3. Rewrites the nginx ban include, records a suspicious event, notifies, and
-   writes an audit entry.
+```mermaid
+flowchart TD
+    B[Burn notice on the link] --> S1[Link deactivated]
+    B --> S2[All traffic denied]
+    B --> S3[Visitor IPs banned]
+    S3 --> X[Approved target IP exempt]
+```
 
-Burn is one-way. If you need the link back, clone its configuration manually.
+The burn notice is one click. It deactivates the link, denies all traffic,
+and bans every visitor IP except the approved target. Use it when an op is
+blown.
 
-## Decoy canaries
+## Serve ratios
 
-On by default (`DECOY_CANARIES=true`). Every decoy page embeds a unique
-per-visitor tracking pixel under `/g/canary/<token>.gif`. A hit on that path
-is always a machine: either a sandbox re-analyzing the decoy later (valid
-token re-hit) or someone probing token patterns (forgery). Both are recorded
-as suspicious events; the response is always a 1x1 GIF so the probe learns
-nothing.
+A link can serve the payload on only some passing requests (for example
+`1/20`). The rest see the held view. Use this to slow scanners while the real
+target retries. Failed rolls never consume uses.
 
-## Notification channels
+## Regular care
 
-- **Panel**: toast + bing (toggle in the topbar) - works while the panel is open.
-- **Browser**: Notification API - panel tab must be open; grant permission on Settings.
-- **Web Push**: VAPID push - works when the panel is closed. Configure
-  `VAPID_PRIVATE_KEY` / `VAPID_PUBLIC_KEY` / `VAPID_ADMIN_EMAIL`
-  (`manage.py vapid_keys` generates keys), then enable "Web Push" on Settings
-  per device. Select the "Web Push" channel in the preferences matrix.
-- **Telegram**: bot DMs; the only channel that also accepts *inbound*
-  decisions (replies and inline buttons).
-
-## Blocking rules
-
-Blocking Rules is a firewall-style chain: rulesets evaluated top to bottom,
-first matching rule wins. An ALLOW rule stops the chain (use it for trusted
-operators so later block rules never touch them); a BLOCK rule serves the
-decoy, logs a `blocked` event, and can auto-ban the IP.
-
-- Rules are typed regex conditions: `ip`, `cidr`, `ua`, `asn`, `isp`,
-  `country`, `city`, combined with ALL / ANY / NONE logic plus per-condition
-  negation. ASN/ISP/geo conditions only fire when enrichment data exists for
-  the address (see deploy.md); a rule with unknown inputs never fires.
-- Sets default to one "everything" chain; additional sets can be scoped to
-  404s only or to a specific delivery link. Drag rules to reorder them inside
-  a set; drag set headers to reorder sets.
-- Export/Import as JSON from the page header; imports always land disabled.
-- Presets seed disabled on first start. Use the Test page (or
-  `POST /api/v1/block-rules/test/`) to dry-run any IP + user agent against the
-  whole chain before enabling anything - enabled rules apply to operators too.
-
-## Decoy pages and the public surface
-
-Anything outside the operator prefix (unknown URLs, `/`, `/panel/` when
-probed) returns the default decoy page - for anonymous visitors and signed-in
-operators alike. Only inside the prefix do operators get the panel's own 404.
-Pick the default page under Decoy Pages: any of the pages shipped with the
-repo, an uploaded HTML file, or a redirect to another site. Every served decoy
-carries a per-visitor canary pixel; a re-hit or a forged token shows up as a
-suspicious event.
+- Run `./update.sh` to update. Run `./update.sh --reset` for a clean install.
+- Check Service Health when something looks wrong.
+- Rotate agent channels after a rebuild of the agent.
+- Review Banned IPs weekly. Lift stale entries.

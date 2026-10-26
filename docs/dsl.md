@@ -1,24 +1,58 @@
 # DSL Reference
 
-Configuration languages used across the control plane: submission ciphers,
-auto-decision rules, and link templates.
+**This page is the reference for the configuration languages in the control
+plane:** submission ciphers, auto-decision rules, gate types, and link
+templates.
+
+## Gate types
+
+| Gate | The visitor presents | On failure |
+|---|---|---|
+| `none` | the path only | held view |
+| `token` | `?t=` or the `X-Gate-Token` header | held view + suspicious event |
+| `totp` | a time-based code, single-use per link | held view + suspicious event |
+| `submission` | an encrypted POST body | held view |
+| `network` | nothing - the IP/UA allow-lists decide | held view + suspicious event |
+
+The network profile (IP allow-list, UA allow-list, header contract) runs
+before the credential check on every gate type.
+
+> [!NOTE]
+> A TOTP code works once per link. A replayed code is rejected and logged.
+> Pick the code format (8-hex or 6-digit) under Settings.
+
+## The checks run in a fixed order
+
+```mermaid
+flowchart TD
+    A[Network profile<br/>IP · UA · header contract] --> B[Credential gate<br/>none · token · TOTP · submission]
+    B --> C[JA3 / JA4 fingerprint]
+    C --> D[Replay dedupe]
+    D --> E[Approval status]
+    E --> F[Serve ratio]
+    F --> G[Release]
+    A & B & C & D -.->|fail| H[Held view]
+    E & F -.->|no| H
+```
+
+A failure at any step looks the same to the visitor.
 
 ## Submission cipher templates
 
-Used by `gate_type=submission` links to decode/decrypt the POST body.
-The body may be the raw blob or a JSON wrapper: `{"data": "<blob>"}`.
+The submission gate decodes the POST body with one template. The body can be
+the raw blob or a JSON wrapper: `{"data": "<blob>"}`.
 
-| Template | Key | IV | Decodes to |
+| Template | Key | IV | Output |
 |---|---|---|---|
 | `base64` | - | - | raw bytes (must be JSON) |
-| `xor` | passphrase | - | base64(blob) XOR key bytes (repeating) |
-| `aes256` | 32-byte hex, or passphrase (→ SHA-256) | 16-byte hex | AES-256-CBC, PKCS7 |
+| `xor` | passphrase | - | base64(blob) XOR key bytes, repeating |
+| `aes256` | 32-byte hex, or passphrase (SHA-256) | 16-byte hex | AES-256-CBC, PKCS7 |
 
-After decoding, the payload must be a JSON **object** and contain every field
-in `expected_fields`. String fields that base64-decode to image magic bytes
-(PNG/JPEG/GIF/BMP) are extracted as images.
+After decoding, the payload must be a JSON object. It must contain every
+field in `expected_fields`. String fields that base64-decode to image magic
+bytes (PNG, JPEG, GIF, BMP) become images on the submission.
 
-## Auto-decision rules (`auto_rules`)
+## Auto-decision rules
 
 ```json
 [
@@ -31,47 +65,41 @@ in `expected_fields`. String fields that base64-decode to image magic bytes
 ]
 ```
 
-Evaluation is top-down; the first rule whose `when` matches decides the
-submission. No match → stays pending for a human.
+The rules run top-down. The first match decides the submission. No match
+means the submission waits for a human.
 
-- `fields_match` - **all** listed fields must exist and match their regex.
-- `forbid` - if **any** decoded value matches **any** forbid regex, the rule
-  is skipped. Forbidden signals veto approvals; they cannot trigger denies by
-  themselves (write an explicit deny rule for patterns you want dead).
-- `require_images` - at least one image must have been extracted.
+```mermaid
+flowchart TD
+    S[Decoded submission] --> R{Rule 1 matches?}
+    R -->|yes| D1[Decide: approve or deny]
+    R -->|no| R2{Rule 2 matches?}
+    R2 -->|yes| D1
+    R2 -->|no| W[Stays pending for an operator]
+```
 
-Every auto-decision records `via: auto-rule#<index>` and the matched reasons in
-the HitEvent detail.
+- `fields_match`: every listed field must exist and match its regex.
+- `forbid`: if any decoded value matches any forbid regex, the rule is
+  skipped. A forbid match cannot deny by itself. Write an explicit deny rule
+  for patterns you want dead.
+- `require_images`: at least one image must be extracted.
 
-## Gate types
+Each auto-decision records `via: auto-rule#<index>` in the hit detail.
 
-> TOTP codes are single-use per link: the first accepted code is recorded,
-> a replay is rejected and logged as a suspicious event, and records prune
-> after three windows. The code format (8-hex truncated HMAC vs 6-digit
-> decimal) is an operator setting under Settings -> Gate codes.
+## Hold responses
 
-| Gate | Client presents | Failure response |
-|---|---|---|
-| `none` | path only | hold response |
-| `token` | `?t=` or `X-Gate-Token` header | hold response + suspicious event |
-| `totp` | time-based code (`?t=` or header), single-use per link | hold response + suspicious event |
-| `submission` | POST body (cipher template) | hold response; undecryptable → suspicious |
-
-Fingerprint requirements (JA3/JA4) compose with the gate type: the gate must
-pass **and** the fingerprint must match.
-
-Hold responses: `blank` (HTTP 204), `placeholder` (generic page), `decoy`
-(convincing default page with canary pixel).
+| Setting | The held visitor gets |
+|---|---|
+| `blank` | HTTP 204, empty body |
+| `placeholder` | a generic page |
+| `decoy` | the default decoy page |
 
 ## Deployment templates
 
-Built-in presets (`gates/link_templates.py`), loadable from the link form:
+Load a preset from the link form. Replace the `{placeholder}` values.
 
-| Template | Use |
+| Template | Use it for |
 |---|---|
-| `dropper-checkin` | AES-encrypted env package; approval before key release; benevolent fallback |
-| `key-drop-one-time` | TOTP-gated, single-retrieval key, time-limited |
-| `loader-stage` | Token-gated file with benevolent fallback, limited uses |
+| `dropper-checkin` | encrypted environment package, approval before key release |
+| `key-drop-one-time` | TOTP-gated, single-retrieval key |
+| `loader-stage` | token-gated file with limited uses |
 | `file-drop` | pwndrop proxy, 10 uses, watermarking on |
-
-`{placeholder}` values in defaults are meant to be replaced at creation.

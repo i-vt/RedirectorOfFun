@@ -1,29 +1,30 @@
-# Nginx C2 Redirector - Full Testlab Setup Guide
+# Testlab setup guide
 
-Everything documented here reflects the actual steps, errors, and fixes encountered during a live deployment. Commands are exact and in order.
+**This page walks you through a full lab deployment, step by step, with the
+exact commands.** Three machines: a target VM, the redirector, and an MSF
+server. Follow the parts in order. Errors we hit and their fixes are included
+(Part 4).
 
----
+The build below is the classic manual path. For the current control plane
+(gates, lures, approvals), prefer `./start.sh` and read
+[docs/deploy.md](docs/deploy.md).
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Attack Chain                          │
-│                                                             │
-│  VirtualBox VM          Redirector           MSF Server     │
-│  (test agent)           (nginx)              (Metasploit)   │
-│                                                             │
-│  payload.exe ──HTTPS──▶ 435pau.com:443 ──HTTPS──▶ :4444    │
-│               ◀─stage──               ◀─stage──            │
-│               ──cb────▶               ──cb────▶            │
-│                                                             │
-│  38.x.x.x (local)    38.55.155.155    40.33.133.133        │
-└─────────────────────────────────────────────────────────────┘
-```
+The agent only ever talks to the redirector. The MSF server address is never
+exposed to the target network.
 
-**Key principle:** The agent only ever connects to the redirector IP/domain. The MSF server IP is never exposed to the target network.
-
----
+```mermaid
+flowchart LR
+    subgraph Lab
+        VM[Target VM<br/>VirtualBox]
+        R[Redirector<br/>nginx :443<br/>38.55.155.155]
+        M[MSF server<br/>:4444<br/>40.33.133.133]
+    end
+    VM -->|HTTPS stage + callbacks| R
+    R -->|HTTPS| M
+    VM -.->|never sees| M
+```
 
 ## Infrastructure
 
