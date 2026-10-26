@@ -55,7 +55,7 @@ class DeliveryLinkSerializer(serializers.ModelSerializer):
                   "domain", "ja3_fingerprint", "ja4_fingerprint", "watermark",
                   "allowed_uas", "allowed_ips", "header_contract", "replay_dedupe",
                   "active_window_start", "active_window_end", "serve_num", "serve_den",
-                  "payload", "payload_size", "benevolent_file",
+                  "payload", "payload_size", "benevolent_file", "serve_as",
                   "created_at", "updated_at"]
         read_only_fields = ["approval_status", "hit_count", "payload_size", "created_at", "updated_at"]
         extra_kwargs = {"payload": {"required": False}, "benevolent_file": {"required": False}}

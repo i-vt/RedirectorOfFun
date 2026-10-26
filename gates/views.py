@@ -108,6 +108,7 @@ def _link_from_post(request, link):
             library.register_upload(request.FILES["payload"], label=link.label)
         except (OSError, ValueError):
             pass  # the library is a convenience; never break a link save
+    link.serve_as = request.POST.get("serve_as", "").strip()[:200]
     if request.FILES.get("benevolent_file"):
         link.benevolent_file = request.FILES["benevolent_file"]
     link.benevolent_text = request.POST.get("benevolent_text", "")

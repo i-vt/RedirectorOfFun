@@ -37,7 +37,7 @@
     <div class="stat-card"><span class="section-label">DOMAIN</span><strong class="mono">{{ link.domain|default:"default" }}</strong></div>
     <div class="stat-card"><span class="section-label">FINGERPRINTS</span><strong class="mono">{{ link.ja3_fingerprint|slice:":10"|default:"-" }} {{ link.ja4_fingerprint|slice:":10"|default:"-" }}</strong></div>
     <div class="stat-card"><span class="section-label">WATERMARK</span><strong>{{ link.watermark|yesno:"ON,off" }}</strong></div>
-    <div class="stat-card"><span class="section-label">PAYLOAD FILE</span><strong class="mono" style="font-size:.72rem;word-break:break-all">{% if link.payload %}{{ link.payload.name|basename }}{% else %}-{% endif %}</strong></div>
+    <div class="stat-card"><span class="section-label">PAYLOAD FILE</span><strong class="mono" style="font-size:.72rem;word-break:break-all">{% if link.payload %}{{ link.payload.name|basename }}{% if link.serve_as %} → {{ link.serve_as }}{% endif %}{% else %}-{% endif %}</strong></div>
   </div>
   <p class="muted" style="font-size:.7rem"><a href="{% url 'm-link' link.pk %}">Open in mobile UI →</a> · <a href="{% url 'gate-payloads' %}">Manage payloads →</a></p>
   <details style="margin-bottom:10px">

@@ -572,6 +572,7 @@ def _mark_served(link):
 def _safe_filename(name):
     import re
     cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", name)[:120]
+    cleaned = cleaned.lstrip(".").replace("..", "__")
     return cleaned or "download.bin"
 
 
@@ -633,6 +634,13 @@ def serve_link(link, request):
         record_hit("suspicious", request=request, path=link.path, link=link,
                    status_code=502, detail={"reason": "serve failed"})
         return HttpResponse(status=502)
+    if link.serve_as:
+        # Masquerade: the stored/uploaded name stays internal; the visitor
+        # gets the operator-chosen filename (e.g. fwfafs.exe -> helper.pdf.exe).
+        filename = link.serve_as
+        detail_masquerade = {"served_as": _safe_filename(filename)}
+    else:
+        detail_masquerade = {}
     if not link.register_release():
         record_hit("expired", request=request, path=link.path, link=link, status_code=410)
         return HttpResponse(status=410)
@@ -641,6 +649,7 @@ def serve_link(link, request):
     if marker:
         content = content + b"\n" + marker.encode() + b"\n"
     detail = {"bytes": len(content), "filename": filename}
+    detail.update(detail_masquerade)
     if marker:
         detail["watermark"] = marker
     record_hit("download", request=request, path=link.path, link=link, detail=detail)
