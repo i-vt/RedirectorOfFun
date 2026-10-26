@@ -16,6 +16,7 @@ def hash_address(address):
 
 
 def event_from_record(record, raw_line="", track_all=None):
+    from gates.crypto_utils import sanitize_text
     status = int(record.get("status", 0) or 0)
     if track_all is None:
         track_all = getattr(settings, "TRACK_ALL_REQUESTS", False)
@@ -30,11 +31,11 @@ def event_from_record(record, raw_line="", track_all=None):
         request_id=request_id,
         occurred_at=occurred_at,
         method=str(record.get("method", "GET"))[:10].upper(),
-        path=str(record.get("path", record.get("uri", "/")))[:8192],
+        path=sanitize_text(str(record.get("path", record.get("uri", "/"))), 8192),
         status=status,
         source_ip=remote_addr or None,
         source_ip_hash=hash_address(remote_addr),
-        user_agent=str(record.get("user_agent", ""))[:1000],
+        user_agent=sanitize_text(str(record.get("user_agent", ""))),
         country_code=str(record.get("country_code", ""))[:2].upper(),
         city=str(record.get("city", ""))[:100],
     )

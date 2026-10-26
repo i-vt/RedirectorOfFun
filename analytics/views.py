@@ -73,10 +73,13 @@ def events_view(request):
         from gates.models import IPIntel
         intel = {i.ip: i for i in IPIntel.objects.filter(ip__in=ips)}
     template = "panel/_events_table.html" if request.headers.get("HX-Request") else "panel/events.html"
+    from gates.models import GateConfig
+    show = request.GET.get("identifiers")
+    show_identifiers = (show == "1") if show is not None else GateConfig.get_solo().reveal_identifiers
     return render(request, template, {
         "title": "404 Events", "page": page, "events": page.object_list,
         "intel": intel,
-        "show_identifiers": request.GET.get("identifiers") == "1",
+        "show_identifiers": show_identifiers,
         "track_all": getattr(settings, "TRACK_ALL_REQUESTS", False),
     })
 

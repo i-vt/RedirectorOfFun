@@ -82,13 +82,13 @@
   </div>
   {% endif %}
   {% if link.manual_admission %}
-  <div class="panel-heading"><div><span class="section-label">VISITOR ADMISSIONS {% if pending_admissions %}<span class="status-badge warn">{{ pending_admissions }} PENDING</span>{% endif %}</span><h2>Who may pass</h2><p>Each new visitor IP waits for a decision after passing the gate. Admitted visitors pass from then on.</p></div></div>
+  <div class="panel-heading"><div><span class="section-label">VISITOR ADMISSIONS {% if pending_admissions %}<span class="status-badge warn">{{ pending_admissions }} PENDING</span>{% endif %}</span><h2>Who may pass</h2><p>Each new visitor IP waits for a decision after passing the gate. Admitted visitors pass from then on.</p></div><a class="text-link" href="?reveal={% if reveal_ids %}0{% else %}1{% endif %}">{% if reveal_ids %}HIDE IDENTIFIERS{% else %}REVEAL IDENTIFIERS{% endif %}</a></div>
   {% if admissions %}<div class="table-wrap"><table><thead><tr><th>FIRST SEEN / UTC</th><th>VISITOR</th><th>UA</th><th>HITS</th><th>STATUS</th><th>DECISION</th></tr></thead><tbody>
     {% for adm in admissions %}
     <tr>
       <td class="mono muted nowrap">{{ adm.created_at|date:"Y-m-d H:i:s" }}</td>
-      <td class="mono">{{ adm.ip_hash|slice:":12" }}</td>
-      <td class="muted" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ adm.user_agent }}">{{ adm.user_agent|truncatechars:40|default:"-" }}</td>
+      <td class="mono">{% if reveal_ids %}{{ adm.ip }}{% else %}{{ adm.ip_hash|slice:":12" }}{% endif %}</td>
+      <td class="muted" {% if not reveal_ids %}style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ adm.user_agent }}"{% else %}style="font-size:.66rem;overflow-wrap:anywhere"{% endif %}>{% if reveal_ids %}{{ adm.user_agent|default:"-" }}{% else %}{{ adm.user_agent|truncatechars:40|default:"-" }}{% endif %}</td>
       <td class="mono">{{ adm.hits }}</td>
       <td>{% if adm.status == 'pending' %}<span class="status-badge warn">PENDING</span>{% elif adm.status == 'admitted' %}<span class="status-badge good">ADMITTED</span>{% else %}<span class="status-badge bad">DENIED</span>{% endif %}</td>
       <td>{% if adm.status == 'pending' %}

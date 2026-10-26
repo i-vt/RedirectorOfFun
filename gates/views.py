@@ -15,7 +15,7 @@ from notifications.services import notify
 
 from .models import (
     AgentChannel, BannedIP, BlockingRule, BUILTIN_DECOYS, DecoyPage, DeliveryLink,
-    HitEvent, LureSite, RuleSet, seed_blocking_rule_presets, Submission,
+    GateConfig, HitEvent, LureSite, RuleSet, seed_blocking_rule_presets, Submission,
     SubmissionImage, validate_auto_rules, validate_header_contract,
 )
 from .link_templates import LINK_TEMPLATES
@@ -223,7 +223,16 @@ def link_detail(request, pk):
         "public_url": request.build_absolute_uri(link.path),
         "admissions": link.admissions.select_related("decided_by")[:20],
         "pending_admissions": link.admissions.filter(status="pending").count(),
+        "reveal_ids": _reveal_ids(request),
     })
+
+
+def _reveal_ids(request):
+    """Identifiers (full IP/UA) shown when the page asks or the global default says so."""
+    override = request.GET.get("reveal")
+    if override is not None:
+        return override == "1"
+    return GateConfig.get_solo().reveal_identifiers
 
 
 @login_required
@@ -742,11 +751,14 @@ def submissions_view(request):
     paginator = Paginator(submissions, 25)
     page = paginator.get_page(request.GET.get("page"))
     template = "panel/_submissions_table.html" if request.headers.get("HX-Request") else "panel/submissions.html"
+    from .models import GateAdmission
     return render(request, template, {
         "title": "Approval Queue", "page": page, "submissions": page.object_list,
         "status": status,
         "pending_count": Submission.objects.filter(status="pending").count(),
         "undo_seconds": services_undo_window(),
+        "pending_admissions": GateAdmission.objects.filter(status="pending").select_related("link"),
+        "reveal_ids": _reveal_ids(request),
     })
 
 

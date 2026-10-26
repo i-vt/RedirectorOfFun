@@ -67,15 +67,16 @@ def client_ip(request):
 
 def record_hit(category, *, request=None, path="", link=None, agent_channel=None,
                status_code=200, detail=None, ip_override=""):
+    from .crypto_utils import sanitize_text
     ip = ip_override or (client_ip(request) if request is not None else "")
     event = HitEvent(
         category=category,
-        path=path[:8192],
+        path=sanitize_text(path, 8192),
         link=link,
         agent_channel=agent_channel,
         ip_hash=hash_address(ip),
         raw_ip=ip or None,
-        user_agent=(request.META.get("HTTP_USER_AGENT", "")[:1000] if request is not None else ""),
+        user_agent=(sanitize_text(request.META.get("HTTP_USER_AGENT", "")) if request is not None else ""),
         status_code=status_code,
         detail=detail or {},
     )
@@ -334,13 +335,14 @@ def handle_submission(link, request):
                    status_code=400, detail={"reason": "missing expected fields", "missing": missing})
         return hold_response(link, request)
 
+    from .crypto_utils import sanitize_json_text, sanitize_text
     submission = Submission.objects.create(
         link=link,
         raw_blob=blob[:65536],
-        decoded_json=decoded,
+        decoded_json=sanitize_json_text(decoded, value_limit=2000),
         client_ip_hash=hash_address(client_ip(request)),
         raw_ip=client_ip(request) or None,
-        user_agent=request.META.get("HTTP_USER_AGENT", "")[:1000],
+        user_agent=sanitize_text(request.META.get("HTTP_USER_AGENT", "")),
     )
     for image in extract_images(decoded):
         SubmissionImage.objects.create(
@@ -383,6 +385,7 @@ def check_admission(link, request, path):
     visitors get the held view; denied visitors get the deny response. A POST
     to a fingerprint-placeholder link attaches browser intel to the pending
     admission and answers 204."""
+    from .crypto_utils import sanitize_text
     from .models import GateAdmission
     ip = client_ip(request)
     if not ip:
@@ -390,7 +393,7 @@ def check_admission(link, request, path):
     admission, created = GateAdmission.objects.get_or_create(
         link=link, ip=ip,
         defaults={"ip_hash": hash_address(ip),
-                  "user_agent": request.META.get("HTTP_USER_AGENT", "")[:1000]})
+                  "user_agent": sanitize_text(request.META.get("HTTP_USER_AGENT", ""))})
     if not created:
         GateAdmission.objects.filter(pk=admission.pk).update(
             hits=F("hits") + 1, last_seen_at=timezone.now())
@@ -411,7 +414,8 @@ def check_admission(link, request, path):
             payload = json.loads(request.body.decode("utf-8", errors="replace"))
             intel = payload.get("fingerprint")
             if isinstance(intel, dict) and len(json.dumps(intel)) <= 8000:
-                admission.fingerprint = intel
+                from .crypto_utils import sanitize_json_text
+                admission.fingerprint = sanitize_json_text(intel)
                 admission.save(update_fields=["fingerprint"])
         except (json.JSONDecodeError, UnicodeDecodeError):
             pass

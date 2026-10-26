@@ -799,6 +799,9 @@ class GateConfig(models.Model):
 
     key = models.CharField(max_length=10, unique=True, default="main")
     totp_style = models.CharField(max_length=10, choices=TOTP_STYLE_CHOICES, default="hex8")
+    reveal_identifiers = models.BooleanField(
+        default=False,
+        help_text="Show full IPs and user agents by default (admissions, events). Off = hashes and truncated UAs until revealed per page.")
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

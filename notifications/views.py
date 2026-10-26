@@ -31,6 +31,14 @@ def settings_view(request):
                              metadata={"totp_style": style}, request=request)
                 messages.success(request, "Gate code format updated; reissue in-flight links.")
             return redirect("settings")
+        if request.POST.get("action") == "identifiers":
+            config = GateConfig.get_solo()
+            config.reveal_identifiers = request.POST.get("reveal_identifiers") == "on"
+            config.save(update_fields=["reveal_identifiers"])
+            record_event(action="gate.identifiers_toggled", actor=request.user, target=config,
+                         metadata={"reveal": config.reveal_identifiers}, request=request)
+            messages.success(request, "Identifier display preference saved.")
+            return redirect("settings")
         for event_type, _ in NotificationPreference.EVENT_CHOICES:
             for channel, _ in NotificationPreference.CHANNEL_CHOICES:
                 key = f"pref-{event_type}-{channel}"
@@ -58,6 +66,7 @@ def settings_view(request):
         "theme_choices": request.user.THEME_CHOICES,
         "totp_style": GateConfig.get_solo().totp_style,
         "totp_style_choices": GateConfig.TOTP_STYLE_CHOICES,
+        "reveal_identifiers": GateConfig.get_solo().reveal_identifiers,
     })
 
 

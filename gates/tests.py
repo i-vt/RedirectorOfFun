@@ -3346,3 +3346,108 @@ class AdmissionOnlyNetworkGateTests(TestCase):
         link = DeliveryLink.objects.get(path="/g/ao/form")
         self.assertTrue(link.manual_admission)
         self.assertEqual(response.status_code, 302)
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class AdmissionsOnApprovalsTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="apop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _pending_admission(self, ua="MyAgent/1"):
+        link = DeliveryLink.objects.create(
+            path="/g/ap/one", kind="key", key_text="K", gate_type="network",
+            allowed_ips=["0.0.0.0/0"], manual_admission=True, placeholder="blank")
+        self.public.get("/g/ap/one", HTTP_USER_AGENT=ua)
+        from gates.models import GateAdmission
+        return GateAdmission.objects.get(link=link)
+
+    def test_pending_admission_shows_on_approvals_page(self):
+        admission = self._pending_admission()
+        response = self.client.get(reverse("gate-submissions"))
+        self.assertContains(response, "VISITOR ADMISSIONS")
+        self.assertContains(response, "/g/ap/one")
+        self.assertContains(response, "MyAgent/1")
+        # admit straight from the approvals page
+        self.client.post(reverse("gate-admission-decide",
+                                 args=[admission.link.pk, admission.pk, "admit"]),
+                         HTTP_REFERER=reverse("gate-submissions"))
+        admission.refresh_from_db()
+        self.assertEqual(admission.status, "admitted")
+        self.assertEqual(self.public.get("/g/ap/one", HTTP_USER_AGENT="MyAgent/1").status_code, 200)
+
+    def test_identifiers_masked_then_revealed(self):
+        admission = self._pending_admission(ua="MyVeryLongCustomAgent/1.2.3 special-build xyz")
+        link = admission.link
+        response = self.client.get(reverse("gate-link-detail", args=[link.pk]))
+        self.assertNotContains(response, admission.ip)  # masked by default
+        self.assertContains(response, admission.ip_hash[:12])
+        response = self.client.get(reverse("gate-link-detail", args=[link.pk]) + "?reveal=1")
+        self.assertContains(response, admission.ip)
+        self.assertContains(response, "MyVeryLongCustomAgent/1.2.3 special-build xyz")
+
+    def test_settings_default_controls_reveal(self):
+        from gates.models import GateConfig
+        admission = self._pending_admission()
+        config = GateConfig.get_solo()
+        config.reveal_identifiers = True
+        config.save(update_fields=["reveal_identifiers"])
+        response = self.client.get(reverse("gate-link-detail", args=[admission.link.pk]))
+        self.assertContains(response, admission.ip)  # shown by default now
+        # the settings page toggles it back
+        self.client.post(reverse("settings"), {"action": "identifiers"})  # unchecked
+        config.refresh_from_db()
+        self.assertFalse(config.reveal_identifiers)
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class InjectionHygieneTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="xjop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def test_control_chars_stripped_at_storage(self):
+        from gates.crypto_utils import sanitize_json_text, sanitize_text
+        self.assertEqual(sanitize_text("a\x00b\x1b[31mc\n"), "ab[31mc")
+        cleaned = sanitize_json_text({"host\nname": "va\x00lue", "list": ["\x07"]})
+        self.assertEqual(cleaned, {"hostname": "value", "list": [""]})
+
+    def test_xss_probe_escaped_in_submission_views(self):
+        link = DeliveryLink.objects.create(path="/g/xj/one", kind="key", key_text="K",
+                                           gate_type="submission", cipher="base64",
+                                           expected_fields=["hostname"], placeholder="blank")
+        payload = base64.b64encode(json.dumps({
+            "hostname": "<script>alert(1)</script>", "user": "{{7*7}}"}).encode()).decode()
+        self.public.post("/g/xj/one", data=payload, content_type="application/octet-stream")
+        for url in (reverse("gate-submissions") + "?status=pending",
+                    reverse("gate-link-detail", args=[link.pk])):
+            response = self.client.get(url)
+            self.assertNotContains(response, "<script>alert(1)</script>")
+            self.assertContains(response, "&lt;script&gt;")
+            self.assertNotContains(response, "49", msg_prefix=url)  # SSTI not evaluated
+
+    def test_xss_probe_in_admission_intel_escaped(self):
+        link = DeliveryLink.objects.create(
+            path="/g/xj/two", kind="key", key_text="K", gate_type="network",
+            allowed_ips=["0.0.0.0/0"], manual_admission=True, placeholder="fingerprint")
+        evil = {"ua": "<img src=x onerror=alert(1)>", "tz": "{{config}}"}
+        self.public.post("/g/xj/two", data=json.dumps({"fingerprint": evil}),
+                         content_type="application/json")
+        response = self.client.get(reverse("gate-link-detail", args=[link.pk]))
+        self.assertNotContains(response, "<img src=x onerror=alert(1)>")
+        self.assertContains(response, "&lt;img")
+        self.assertNotContains(response, "<config>")
+
+    def test_hostile_user_agent_safe_in_events_and_hits(self):
+        ua = '<script>alert("x")</script>\x00\x1b[31m'
+        DeliveryLink.objects.create(path="/g/xj/three", kind="key", key_text="K", placeholder="blank")
+        self.public.get("/g/xj/three", HTTP_USER_AGENT=ua)
+        hit = HitEvent.objects.get(category="key_served")
+        self.assertNotIn("\x00", hit.user_agent)
+        self.assertNotIn("\n", hit.user_agent)
+        response = self.client.get(reverse("gate-events"))
+        self.assertNotContains(response, '<script>alert("x")</script>')

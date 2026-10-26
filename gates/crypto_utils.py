@@ -20,6 +20,31 @@ class GateCryptoError(ValueError):
     """Raised when a blob cannot be decoded/decrypted or parsed."""
 
 
+def sanitize_text(value, limit=1000):
+    """Strip control characters and cap length for any untrusted text we store.
+
+    Templates autoescape on render; this guards the other consumers: logs,
+    terminals, Telegram messages, exports."""
+    import re
+    return re.sub(r"[\x00-\x1f\x7f-\x9f]", "", str(value))[:limit]
+
+
+def sanitize_json_text(value, key_limit=60, value_limit=300):
+    """Recursively sanitize keys/strings in untrusted JSON-ish data."""
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in list(value.items())[:80]:
+            cleaned[sanitize_text(key, key_limit)] = sanitize_json_text(item, key_limit, value_limit)
+        return cleaned
+    if isinstance(value, list):
+        return [sanitize_json_text(item, key_limit, value_limit) for item in value[:80]]
+    if isinstance(value, str):
+        return sanitize_text(value, value_limit)
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return sanitize_text(value, value_limit)
+
+
 def b64_decode(blob: str) -> bytes:
     try:
         return base64.b64decode(blob.strip(), validate=True)
