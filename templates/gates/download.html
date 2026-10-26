@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download</title>
+<style>
+  html,body{margin:0;height:100%;background:#f4f5f7;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#3c4043}
+  .wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+  .card{background:#fff;border:1px solid #e1e4e8;border-radius:12px;padding:28px 34px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+  p{font-size:14px;margin:0 0 6px}
+  small{color:#9aa0a6;font-size:11px}
+  a{color:#1a73e8;text-decoration:none}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <p>Your download should start automatically.</p>
+      <small>If it does not, <a href="{{ download_url }}">download {{ filename }} directly</a>.</small>
+    </div>
+  </div>
+  <a id="dl" href="{{ download_url }}" download="{{ filename }}" hidden></a>
+  {{ target_json|json_script:"redirect-target" }}
+<script>
+(() => {
+  document.getElementById("dl").click();
+  const target = JSON.parse(document.getElementById("redirect-target").textContent);
+  setTimeout(() => { window.location.href = target; }, 1600);
+})();
+</script>
+</body>
+</html>

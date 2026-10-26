@@ -98,6 +98,8 @@ def _render_link_form(request, link, title):
         "allowed_ips_csv": ", ".join(link.allowed_ips or []),
         "domains": getattr(settings, "REDIRECTOR_DOMAINS", []),
         "templates": LINK_TEMPLATES,
+        "loading_pages": services.page_pool("loading"),
+        "fingerprint_pages": services.page_pool("fingerprint"),
     })
 
 
@@ -129,6 +131,10 @@ def _link_from_post(request, link):
         except (OSError, ValueError):
             pass  # the library is a convenience; never break a link save
     link.serve_as = request.POST.get("serve_as", "").strip()[:200]
+    link.post_download_redirect = request.POST.get("post_download_redirect") == "on"
+    link.post_download_url = request.POST.get("post_download_url", "").strip()[:300]
+    link.loading_page = request.POST.get("loading_page", "").strip()[:120]
+    link.fingerprint_page = request.POST.get("fingerprint_page", "").strip()[:120]
     if request.FILES.get("benevolent_file"):
         link.benevolent_file = request.FILES["benevolent_file"]
     link.benevolent_text = request.POST.get("benevolent_text", "")

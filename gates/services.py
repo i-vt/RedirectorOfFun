@@ -288,9 +288,15 @@ def hold_response(link, request=None):
     if link.placeholder == "decoy":
         return _decoy(request)
     if link.placeholder == "loading":
+        custom = read_pool_page("loading", link.loading_page)
+        if custom is not None:
+            return range_aware_response(request, custom, content_type="text/html")
         return range_aware_response(
             request, render_to_string("gates/loading.html"), content_type="text/html")
     if link.placeholder == "fingerprint":
+        custom = read_pool_page("fingerprint", link.fingerprint_page)
+        if custom is not None:
+            return range_aware_response(request, custom, content_type="text/html")
         return range_aware_response(
             request, render_to_string("gates/fingerprint.html"), content_type="text/html")
     return _blank()
@@ -376,6 +382,51 @@ def handle_submission(link, request):
         logger.info("auto-rule #%s %s submission #%s (%s)", rule_index, verdict,
                     submission.pk, "; ".join(reasons))
     return hold_response(link, request)
+
+
+def _make_dl_token(link):
+    """Short-lived signed token letting the interstitial's download through."""
+    from django.core.signing import TimestampSigner
+    return TimestampSigner(salt="rof-dl").sign(f"dl:{link.pk}")
+
+
+def _valid_dl_token(link, token):
+    if not token:
+        return False
+    from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
+    try:
+        value = TimestampSigner(salt="rof-dl").unsign(token, max_age=180)
+    except (BadSignature, SignatureExpired):
+        return False
+    return value == f"dl:{link.pk}"
+
+
+# ─── Custom held-view page pools (./loading/, ./fingerprint/) ────────────────
+
+def page_pool(kind):
+    """Names of operator-provided .html pages in ./loading/ or ./fingerprint/."""
+    from pathlib import Path
+    directory = Path(getattr(settings, f"{kind.upper()}_PAGES_DIR", settings.BASE_DIR / kind))
+    if not directory.is_dir():
+        return []
+    return sorted(p.name for p in directory.glob("*.html") if p.is_file())
+
+
+def read_pool_page(kind, name):
+    """Read a pool page, confined to its folder. None when absent/invalid."""
+    import re
+    from pathlib import Path
+    if not name or not re.fullmatch(r"[A-Za-z0-9._-]+\.html", name):
+        return None
+    directory = Path(getattr(settings, f"{kind.upper()}_PAGES_DIR",
+                             settings.BASE_DIR / kind)).resolve()
+    path = (directory / name).resolve()
+    if path.parent != directory or not path.is_file():
+        return None
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
 
 
 def check_admission(link, request, path):
@@ -733,6 +784,46 @@ def serve_link(link, request):
         detail_masquerade = {"served_as": _safe_filename(filename)}
     else:
         detail_masquerade = {}
+    if link.post_download_redirect:
+        # Interstitial flow: the page counts the release and hands out a
+        # short-lived token; the token fetch serves the bytes, uncounted.
+        dl_token = request.GET.get("dl", "")
+        if not _valid_dl_token(link, dl_token):
+            if not link.register_release():
+                record_hit("expired", request=request, path=link.path, link=link, status_code=410)
+                return HttpResponse(status=410)
+            _mark_served(link)
+            filename = _safe_filename(filename)
+            target = link.post_download_url or link.benevolent_target or "https://www.google.com/"
+            token = _make_dl_token(link)
+            separator = "&" if "?" in request.get_full_path() else "?"
+            download_url = f"{request.get_full_path()}{separator}dl={token}"
+            detail = {"filename": filename, "interstitial": True, "target": target}
+            detail.update(detail_masquerade)
+            if marker:
+                detail["watermark"] = marker
+            record_hit("download", request=request, path=link.path, link=link, detail=detail)
+            notify("gates", {
+                "title": "Gated download released",
+                "detail": f"{link.path} released '{filename}' (use {link.hit_count}); visitor then redirects to {target}.",
+            })
+            return range_aware_response(
+                request,
+                render_to_string("gates/download.html",
+                                 {"download_url": download_url, "target_json": target,
+                                  "filename": filename}),
+                content_type="text/html")
+        # valid continuation token: serve the bytes without counting again
+        filename = _safe_filename(filename)
+        if marker:
+            content = content + b"\n" + marker.encode() + b"\n"
+        detail = {"bytes": len(content), "filename": filename, "continuation": True}
+        detail.update(detail_masquerade)
+        if marker:
+            detail["watermark"] = marker
+        record_hit("download", request=request, path=link.path, link=link, detail=detail)
+        return range_aware_response(request, content, filename=filename,
+                                    content_type=content_type or "application/octet-stream")
     if not link.register_release():
         record_hit("expired", request=request, path=link.path, link=link, status_code=410)
         return HttpResponse(status=410)
@@ -837,6 +928,12 @@ def dispatch(request, path):
             return response
 
     if not link.available:
+        # A signed download-continuation token still serves the bytes: the
+        # interstitial page counted the release (one_time links deactivate
+        # there) and the visitor is mid-download.
+        dl_token = request.GET.get("dl", "")
+        if _valid_dl_token(link, dl_token):
+            return serve_link(link, request)
         record_hit("expired", request=request, path=normalized, link=link, status_code=410)
         return HttpResponse(status=410)
 

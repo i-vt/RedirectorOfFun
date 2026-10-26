@@ -189,6 +189,9 @@ VAPID_ADMIN_EMAIL = os.getenv("VAPID_ADMIN_EMAIL", "mailto:operators@example.com
 MEDIA_URL = "/media/"
 # Payload library: one folder per bundle (files + notes.md + favicon.ico).
 PAYLOAD_LIBRARY_DIR = Path(os.getenv("PAYLOAD_LIBRARY_DIR", str(BASE_DIR / "payloads")))
+# Custom held-view pages: ./loading/*.html and ./fingerprint/*.html pools.
+LOADING_PAGES_DIR = Path(os.getenv("LOADING_PAGES_DIR", str(BASE_DIR / "loading")))
+FINGERPRINT_PAGES_DIR = Path(os.getenv("FINGERPRINT_PAGES_DIR", str(BASE_DIR / "fingerprint")))
 MEDIA_ROOT = BASE_DIR / "var" / "media"
 
 LOGGING = {

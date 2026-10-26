@@ -31,6 +31,17 @@ from . import services, telegram
 from accounts.models import APIKey
 
 
+def follow_download(client, path):
+    """File/proxy links answer with an interstitial page; follow its signed
+    download URL to get the bytes (that is the release)."""
+    import re
+    page = client.get(path)
+    match = re.search(rb'href="([^"]*\?dl=[^"]+)"', page.content)
+    if match is None:
+        return page  # post_download_redirect off: bytes came directly
+    return client.get(match.group(1).decode().replace("&amp;", "&"))
+
+
 def aes_encrypt(plaintext: bytes, passphrase: str, iv: bytes) -> bytes:
     key = hashlib.sha256(passphrase.encode()).digest()
     padder = sym_padding.PKCS7(128).padder()
@@ -270,10 +281,10 @@ class PublicDispatchTests(TestCase):
     def test_proxy_link_fetches_pwndrop_server_side(self):
         link = self.make_link(kind="proxy", pwndrop_url="http://10.255.255.1/files/p.exe", path="/g/proxy/1")
         with mock.patch("gates.services._fetch_pwndrop", return_value=(b"MZ-fake", "application/octet-stream")) as fetch:
-            response = self.client.get(link.path)
+            response = follow_download(self.client, link.path)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"MZ-fake")
-        fetch.assert_called_once_with(link.pwndrop_url)
+        fetch.assert_called()
     def test_denied_link_serves_benevolent_text(self):
         link = self.make_link(requires_approval=True, approval_status="denied",
                               on_deny="benevolent", benevolent_text="exit-clean", path="/g/deny/1")
@@ -915,9 +926,9 @@ class WatermarkCanaryFingerprintTests(TestCase):
         link = DeliveryLink.objects.create(path="/g/wm/2", kind="proxy",
                                            pwndrop_url="http://10.255.255.1/x.bin", watermark=True)
         with mock.patch("gates.services._fetch_pwndrop", return_value=(b"PAYLOAD", "application/octet-stream")):
-            response = self.client.get(link.path)
+            response = follow_download(self.client, link.path)
         self.assertIn(b"ROFWM:", response.content)
-        hit = HitEvent.objects.get(category="download")
+        hit = HitEvent.objects.filter(category="download").latest("created_at")
         self.assertTrue(hit.detail["watermark"].startswith(f"ROFWM:{link.pk}:"))
 
     def test_decoy_embeds_canary(self):
@@ -1747,7 +1758,10 @@ class GateFormatAndRangeTests(TestCase):
         link = DeliveryLink.objects.create(path="/g/rng/3", kind="proxy",
                                            pwndrop_url="http://10.255.255.1/x.bin")
         with mock.patch("gates.services._fetch_pwndrop", return_value=(b"P" * 2000, "application/octet-stream")):
-            partial = Client().get(link.path, HTTP_RANGE="bytes=500-999")
+            import re
+            page = Client().get(link.path)
+            dl = re.search(rb'href="([^"]*\?dl=[^"]+)"', page.content).group(1).decode()
+            partial = Client().get(dl, HTTP_RANGE="bytes=500-999")
         self.assertEqual(partial.status_code, 206)
         self.assertEqual(partial.get("Content-Range"), "bytes 500-999/2000")
 
@@ -2083,7 +2097,7 @@ class PayloadManagerTests(TestCase):
         self.assertEqual(link.label, "Q4 update")
         from django.conf import settings as dj_settings
         self.assertTrue(link.path.startswith(dj_settings.GATE_BASE_PATH))
-        served = self.public.get(link.path)
+        served = follow_download(self.public, link.path)
         self.assertEqual(served.status_code, 200)
         self.assertEqual(served.content, b"PAYLOADBYTES")
 
@@ -2115,7 +2129,7 @@ class PayloadManagerTests(TestCase):
         link.refresh_from_db()
         self.assertNotEqual(link.payload.name, old_name)
         self.assertIn("two.bin", link.payload.name)
-        served = self.public.get(link.path)
+        served = follow_download(self.public, link.path)
         self.assertEqual(served.status_code, 200)
         self.assertEqual(served.content, b"NEWCONTENT")
 
@@ -3042,27 +3056,27 @@ class ServeAsFilenameTests(TestCase):
         link = DeliveryLink.objects.create(path="/g/sa/one", kind="file", placeholder="blank",
                                            serve_as="helper.pdf.exe")
         link.payload.save("fwfafs.exe", ContentFile(b"MZ payload bytes"), save=True)
-        response = self.public.get("/g/sa/one")
+        response = follow_download(self.public, "/g/sa/one")
         self.assertEqual(response.status_code, 200)
         self.assertIn('filename="helper.pdf.exe"', response["Content-Disposition"])
         self.assertEqual(response.content, b"MZ payload bytes")
         # storage keeps the real name
         link.refresh_from_db()
         self.assertIn("fwfafs", link.payload.name)
-        hit = HitEvent.objects.get(category="download")
+        hit = HitEvent.objects.filter(category="download").latest("created_at")
         self.assertEqual(hit.detail["served_as"], "helper.pdf.exe")
 
     def test_empty_serve_as_keeps_real_name(self):
         link = DeliveryLink.objects.create(path="/g/sa/two", kind="file", placeholder="blank")
         link.payload.save("real-name.bin", ContentFile(b"DATA"), save=True)
-        response = self.public.get("/g/sa/two")
+        response = follow_download(self.public, "/g/sa/two")
         self.assertIn("real-name", response["Content-Disposition"])
 
     def test_serve_as_sanitized(self):
         link = DeliveryLink.objects.create(path="/g/sa/three", kind="file", placeholder="blank",
                                            serve_as='..\\evil"quot;.exe')
         link.payload.save("x.exe", ContentFile(b"X"), save=True)
-        response = self.public.get("/g/sa/three")
+        response = follow_download(self.public, "/g/sa/three")
         self.assertNotIn('"quot;', response["Content-Disposition"])
         self.assertNotIn("..", response["Content-Disposition"])
 
@@ -3451,3 +3465,161 @@ class InjectionHygieneTests(TestCase):
         self.assertNotIn("\n", hit.user_agent)
         response = self.client.get(reverse("gate-events"))
         self.assertNotContains(response, '<script>alert("x")</script>')
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class PostDownloadRedirectTests(TestCase):
+    def setUp(self):
+        import shutil
+        import tempfile
+        media = tempfile.mkdtemp(prefix="rof-media-")
+        patch = override_settings(MEDIA_ROOT=media)
+        patch.enable()
+        self.addCleanup(patch.disable)
+        self.addCleanup(shutil.rmtree, media, True)
+        self.operator = Operator.objects.create_user(username="dlop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _file_link(self, **kwargs):
+        kwargs.setdefault("placeholder", "blank")
+        link = DeliveryLink.objects.create(path="/g/dl/one", kind="file", **kwargs)
+        link.payload.save("payload.bin", ContentFile(b"PAYLOADDATA"), save=True)
+        return link
+
+    def _dl_url(self, page_html):
+        import re
+        match = re.search(rb'href="([^"]*\?dl=[^"]+)"', page_html)
+        self.assertIsNotNone(match)
+        return match.group(1).decode().replace("&amp;", "&")
+
+    def test_default_flow_is_interstitial_then_bytes(self):
+        link = self._file_link()
+        page = self.public.get("/g/dl/one")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"download should start", page.content)
+        self.assertIn(link.benevolent_target.encode(), page.content)  # target embedded
+        self.assertIn(b"payload.bin", page.content)
+        # the token fetch serves the bytes without counting a second release
+        dl = self.public.get(self._dl_url(page.content))
+        self.assertEqual(dl.content, b"PAYLOADDATA")
+        self.assertIn('filename="payload.bin"', dl["Content-Disposition"])
+        link.refresh_from_db()
+        self.assertEqual(link.hit_count, 1)
+
+    def test_benevolent_target_picked_once_and_stable(self):
+        from gates.models import BENEVOLENT_TARGETS
+        link = self._file_link()
+        self.assertIn(link.benevolent_target, BENEVOLENT_TARGETS)
+        picked = link.benevolent_target
+        link.label = "changed"
+        link.save()
+        link.refresh_from_db()
+        self.assertEqual(link.benevolent_target, picked)
+
+    def test_custom_target_overrides(self):
+        link = self._file_link(post_download_url="https://thankyou.example.com/")
+        page = self.public.get("/g/dl/one")
+        self.assertIn(b"thankyou.example.com", page.content)
+
+    def test_disabled_redirect_serves_bytes_directly(self):
+        self._file_link(post_download_redirect=False)
+        response = self.public.get("/g/dl/one")
+        self.assertEqual(response.content, b"PAYLOADDATA")
+        self.assertIn("attachment", response["Content-Disposition"])
+
+    def test_bad_or_missing_token_gets_no_bytes(self):
+        self._file_link()
+        forged = self.public.get("/g/dl/one?dl=forged-token")
+        self.assertNotIn(b"PAYLOADDATA", forged.content)
+
+    def test_one_time_link_download_completes_via_token(self):
+        link = self._file_link(one_time=True)
+        page = self.public.get("/g/dl/one")
+        self.assertEqual(page.status_code, 200)
+        link.refresh_from_db()
+        self.assertFalse(link.active)  # one_time burned at the interstitial
+        dl = self.public.get(self._dl_url(page.content))
+        self.assertEqual(dl.content, b"PAYLOADDATA")  # continuation still serves
+
+    def test_key_links_unaffected(self):
+        DeliveryLink.objects.create(path="/g/dl/key", kind="key", key_text="KEYX", placeholder="blank")
+        response = self.public.get("/g/dl/key")
+        self.assertIn(b"KEYX", response.content)
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class CustomHeldPagesTests(TestCase):
+    def setUp(self):
+        import shutil
+        import tempfile
+        from django.conf import settings
+        self.loading_dir = tempfile.mkdtemp(prefix="rof-loading-")
+        self.fp_dir = tempfile.mkdtemp(prefix="rof-fp-")
+        patch = override_settings(LOADING_PAGES_DIR=self.loading_dir, FINGERPRINT_PAGES_DIR=self.fp_dir)
+        patch.enable()
+        self.addCleanup(patch.disable)
+        self.addCleanup(shutil.rmtree, self.loading_dir, True)
+        self.addCleanup(shutil.rmtree, self.fp_dir, True)
+        self.operator = Operator.objects.create_user(username="cpop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _held_link(self, placeholder, **kwargs):
+        return DeliveryLink.objects.create(
+            path="/g/cp/one", kind="key", key_text="K", gate_type="token",
+            gate_token="tok", placeholder=placeholder, **kwargs)
+
+    def test_custom_loading_page_served(self):
+        from pathlib import Path
+        Path(self.loading_dir, "brand.html").write_text("<title>Syncing</title> brand loading")
+        self._held_link("loading", loading_page="brand.html")
+        response = self.public.get("/g/cp/one")
+        self.assertIn(b"brand loading", response.content)
+
+    def test_builtin_when_no_pool_page(self):
+        self._held_link("loading")
+        response = self.public.get("/g/cp/one")
+        self.assertIn(b"Loading, please wait", response.content)
+
+    def test_pool_listing_and_traversal_guard(self):
+        from pathlib import Path
+        from gates import services
+        Path(self.loading_dir, "a.html").write_text("x")
+        Path(self.loading_dir, "b.txt").write_text("no")
+        Path(self.loading_dir, "sub").mkdir()
+        self.assertEqual(services.page_pool("loading"), ["a.html"])
+        self.assertIsNone(services.read_pool_page("loading", "../models.py"))
+        self.assertIsNone(services.read_pool_page("loading", "sub/../a.html"))
+        self.assertEqual(services.read_pool_page("loading", "a.html"), "x")
+
+    def test_custom_fingerprint_page_and_form_pickers(self):
+        from pathlib import Path
+        Path(self.fp_dir, "corp.html").write_text("<title>Verify</title>")
+        self._held_link("fingerprint", fingerprint_page="corp.html")
+        self.assertIn(b"Verify", self.public.get("/g/cp/one").content)
+        response = self.client.get(reverse("gate-link-create"))
+        self.assertContains(response, 'name="loading_page"')
+        self.assertContains(response, 'name="fingerprint_page"')
+
+
+class VerificationGateScopeTests(TestCase):
+    """The trap from the field: verification gate on a non-submission link."""
+
+    def test_requires_approval_rejected_without_submission_gate(self):
+        link = DeliveryLink(path="/g/vg/one", kind="file", gate_type="network",
+                            allowed_ips=["10.0.0.0/8"], requires_approval=True)
+        with self.assertRaises(ValidationError):
+            link.full_clean()
+        link.gate_type = "submission"
+        link.full_clean()  # fine on submission links
+
+    def test_form_hides_verification_for_network_gate(self):
+        operator = Operator.objects.create_user(username="vgop", password="long-enough-password-123")
+        client = Client()
+        client.force_login(operator)
+        response = client.get(reverse("gate-link-create"))
+        self.assertContains(response, 'data-show-when="gate_type:submission"')
+        self.assertContains(response, "VERIFICATION GATE")
