@@ -58,8 +58,9 @@
   <div class="panel-heading"><div><span class="section-label">VERIFICATION GATE</span><h2>Operator decision</h2></div></div>
   {% with sub=link.submissions.first %}
   {% if link.approval_status == 'pending' and sub %}
-    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'approve' %}" style="display:inline">{% csrf_token %}<button class="button" type="submit">Approve &amp; release</button></form>
-    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'deny' %}" style="display:inline" data-confirm="Deny this submission?">{% csrf_token %}<button class="button secondary" type="submit">Deny</button></form>
+    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'approve' %}" style="display:inline">{% csrf_token %}<input type="hidden" name="remember" class="remember-flag-detail" value="0"><button class="button" type="submit">Approve &amp; release</button></form>
+    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'deny' %}" style="display:inline" data-confirm="Deny this submission?">{% csrf_token %}<input type="hidden" name="remember" class="remember-flag-detail" value="0"><button class="button secondary" type="submit">Deny</button></form>
+    <label class="check" style="font-size:.62rem"><input type="checkbox" onchange="document.querySelectorAll('.remember-flag-detail').forEach(i => i.value = this.checked ? '1' : '0')"> <span>REMEMBER MY DECISION {% tip "Learn this decision: a matching future submission on this link auto-decides the same way. Editable in the link's auto-decision rules." %}</span></label>
   {% elif link.approval_status == 'pending' %}
     <p class="muted">No submission received yet - the link stays held until a package arrives.</p>
   {% else %}<p>Decided by {{ link.decided_by|default:"system" }} at {{ link.decided_at|date:"Y-m-d H:i e" }}.</p>{% endif %}

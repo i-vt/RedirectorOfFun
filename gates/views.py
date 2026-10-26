@@ -703,7 +703,8 @@ def submission_decide(request, pk, verdict):
         return redirect("gate-submissions")
     submission = get_object_or_404(Submission.objects.select_related("link"), pk=pk)
     decided = services.decide_submission(submission, verdict, actor=request.user,
-                                         via="panel", request=request)
+                                         via="panel", request=request,
+                                         remember=request.POST.get("remember") == "1")
     if decided is None:
         messages.info(request, f"Submission #{submission.pk} was already decided.")
     return redirect(request.META.get("HTTP_REFERER", "gate-submissions"))

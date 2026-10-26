@@ -489,12 +489,42 @@ def evaluate_auto_rules(link, submission):
     return None
 
 
-def decide_submission(submission, verdict, *, actor=None, via="panel", request=None, extra_detail=None):
+def learn_from_decision(link, submission, verdict):
+    """Append an auto-decision rule learned from a human decision.
+
+    The rule matches the decided submission exactly (every short scalar field
+    anchored with ^...$, images required when present). Idempotent: an
+    identical learned rule is never duplicated. Returns True when added."""
+    decoded = submission.decoded_json or {}
+    fields = {}
+    for key, value in decoded.items():
+        if isinstance(value, str) and 0 < len(value) <= 120 and "\n" not in value:
+            # anchor exact, escaping only real regex specials (keep - readable)
+            fields[str(key)[:60]] = "^" + re.sub(r"([.^$*+?{}\[\]\\|()])", r"\\\1", value) + "$"
+    if not fields:
+        return False
+    when = {"fields_match": fields}
+    if submission.images.exists():
+        when["require_images"] = True
+    rules = list(link.auto_rules or [])
+    for existing in rules:
+        if (existing.get("action") == verdict
+                and existing.get("when", {}).get("fields_match") == fields):
+            return False
+    rules.append({"action": verdict, "learned": True, "when": when})
+    link.auto_rules = rules
+    link.save(update_fields=["auto_rules"])
+    return True
+
+
+def decide_submission(submission, verdict, *, actor=None, via="panel", request=None,
+                      extra_detail=None, remember=False):
     """Shared approve/deny path for the panel, the API, Telegram, and auto rules.
 
     Returns the refreshed submission, or None if it was already decided.
     The pending-to-decided transition is atomic so concurrent deciders
-    (panel + telegram + API) cannot both win.
+    (panel + telegram + API) cannot both win. With remember=True the decision
+    is learned as an auto-rule for future submissions on the same link.
     """
     if verdict not in {"approve", "deny"}:
         raise ValueError("verdict must be 'approve' or 'deny'")
@@ -522,6 +552,15 @@ def decide_submission(submission, verdict, *, actor=None, via="panel", request=N
     })
     record_event(action=f"gate.submission_{status}", actor=actor, target=submission,
                  metadata={"link": link.path, "via": via}, request=request)
+    if remember:
+        if learn_from_decision(link, submission, verdict):
+            notify("gates", {
+                "title": "Decision learned",
+                "detail": f"{link.path}: future matching submissions will be auto-{status}.",
+            })
+            record_event(action="gate.decision_learned", actor=actor, target=link,
+                         metadata={"submission": submission.pk, "verdict": verdict},
+                         request=request)
     return submission
 
 

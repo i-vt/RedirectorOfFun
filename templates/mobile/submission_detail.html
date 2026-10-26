@@ -16,9 +16,10 @@
 
 {% if s.status == 'pending' %}
 <div class="row">
-  <form method="post" style="flex:1">{% csrf_token %}<input type="hidden" name="action" value="approve"><button class="btn primary" type="submit" style="width:100%">Approve &amp; release</button></form>
-  <form method="post" style="flex:1" data-confirm="Deny this submission?">{% csrf_token %}<input type="hidden" name="action" value="deny"><button class="btn danger" type="submit" style="width:100%">Deny</button></form>
+  <form method="post" style="flex:1">{% csrf_token %}<input type="hidden" name="action" value="approve"><input type="hidden" name="remember" class="remember-flag-m" value="0"><button class="btn primary" type="submit" style="width:100%">Approve &amp; release</button></form>
+  <form method="post" style="flex:1" data-confirm="Deny this submission?">{% csrf_token %}<input type="hidden" name="action" value="deny"><input type="hidden" name="remember" class="remember-flag-m" value="0"><button class="btn danger" type="submit" style="width:100%">Deny</button></form>
 </div>
+<label class="muted" style="display:flex;align-items:center;gap:8px;font-size:.8rem;margin-top:4px"><input type="checkbox" style="width:22px;height:22px" onchange="document.querySelectorAll('.remember-flag-m').forEach(i => i.value = this.checked ? '1' : '0')"> Remember my decision (auto-decide matching submissions)</label>
 {% else %}
 <div class="row">
   <form method="post" style="flex:1">{% csrf_token %}<input type="hidden" name="action" value="undo"><button class="btn secondary" type="submit" style="width:100%" onclick="return confirm('Undo the decision?')">Undo decision</button></form>

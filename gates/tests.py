@@ -3107,3 +3107,85 @@ class DocsQualityTests(TestCase):
             body = doc.read_text().lower()
             for word in banned:
                 self.assertNotIn(word, body, f"{doc.name}: '{word}'")
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class RememberDecisionTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="rmop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.link = DeliveryLink.objects.create(
+            path="/g/rm/one", kind="key", key_text="K", gate_type="submission",
+            requires_approval=True, placeholder="blank")
+        self.submission = Submission.objects.create(
+            link=self.link, decoded_json={"hostname": "ws-01", "user": "jdoe"},
+            client_ip_hash="f" * 64)
+
+    def _matching(self):
+        return Submission.objects.create(
+            link=self.link, decoded_json={"hostname": "ws-01", "user": "jdoe"})
+
+    def test_remember_approve_learns_rule(self):
+        response = self.client.post(
+            reverse("gate-submission-decide", args=[self.submission.pk, "approve"]),
+            {"remember": "1"})
+        self.link.refresh_from_db()
+        self.assertEqual(len(self.link.auto_rules), 1)
+        rule = self.link.auto_rules[0]
+        self.assertEqual(rule["action"], "approve")
+        self.assertTrue(rule["learned"])
+        self.assertEqual(rule["when"]["fields_match"]["hostname"], "^ws-01$")
+        # next matching submission auto-approves
+        result = services.evaluate_auto_rules(self.link, self._matching())
+        self.assertEqual(result[0], "approve")
+        # a different hostname still waits for a human
+        other = Submission.objects.create(link=self.link, decoded_json={"hostname": "evil-1", "user": "jdoe"})
+        self.assertIsNone(services.evaluate_auto_rules(self.link, other))
+
+    def test_remember_deny_learns_deny_rule(self):
+        self.client.post(reverse("gate-submission-decide", args=[self.submission.pk, "deny"]),
+                         {"remember": "1"})
+        self.link.refresh_from_db()
+        self.assertEqual(self.link.auto_rules[0]["action"], "deny")
+        result = services.evaluate_auto_rules(self.link, self._matching())
+        self.assertEqual(result[0], "deny")
+
+    def test_no_remember_leaves_rules_empty(self):
+        self.client.post(reverse("gate-submission-decide", args=[self.submission.pk, "approve"]))
+        self.link.refresh_from_db()
+        self.assertEqual(self.link.auto_rules, [])
+
+    def test_learning_is_idempotent(self):
+        services.decide_submission(self.submission, "approve", actor=self.operator, remember=True)
+        self.link.refresh_from_db()
+        self.assertEqual(len(self.link.auto_rules), 1)
+        # deciding a second identical submission with remember adds nothing
+        second = self._matching()
+        second.status = "pending"
+        second.save()
+        services.decide_submission(second, "approve", actor=self.operator, remember=True)
+        self.link.refresh_from_db()
+        self.assertEqual(len(self.link.auto_rules), 1)
+
+    def test_api_decide_with_remember(self):
+        _, raw = APIKey.create(operator=self.operator, name="ci")
+        response = self.client.post(
+            f"/api/v1/submissions/{self.submission.pk}/approve/",
+            data={"remember": True}, content_type="application/json",
+            HTTP_AUTHORIZATION=f"ApiKey {raw}")
+        self.assertEqual(response.status_code, 200)
+        self.link.refresh_from_db()
+        self.assertEqual(len(self.link.auto_rules), 1)
+
+    def test_telegram_remember_syntax(self):
+        from gates import telegram
+        reply = telegram.handle_command(f"approve {self.submission.pk} remember")
+        self.assertIn("learned", reply.lower())
+        self.link.refresh_from_db()
+        self.assertEqual(len(self.link.auto_rules), 1)
+
+    def test_decide_ui_has_remember_checkbox(self):
+        response = self.client.get(reverse("gate-submissions") + "?status=pending")
+        self.assertContains(response, "REMEMBER")
+        self.assertContains(response, f"remember-flag-{self.submission.pk}")

@@ -22,6 +22,7 @@ HELP_TEXT = (
     "RoF control bot\n"
     "approve <id> - approve submission\n"
     "deny <id> - deny submission\n"
+    "approve <id> remember - approve and auto-approve matching submissions\n"
     "pending - list pending submissions\n"
     "help - this message"
 )
@@ -97,17 +98,22 @@ def handle_command(text):
         return _pending_summary()
     if command in {"approve", "deny"}:
         if len(parts) < 2 or not parts[1].lstrip("#").isdigit():
-            return f"Usage: {command} <submission id>"
+            return f"Usage: {command} <submission id> [remember]"
         submission_id = int(parts[1].lstrip("#"))
+        # "approve 42 remember" (or trailing +) learns the decision as an
+        # auto-rule for future matching submissions on the same link.
+        remember = any(p in {"remember", "r", "+"} for p in parts[2:])
         submission = Submission.objects.select_related("link").filter(pk=submission_id).first()
         if submission is None:
             return f"Submission #{submission_id} not found."
         verdict = "approve" if command == "approve" else "deny"
-        decided = services.decide_submission(submission, verdict, via="telegram")
+        decided = services.decide_submission(submission, verdict, via="telegram",
+                                             remember=remember)
         if decided is None:
             return f"Submission #{submission_id} was already {submission.status}."
+        suffix = " Decision learned for future matches." if remember else ""
         return (f"Submission #{submission_id} {submission.status}. "
-                f"{submission.link.path} now serves: {submission.link.get_on_deny_display() if submission.status == 'denied' else 'content released on next visit'}.")
+                f"{submission.link.path} now serves: {submission.link.get_on_deny_display() if submission.status == 'denied' else 'content released on next visit'}.{suffix}")
     return "Unknown command. Send 'help'."
 
 

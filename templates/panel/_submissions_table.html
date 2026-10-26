@@ -8,8 +8,9 @@
   <td class="mono muted">{{ sub.decoded_json.keys|join:", "|truncatechars:60|default:"-" }}</td>
   <td>{% for img in sub.images.all %}<img src="{% url 'gate-submission-image' img.pk %}" alt="{{ img.field_name }}" loading="lazy" data-lightbox data-caption="{{ img.field_name }} · {{ sub.link.path }} · {{ sub.created_at|date:'Y-m-d H:i' }} UTC" style="max-height:64px;border-radius:6px;border:1px solid #30363d;cursor:zoom-in">{% empty %}-{% endfor %}</td>
   <td>{% if sub.status == 'pending' %}
-    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'approve' %}" style="display:inline">{% csrf_token %}<button class="button" type="submit">{% icon "check" %}Approve</button></form>
-    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'deny' %}" style="display:inline" data-confirm="Deny this submission?">{% csrf_token %}<button class="button secondary" type="submit">{% icon "x" %}Deny</button></form>
+    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'approve' %}" style="display:inline">{% csrf_token %}<input type="hidden" name="remember" class="remember-flag-{{ sub.pk }}" value="0"><button class="button" type="submit">{% icon "check" %}Approve</button></form>
+    <form method="post" action="{% url 'gate-submission-decide' sub.pk 'deny' %}" style="display:inline" data-confirm="Deny this submission?">{% csrf_token %}<input type="hidden" name="remember" class="remember-flag-{{ sub.pk }}" value="0"><button class="button secondary" type="submit">{% icon "x" %}Deny</button></form>
+    <label class="check" style="font-size:.58rem" ><input type="checkbox" onchange="document.querySelectorAll('.remember-flag-{{ sub.pk }}').forEach(i => i.value = this.checked ? '1' : '0')"> <span>REMEMBER {% tip "Learn this decision: a matching future submission on this link auto-decides the same way (anchored on its fields). Learned rules appear in the link's auto-decision rules and can be edited there." %}</span></label>
     {% else %}<span class="mono muted">{{ sub.decided_by|default:"-" }}</span>
     <form method="post" action="{% url 'gate-submission-undo' sub.pk %}" style="display:inline" data-confirm="Undo this decision ({{ undo_seconds }}s window, before any release)?">{% csrf_token %}<button class="text-button" type="submit">UNDO</button></form>{% endif %}</td>
 </tr>

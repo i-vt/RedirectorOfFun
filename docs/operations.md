@@ -47,6 +47,9 @@ sequenceDiagram
   mismatches.
 - `forbid` patterns in auto-rules are the safety net. A rule never fires when
   a forbidden value is present.
+- Tick **REMEMBER** when you decide. The decision becomes a learned auto-rule
+  (exact field match) on that link. The next matching submission decides
+  itself. Edit or remove learned rules on the link form.
 - Deny sends the response you set on the link: 404, decoy, or your benevolent
   content. Configure the benevolent response before the engagement.
 

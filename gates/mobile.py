@@ -30,7 +30,9 @@ def submission_detail(request, pk):
     if request.method == "POST":
         action = request.POST.get("action", "")
         if action in {"approve", "deny"}:
-            services.decide_submission(submission, action, actor=request.user, via="mobile", request=request)
+            services.decide_submission(submission, action, actor=request.user, via="mobile",
+                                       request=request,
+                                       remember=request.POST.get("remember") == "1")
             return redirect("m-submissions")
         if action == "undo":
             services.undo_decision(submission, request.user)

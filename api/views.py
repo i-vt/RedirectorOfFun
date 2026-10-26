@@ -131,7 +131,8 @@ class SubmissionDecide(APIView):
             return Response({"detail": "verdict must be 'approve' or 'deny'."}, status=status.HTTP_400_BAD_REQUEST)
         submission = get_object_or_404(Submission.objects.select_related("link"), pk=pk)
         decided = gate_services.decide_submission(submission, verdict, actor=request.user,
-                                                  via="api", request=request)
+                                                  via="api", request=request,
+                                                  remember=bool(request.data.get("remember")))
         if decided is None:
             return Response({"detail": f"Submission #{submission.pk} was already decided."},
                             status=status.HTTP_409_CONFLICT)
