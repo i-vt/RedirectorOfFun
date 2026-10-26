@@ -117,6 +117,8 @@ def _render_link_form(request, link, title):
         "templates": LINK_TEMPLATES,
         "loading_pages": services.page_pool("loading"),
         "fingerprint_pages": services.page_pool("fingerprint"),
+        "download_pages": services.page_pool("download"),
+        "benevolent_pages": services.page_pool("benevolent"),
         "library_files": _library_file_choices(),
     })
 
@@ -185,6 +187,8 @@ def _link_from_post(request, link):
     link.post_download_url = request.POST.get("post_download_url", "").strip()[:300]
     link.loading_page = request.POST.get("loading_page", "").strip()[:120]
     link.fingerprint_page = request.POST.get("fingerprint_page", "").strip()[:120]
+    link.download_page = request.POST.get("download_page", "").strip()[:120]
+    link.benevolent_page = request.POST.get("benevolent_page", "").strip()[:120]
     if request.FILES.get("benevolent_file"):
         link.benevolent_file = request.FILES["benevolent_file"]
     link.benevolent_text = request.POST.get("benevolent_text", "")

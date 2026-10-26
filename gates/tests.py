@@ -1746,12 +1746,15 @@ class GateFormatAndRangeTests(TestCase):
                                            on_deny="benevolent")
         link.benevolent_file.save("b.bin", ContentFile(b"B" * 4000), save=True)
         public = Client()
-        full = public.get(link.path)
+        import re
+        page = public.get(link.path)
+        dl = re.search(rb'href="([^"]*\?dl=[^"]+)"', page.content).group(1).decode()
+        full = public.get(dl)
         self.assertEqual(full.get("Accept-Ranges"), "bytes")
-        partial = public.get(link.path, HTTP_RANGE="bytes=0-99")
+        partial = public.get(dl, HTTP_RANGE="bytes=0-99")
         self.assertEqual(partial.status_code, 206)
         self.assertEqual(partial.get("Content-Range"), "bytes 0-99/4000")
-        bad = public.get(link.path, HTTP_RANGE="bytes=9999-10000")
+        bad = public.get(dl, HTTP_RANGE="bytes=9999-10000")
         self.assertEqual(bad.status_code, 416)
 
     def test_file_download_supports_range(self):
@@ -3876,3 +3879,94 @@ class SidebarPaletteLibraryRobotsTests(TestCase):
         response = self.public.get("/robots.txt")
         self.assertIn(b"custom operator file", response.content)
         self.assertIn(b"Disallow: /", response.content)
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class BenevolentRedirectAndCustomPagesTests(TestCase):
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.dirs = {kind: tempfile.mkdtemp(prefix=f"rof-{kind}-")
+                     for kind in ("download", "benevolent")}
+        media = tempfile.mkdtemp(prefix="rof-media-")
+        patch = override_settings(
+            DOWNLOAD_PAGES_DIR=self.dirs["download"],
+            BENEVOLENT_PAGES_DIR=self.dirs["benevolent"],
+            MEDIA_ROOT=media)
+        patch.enable()
+        self.addCleanup(patch.disable)
+        for directory in self.dirs.values():
+            self.addCleanup(shutil.rmtree, directory, True)
+        self.addCleanup(shutil.rmtree, media, True)
+        self.operator = Operator.objects.create_user(username="bvop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _denied_link(self, **kwargs):
+        kwargs.setdefault("placeholder", "blank")
+        link = DeliveryLink.objects.create(
+            path="/g/bv/one", kind="file", on_deny="benevolent",
+            requires_approval=True, approval_status="denied", gate_type="submission",
+            cipher="base64", **kwargs)
+        link.benevolent_file.save("deny-note.pdf", ContentFile(b"PDF-BYTES"), save=True)
+        return link
+
+    def test_benevolent_file_redirects_after_download_by_default(self):
+        link = self._denied_link()
+        page = self.public.get("/g/bv/one")
+        self.assertIn(b"download should start", page.content)  # interstitial
+        import re
+        dl = re.search(rb'href="([^"]*\?dl=[^"]+)"', page.content).group(1).decode()
+        response = self.public.get(dl)
+        self.assertEqual(response.content, b"PDF-BYTES")
+        self.assertIn(f'filename="{link.benevolent_file.name.rsplit("/", 1)[-1]}"',
+                      response["Content-Disposition"])
+
+    def test_benevolent_redirect_disabled_serves_bytes(self):
+        self._denied_link(post_download_redirect=False)
+        response = self.public.get("/g/bv/one")
+        self.assertEqual(response.content, b"PDF-BYTES")
+
+    def test_custom_benevolent_page_served_as_is(self):
+        from pathlib import Path
+        Path(self.dirs["benevolent"], "sorry.html").write_text("<title>Nothing here</title> custom deny")
+        self._denied_link(benevolent_page="sorry.html")
+        response = self.public.get("/g/bv/one")
+        self.assertIn(b"custom deny", response.content)
+
+    def test_custom_download_page_tokens_substituted(self):
+        from pathlib import Path
+        Path(self.dirs["download"], "portal.html").write_text(
+            '<a href="%DOWNLOAD_URL%">get %FILENAME%</a><i data-t="%TARGET%"></i>')
+        link = DeliveryLink.objects.create(path="/g/bv/two", kind="file", placeholder="blank",
+                                           download_page="portal.html")
+        link.payload.save("x.bin", ContentFile(b"X"), save=True)
+        page = self.public.get("/g/bv/two")
+        self.assertIn(b"dl=dl:", page.content)
+        self.assertIn(b"get x.bin", page.content)
+        self.assertNotIn(b"%DOWNLOAD_URL%", page.content)
+        self.assertIn(link.benevolent_target.encode(), page.content)
+
+    def test_better_icons_are_valid_and_varied(self):
+        from gates.library import generate_ico
+        icons = {generate_ico() for _ in range(12)}
+        self.assertGreater(len(icons), 4)  # real variation
+        for blob in icons:
+            self.assertEqual(blob[:4], b"\x00\x00\x01\x00")  # ICO magic
+            self.assertGreater(len(blob), 1000)
+
+    def test_payloads_page_structure(self):
+        from gates import library
+        folder = library.library_dir()
+        (folder / "vendor").mkdir(parents=True, exist_ok=True)
+        (folder / "vendor" / "x.exe").write_bytes(b"X")
+        link = DeliveryLink.objects.create(path="/g/bv/ben", kind="file", on_deny="benevolent")
+        link.benevolent_file.save("deny.bin", ContentFile(b"D"), save=True)
+        response = self.client.get(reverse("gate-payloads"))
+        content = response.content.decode()
+        self.assertIn("bundle-card", content)
+        self.assertIn("BENEVOLENT FALLBACKS", content)
+        # fallbacks collapsed by default, visually apart from payloads
+        self.assertIn('<summary>BENEVOLENT FALLBACKS', content)
+        self.assertEqual(content.count("<details"), content.count("</details>"))

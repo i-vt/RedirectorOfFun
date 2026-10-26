@@ -205,6 +205,12 @@ class DeliveryLink(models.Model):
     fingerprint_page = models.CharField(
         max_length=120, blank=True,
         help_text="Custom page from ./fingerprint/ for the 'fingerprint' held view. Empty = built-in page.")
+    download_page = models.CharField(
+        max_length=120, blank=True,
+        help_text="Custom interstitial from ./download/ for the after-download flow. Tokens: %DOWNLOAD_URL%, %TARGET%, %FILENAME%.")
+    benevolent_page = models.CharField(
+        max_length=120, blank=True,
+        help_text="Custom page from ./benevolent/ served as the deny response (on_deny = benevolent). Beats benevolent text when set.")
     benevolent_text = models.TextField(blank=True, help_text="Plain response served when a request is denied and on_deny=benevolent.")
     benevolent_file = models.FileField(upload_to="benevolent/", blank=True, null=True)
 

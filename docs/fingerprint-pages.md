@@ -1,15 +1,18 @@
 # Custom held-view pages
 
-**This page tells you how to write your own "loading" and "fingerprint"
-pages.** Drop `.html` files into `./loading/` or `./fingerprint/` next to
-`manage.py`, then pick them per link in the link form (advanced sections).
+**This page tells you how to write your own "loading", "fingerprint",
+"download", and "benevolent" pages.** Drop `.html` files into the matching
+folder next to `manage.py`, then pick them per link in the link form
+(advanced sections).
 
 The folders:
 
-| Folder | Used when the held view is |
+| Folder | Used for |
 |---|---|
-| `./loading/` | `Loading page (auto-retries until admitted)` |
-| `./fingerprint/` | `Fingerprint page, then loading` |
+| `./loading/` | the `loading` held view (auto-retries until admitted) |
+| `./fingerprint/` | the `fingerprint` held view (collect intel, then load) |
+| `./download/` | the after-download interstitial |
+| `./benevolent/` | the deny response when `on_deny` is benevolent |
 
 Only top-level `.html` files are listed. Anything else is ignored.
 
@@ -66,6 +69,30 @@ Minimum viable page:
 
 The intel lands on the pending admission (link detail page, VISITOR
 ADMISSIONS → INTEL). The operator decides with that context.
+
+## The download interstitial contract
+
+The interstitial starts the file download and then sends the visitor to a
+harmless page. A custom page gets three tokens, substituted as plain text:
+
+| Token | Becomes |
+|---|---|
+| `%DOWNLOAD_URL%` | the signed continuation URL (fetch it to download) |
+| `%TARGET%` | the after-download target (custom or benevolent) |
+| `%FILENAME%` | the presented filename |
+
+Minimum viable page:
+
+```html
+<p>Your download should start automatically.</p>
+<a id="dl" href="%DOWNLOAD_URL%" download="%FILENAME%" hidden></a>
+<script>
+  document.getElementById("dl").click();
+  setTimeout(() => { window.location.href = "%TARGET%"; }, 1600);
+</script>
+```
+
+The benevolent page has no contract: it is served as-is to denied visitors.
 
 ## What the built-in page collects
 

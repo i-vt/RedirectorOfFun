@@ -20,17 +20,15 @@
 
   <div class="panel-heading"><div><span class="section-label">PAYLOAD LIBRARY</span><h3>Bundles in ./payloads/ {% tip "One folder per bundle: the files, a README.md of operator notes (generated when missing, always shown as escaped text), and a favicon.ico (randomly generated when missing). Uploads via quick drop or the link form land here automatically." %}</h3></div></div>
   {% if bundles %}
-  <div class="intel-grid">
+  <div class="bundle-grid">
     {% for bundle in bundles %}
-    <figure class="intel-card">
-      <a href="{% url 'gate-library-bundle' bundle.name %}" style="display:flex;align-items:center;gap:12px;padding:14px">
-        {% if bundle.has_icon %}<img src="{% url 'gate-library-file' bundle.name 'favicon.ico' %}" alt="" style="width:32px;height:32px;border-radius:6px;image-rendering:pixelated">{% endif %}
-        <span>
-          <strong class="mono">{{ bundle.name }}</strong><br>
-          <span class="muted" style="font-size:.66rem">{{ bundle.files|length }} file{{ bundle.files|length|pluralize }}</span>
-        </span>
-      </a>
-    </figure>
+    <a class="bundle-card" href="{% url 'gate-library-bundle' bundle.name %}">
+      {% if bundle.has_icon %}<img src="{% url 'gate-library-file' bundle.name 'favicon.ico' %}" alt="">{% endif %}
+      <span>
+        <strong class="mono">{{ bundle.name }}</strong><br>
+        <span class="muted">{{ bundle.files|length }} file{{ bundle.files|length|pluralize }}</span>
+      </span>
+    </a>
     {% endfor %}
   </div>
   {% else %}
@@ -65,7 +63,8 @@
   {% else %}<div class="empty-state"><strong>No payloads yet</strong><p>Quick drop a file from the Links page, or attach one to a link.</p></div>{% endif %}
 
   {% if benevolent_links %}
-  <div class="panel-heading" style="margin-top:24px"><div><span class="section-label">BENEVOLENT FALLBACKS</span><h3>Deny-response files</h3></div></div>
+  <details class="adv" style="margin-top:24px">
+  <summary>BENEVOLENT FALLBACKS <span class="adv-hint">deny-response files - kept apart from payloads</span></summary>
   <div class="table-wrap"><table><thead><tr><th>FILE</th><th>LINK</th><th>SIZE</th><th></th></tr></thead><tbody>
     {% for link in benevolent_links %}
     <tr>
@@ -76,10 +75,12 @@
     </tr>
     {% endfor %}
   </tbody></table></div>
+  </details>
   {% endif %}
 
   {% if decoys %}
-  <div class="panel-heading" style="margin-top:24px"><div><span class="section-label">DECOYS</span><h3>Uploaded decoy pages</h3><p>Managed under Decoy Pages.</p></div></div>
+  <details class="adv" style="margin-top:24px">
+  <summary>DECOYS <span class="adv-hint">uploaded decoy pages - managed under Decoy Pages</span></summary>
   <div class="table-wrap"><table><thead><tr><th>FILE</th><th>DECOY</th><th>SIZE</th><th>STATUS</th></tr></thead><tbody>
     {% for page in decoys %}
     <tr>
@@ -90,6 +91,7 @@
     </tr>
     {% endfor %}
   </tbody></table></div>
+  </details>
   {% endif %}
 </section>
 {% endblock %}

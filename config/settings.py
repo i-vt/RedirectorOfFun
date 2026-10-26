@@ -192,6 +192,8 @@ PAYLOAD_LIBRARY_DIR = Path(os.getenv("PAYLOAD_LIBRARY_DIR", str(BASE_DIR / "payl
 # Custom held-view pages: ./loading/*.html and ./fingerprint/*.html pools.
 LOADING_PAGES_DIR = Path(os.getenv("LOADING_PAGES_DIR", str(BASE_DIR / "loading")))
 FINGERPRINT_PAGES_DIR = Path(os.getenv("FINGERPRINT_PAGES_DIR", str(BASE_DIR / "fingerprint")))
+DOWNLOAD_PAGES_DIR = Path(os.getenv("DOWNLOAD_PAGES_DIR", str(BASE_DIR / "download")))
+BENEVOLENT_PAGES_DIR = Path(os.getenv("BENEVOLENT_PAGES_DIR", str(BASE_DIR / "benevolent")))
 MEDIA_ROOT = BASE_DIR / "var" / "media"
 
 LOGGING = {

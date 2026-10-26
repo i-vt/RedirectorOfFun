@@ -102,23 +102,40 @@ def _rgb(value):
 
 
 def generate_ico():
-    """A random 16x16 .ico: two-color geometric pattern, valid everywhere."""
-    palettes = [("#3fb68b", "#0d1117"), ("#58a6ff", "#10131a"), ("#d29922", "#161b22"),
-                ("#f778ba", "#14101a"), ("#7ee787", "#0e1512"), ("#ff9e64", "#18120e")]
-    primary, background = map(_rgb, secrets.choice(palettes))
+    """A random 16x16 .ico that looks designed: mirrored symmetry, a dark
+    ground, a saturated accent, and a corner ring. Valid everywhere."""
+    palettes = [
+        ("#0d1117", "#3fb68b", "#7ee787"), ("#10131a", "#58a6ff", "#79c0ff"),
+        ("#161b22", "#d29922", "#eac54f"), ("#14101a", "#f778ba", "#ff9ecf"),
+        ("#0e1512", "#7ee787", "#3fb68b"), ("#18120e", "#ff9e64", "#ffc777"),
+        ("#12141c", "#89b4fa", "#b4befe"), ("#161211", "#f38ba8", "#eba0ac"),
+    ]
+    background, primary, secondary = map(_rgb, secrets.choice(palettes))
     pattern = secrets.randbelow(4)
+
+    def on(x, y):
+        if pattern == 0:  # mirrored wedges
+            qx, qy = (x if x < 8 else 15 - x), (y if y < 8 else 15 - y)
+            return qx >= qy
+        if pattern == 1:  # quadrant checker
+            return ((x // 4) + (y // 4)) % 2 == 0
+        if pattern == 2:  # centered diamond
+            return abs(x - 7.5) + abs(y - 7.5) <= 7
+        # concentric rings
+        dist = ((x - 7.5) ** 2 + (y - 7.5) ** 2) ** 0.5
+        return int(dist) % 3 == 0
+
     rows = []
     for y in range(16):
         for x in range(16):
-            if pattern == 0:
-                on = x >= y  # diagonal half
-            elif pattern == 1:
-                on = (x // 4 + y // 4) % 2 == 0  # checker
-            elif pattern == 2:
-                on = x in (0, 15) or y in (0, 15) or x == y  # border + diagonal
+            ring = x in (0, 15) or y in (0, 15)
+            if ring:
+                color = secondary
+            elif on(x, y):
+                color = primary
             else:
-                on = (x - 8) ** 2 + (y - 8) ** 2 <= 36  # disc
-            r, g, b = primary if on else background
+                color = background
+            r, g, b = color
             rows.append(bytes((b, g, r, 255)))  # BGRA
     pixels = b"".join(reversed(rows))  # bottom-up
     and_mask = b"\x00" * (16 * 4)  # 1bpp, 4-byte-padded rows, fully opaque

@@ -363,7 +363,18 @@ def gate_denied_response(link, request=None):
     if link.on_deny == "decoy":
         return _decoy(request, status=status)
     if link.on_deny == "benevolent":
+        custom_page = read_pool_page("benevolent", link.benevolent_page)
+        if custom_page is not None:
+            return range_aware_response(request, custom_page, content_type="text/html")
         if link.benevolent_file:
+            if link.post_download_redirect:
+                # Same two-step flow as real downloads: interstitial, then the
+                # visitor leaves for a harmless page.
+                dl_token = request.GET.get("dl", "")
+                if not _valid_dl_token(link, dl_token):
+                    filename = _safe_filename(link.benevolent_file.name.rsplit("/", 1)[-1])
+                    response, _target = _download_interstitial(link, request, filename)
+                    return response
             with link.benevolent_file.open("rb") as handle:
                 return range_aware_response(request, handle.read(),
                                             filename=link.benevolent_file.name.rsplit("/", 1)[-1])
@@ -490,6 +501,28 @@ def _valid_dl_token(link, token):
     except (BadSignature, SignatureExpired):
         return False
     return value == f"dl:{link.pk}"
+
+
+def _download_interstitial(link, request, filename):
+    """The neutral 'your download is starting' page (or the operator's custom
+    one from ./download/), wired to a fresh continuation token and the
+    benevolent/custom target."""
+    target = link.post_download_url or link.benevolent_target or "https://www.google.com/"
+    token = _make_dl_token(link)
+    separator = "&" if "?" in request.get_full_path() else "?"
+    download_url = f"{request.get_full_path()}{separator}dl={token}"
+    custom = read_pool_page("download", link.download_page)
+    if custom is not None:
+        html = (custom.replace("%DOWNLOAD_URL%", download_url)
+                      .replace("%TARGET%", target)
+                      .replace("%FILENAME%", filename))
+        return range_aware_response(request, html, content_type="text/html"), target
+    return range_aware_response(
+        request,
+        render_to_string("gates/download.html",
+                         {"download_url": download_url, "target_json": target,
+                          "filename": filename}),
+        content_type="text/html"), target
 
 
 # ─── Custom held-view page pools (./loading/, ./fingerprint/) ────────────────
@@ -894,10 +927,7 @@ def serve_link(link, request):
                 return HttpResponse(status=410)
             _mark_served(link)
             filename = _safe_filename(filename)
-            target = link.post_download_url or link.benevolent_target or "https://www.google.com/"
-            token = _make_dl_token(link)
-            separator = "&" if "?" in request.get_full_path() else "?"
-            download_url = f"{request.get_full_path()}{separator}dl={token}"
+            response, target = _download_interstitial(link, request, filename)
             detail = {"filename": filename, "interstitial": True, "target": target}
             detail.update(detail_masquerade)
             if marker:
@@ -907,12 +937,7 @@ def serve_link(link, request):
                 "title": "Gated download released",
                 "detail": f"{link.path} released '{filename}' (use {link.hit_count}); visitor then redirects to {target}.",
             })
-            return range_aware_response(
-                request,
-                render_to_string("gates/download.html",
-                                 {"download_url": download_url, "target_json": target,
-                                  "filename": filename}),
-                content_type="text/html")
+            return response
         # valid continuation token: serve the bytes without counting again
         filename = _safe_filename(filename)
         if marker:

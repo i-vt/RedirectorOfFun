@@ -74,10 +74,16 @@
       {% endif %}
       <div class="grid-2" data-show-when="on_deny:benevolent">
         <label><span>DENY RESPONSE TEXT (on_deny = benevolent)</span><textarea class="field-input mono" name="benevolent_text" rows="3">{{ link.benevolent_text }}</textarea></label>
+        <div>
         <label><span>DENY RESPONSE FILE</span>
           <div class="drop-zone" data-file-input="benevolent-input">Drop a file here, or click to choose<input class="field-input" type="file" name="benevolent_file" id="benevolent-input" style="display:none"></div>
           <small class="mono muted" id="benevolent-input-chosen" style="font-size:.68rem">{% if link.benevolent_file %}current: {{ link.benevolent_file.name }}{% endif %}</small>
         </label>
+        {% if benevolent_pages %}
+        <label style="margin-top:8px"><span>DENY RESPONSE PAGE {% tip "A custom page from ./benevolent/ served as the deny response. Beats text and file when set." %}</span>
+          <select class="field-input mono" name="benevolent_page"><option value="">(none)</option>{% for page in benevolent_pages %}<option value="{{ page }}" {% if link.benevolent_page == page %}selected{% endif %}>{{ page }}</option>{% endfor %}</select></label>
+        {% endif %}
+        </div>
       </div>
     </fieldset>
     <fieldset>
@@ -140,6 +146,10 @@
         <summary>AFTER THE DOWNLOAD <span class="adv-hint">advanced - where the visitor lands once the file starts</span></summary>
         <label class="check"><input type="checkbox" name="post_download_redirect" {% if link.post_download_redirect or link is None %}checked{% endif %}> <span>REDIRECT AFTER DOWNLOAD {% tip "Serves a small download page that starts the file, then sends the visitor to a harmless page. Off = the raw file answers the link directly." %}</span></label>
         <label><span>CUSTOM TARGET (optional) {% tip "Where the visitor goes after the download starts. Empty = the link's benevolent target, picked once at creation and never rotated." %}</span><input class="field-input mono" type="url" name="post_download_url" value="{{ link.post_download_url }}" placeholder="https://www.example.com/thank-you"></label>
+        {% if download_pages %}
+        <label><span>DOWNLOAD PAGE {% tip "Custom interstitial from ./download/. Tokens available: %DOWNLOAD_URL%, %TARGET%, %FILENAME%. Empty = the built-in neutral page." %}</span>
+          <select class="field-input mono" name="download_page"><option value="">(built-in)</option>{% for page in download_pages %}<option value="{{ page }}" {% if link.download_page == page %}selected{% endif %}>{{ page }}</option>{% endfor %}</select></label>
+        {% endif %}
         {% if link.benevolent_target %}<p class="muted" style="font-size:.66rem">Benevolent target for this link: <span class="mono">{{ link.benevolent_target }}</span></p>{% endif %}
       </details>
     </fieldset>

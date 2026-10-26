@@ -181,3 +181,10 @@ details.adv .adv-hint{font-size:.6rem;color:var(--s-dim);letter-spacing:0;margin
 .palette-item.active{color:var(--s-accent)}
 .palette-group{font-size:.54rem;letter-spacing:.14em;color:var(--s-dim);margin:10px 4px 4px}
 #palette-input{font-size:.85rem}
+
+/* Payload library bundle cards */
+.bundle-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.bundle-card{display:flex;align-items:center;gap:12px;padding:12px 14px;border:var(--c-panel-border);border-radius:10px;background:var(--s-surface);text-decoration:none;color:var(--s-text);transition:border-color .15s ease,transform .15s ease}
+.bundle-card:hover{border-color:var(--s-accent);transform:translateY(-1px)}
+.bundle-card img{width:28px;height:28px;border-radius:6px;image-rendering:pixelated}
+.bundle-card .muted{font-size:.64rem}
