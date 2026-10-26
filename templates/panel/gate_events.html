@@ -1,4 +1,11 @@
 {% extends "base.html" %}
+{% block guide %}
+<p>Everything the gate system saw: hits, releases, suspicious attempts, bans, canary fires, lure views.</p>
+<ul>
+  <li>Filter by category to isolate suspicious activity or releases.</li>
+  <li>IPs are stored hashed; raw IPs appear only where the system needs them (bans).</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">

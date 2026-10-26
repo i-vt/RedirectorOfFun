@@ -1,5 +1,26 @@
 {% extends "base.html" %}
 {% load gate_extras %}
+{% block guide %}
+<p>A delivery link is a URL under <code>{{ base_path }}</code> that serves content you control - a key, a file, or a pwndrop-proxied download. Everything on this page is optional except the path; the fastest start is the <strong>Quick drop</strong> button on the Links page.</p>
+<h3>CHOOSE A KIND</h3>
+<ul>
+  <li><strong>Key</strong> - serve short text (license key, config blob) as a small page.</li>
+  <li><strong>File</strong> - serve an uploaded payload at a stable URL.</li>
+  <li><strong>Proxy</strong> - fetch from a pwndrop URL server-side; the source is never exposed.</li>
+</ul>
+<h3>CHOOSE A GATE</h3>
+<ul>
+  <li><strong>No gate</strong> - anyone with the URL gets the content.</li>
+  <li><strong>Token / TOTP</strong> - the visitor presents a shared token or a timed code.</li>
+  <li><strong>Submission</strong> - the agent POSTs an encrypted package (hostname, screenshots); an operator approves before release.</li>
+  <li><strong>IP / User-Agent only</strong> - no credentials; the NETWORK PROFILE below decides. Fields you don't need stay hidden until you pick the matching option.</li>
+</ul>
+<h3>WHILE HELD / ON DENY</h3>
+<ul>
+  <li>Held requests can show a blank 204, the decoy, or a redirect. Denied ones return 404, the decoy, or your benevolent content.</li>
+  <li>The network profile (IP / UA / header contract / time window) is checked <em>before</em> credentials - failures look identical to a wrong token.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading"><div><span class="section-label">RELEASE GATES</span><h2>{{ title }}</h2><p>Public path must live under <code>{{ base_path }}</code> so nginx routes it to the control plane.</p></div></div>
@@ -16,10 +37,10 @@
     {% csrf_token %}
     <fieldset>
       <legend>IDENTITY</legend>
-      <label><span>PATH</span><input class="field-input mono" name="path" required maxlength="240" value="{{ link.path|default:base_path }}" placeholder="{{ base_path }}update/x7Q9"></label>
+      <label><span>PATH {% tip "Public URL path. Must start with the gate base so nginx routes it here. Random suffixes resist scanning." %}</span><input class="field-input mono" name="path" required maxlength="240" value="{{ link.path|default:base_path }}" placeholder="{{ base_path }}update/x7Q9"></label>
       <div class="grid-2">
-        <label><span>KIND</span><select class="field-input" name="kind">{% for value, label in kinds %}<option value="{{ value }}" {% if link.kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-        <label><span>LABEL</span><input class="field-input" name="label" maxlength="120" value="{{ link.label }}" placeholder="Quarterly update package"></label>
+        <label><span>KIND {% tip "What this link serves: short text (key), an uploaded file, or a pwndrop-proxied download." %}</span><select class="field-input" name="kind">{% for value, label in kinds %}<option value="{{ value }}" {% if link.kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+        <label><span>LABEL {% tip "Operator-facing name shown in lists and notifications. Visitors never see it." %}</span><input class="field-input" name="label" maxlength="120" value="{{ link.label }}" placeholder="Quarterly update package"></label>
       </div>
       {% if domains %}
       <label><span>SERVED ON DOMAIN</span><select class="field-input" name="domain">
@@ -29,13 +50,13 @@
       {% else %}
       <label><span>SERVED ON DOMAIN (set REDIRECTOR_DOMAINS to enable the list)</span><input class="field-input mono" name="domain" maxlength="253" value="{{ link.domain }}" placeholder="updates.example.com"></label>
       {% endif %}
-      <label><span>AGENT / BUILD TAG</span><input class="field-input" name="agent_label" maxlength="120" value="{{ link.agent_label }}" placeholder="agent-42 / build 2026-10"></label>
+      <label><span>AGENT / BUILD TAG {% tip "Free-form tag tying this link to an agent or build, e.g. agent-42 / 2026-10. Useful for filtering and the payloads page." %}</span><input class="field-input" name="agent_label" maxlength="120" value="{{ link.agent_label }}" placeholder="agent-42 / build 2026-10"></label>
     </fieldset>
     <fieldset>
       <legend>CONTENT</legend>
-      <label data-show-when="kind:key"><span>KEY TEXT (kind = key)</span><textarea class="field-input mono" name="key_text" rows="4">{{ link.key_text }}</textarea></label>
+      <label data-show-when="kind:key"><span>KEY TEXT (kind = key) {% tip "The exact text served when the gate passes. Watermarking appends a per-release marker so leaks trace back." %}</span><textarea class="field-input mono" name="key_text" rows="4">{{ link.key_text }}</textarea></label>
       <label data-show-when="kind:proxy"><span>PWNDROP SOURCE URL (kind = proxy - fetched server-side, location never exposed)</span><input class="field-input mono" name="pwndrop_url" value="{{ link.pwndrop_url }}" placeholder="http://10.0.0.5:8080/files/payload.bin"></label>
-      <label data-show-when="kind:file"><span>PAYLOAD FILE (kind = file)</span>
+      <label data-show-when="kind:file"><span>PAYLOAD FILE (kind = file) {% tip "Drop or pick the file to serve. Replacing it later keeps the same URL - rotate payloads without re-sending links." %}</span>
         <div class="drop-zone" data-file-input="payload-input">Drop a file here, or click to choose<input class="field-input" type="file" name="payload" id="payload-input" style="display:none"></div>
         <small class="mono muted" id="payload-input-chosen" style="font-size:.68rem">{% if link.payload %}current: {{ link.payload.name }}{% endif %}</small>
       </label>
@@ -51,53 +72,53 @@
       <legend>GATE</legend>
       <div class="grid-2">
         <label><span>GATE TYPE</span><select class="field-input" name="gate_type">{% for value, label in gates %}<option value="{{ value }}" {% if link.gate_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-        <label data-show-when="gate_type:token"><span>STATIC TOKEN (gate = token, sent as ?t= or X-Gate-Token)</span><input class="field-input mono" name="gate_token" value="{{ link.gate_token }}"></label>
+        <label data-show-when="gate_type:token"><span>STATIC TOKEN {% tip "Shared secret. Agents send it as ?t=… or the X-Gate-Token header. Long and random beats clever." %}</span><input class="field-input mono" name="gate_token" value="{{ link.gate_token }}"></label>
       </div>
       <p class="muted" style="font-size:.68rem;margin-top:-4px" data-show-when="gate_type:network">IP/UA gate: no credentials at all - the NETWORK PROFILE section below decides who may even attempt the link.</p>
       <div class="grid-2" data-show-when="gate_type:totp">
-        <label><span>TOTP SECRET (gate = totp)</span><input class="field-input mono" name="totp_secret" value="{{ link.totp_secret }}"></label>
-        <label><span>TOTP WINDOW (SECONDS)</span><input class="field-input" type="number" min="5" name="totp_window" value="{{ link.totp_window|default:30 }}"></label>
+        <label><span>TOTP SECRET {% tip "Shared seed for time-based codes. Codes are single-use per link - a replayed code is held and flagged." %}</span><input class="field-input mono" name="totp_secret" value="{{ link.totp_secret }}"></label>
+        <label><span>TOTP WINDOW {% tip "Seconds each code stays valid. 30 is standard; larger windows forgive clock skew but burn slower." %}</span><input class="field-input" type="number" min="5" name="totp_window" value="{{ link.totp_window|default:30 }}"></label>
       </div>
       <div class="grid-3" data-show-when="gate_type:submission">
         <label><span>DECODE/DECRYPT TEMPLATE (gate = submission)</span><select class="field-input" name="cipher">{% for value, label in ciphers %}<option value="{{ value }}" {% if link.cipher == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
         <label data-show-when="gate_type:submission" data-also-when="cipher:xor|aes256"><span>KEY (xor / aes256)</span><input class="field-input mono" name="cipher_key" value="{{ link.cipher_key }}"></label>
         <label data-show-when="gate_type:submission" data-also-when="cipher:aes256"><span>IV (aes256, hex)</span><input class="field-input mono" name="cipher_iv" value="{{ link.cipher_iv }}"></label>
       </div>
-      <label data-show-when="gate_type:submission"><span>EXPECTED JSON FIELDS (comma separated)</span><input class="field-input mono" name="expected_fields" value="{{ expected_fields_csv }}" placeholder="hostname, username, screenshot"></label>
+      <label data-show-when="gate_type:submission"><span>EXPECTED JSON FIELDS {% tip "Submission gate: fields that must exist in the decrypted package (e.g. hostname, screenshot) or it is rejected." %}</span><input class="field-input mono" name="expected_fields" value="{{ expected_fields_csv }}" placeholder="hostname, username, screenshot"></label>
       <label data-show-when="gate_type:submission"><span>AUTO-DECISION RULES (JSON, optional - first match decides; no match stays manual)</span><textarea class="field-input mono" name="auto_rules" rows="4" placeholder='[{"action":"approve","when":{"fields_match":{"hostname":"^corp-laptop-\\d+$"},"forbid":["vmware|vbox|sandbox"],"require_images":true}}]'>{{ link.auto_rules|as_json }}</textarea></label>
     </fieldset>
     <fieldset>
       <legend>RELEASE RULES</legend>
       <div class="grid-2">
-        <label><span>WHILE HELD SHOW</span><select class="field-input" name="placeholder">{% for value, label in placeholders %}<option value="{{ value }}" {% if link.placeholder == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-        <label><span>ON DENY SERVE</span><select class="field-input" name="on_deny">{% for value, label in denies %}<option value="{{ value }}" {% if link.on_deny == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+        <label><span>WHILE HELD {% tip "What a visitor sees before approval / without credentials: blank 204, the decoy page, or a redirect elsewhere." %}</span><select class="field-input" name="placeholder">{% for value, label in placeholders %}<option value="{{ value }}" {% if link.placeholder == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+        <label><span>ON DENY {% tip "What a denied or banned visitor gets: 404, the decoy, or your benevolent content below." %}</span><select class="field-input" name="on_deny">{% for value, label in denies %}<option value="{{ value }}" {% if link.on_deny == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
       </div>
       <div class="grid-3">
         <label><span>JA3 FINGERPRINT (requires OpenResty front, docs/openresty-ja3.md)</span><input class="field-input mono" name="ja3_fingerprint" maxlength="64" value="{{ link.ja3_fingerprint }}" placeholder="e3b0c44298fc1c149afbf4c8996fb924"></label>
         <label><span>JA4 FINGERPRINT</span><input class="field-input mono" name="ja4_fingerprint" maxlength="64" value="{{ link.ja4_fingerprint }}" placeholder="t13d1516h2_8daaf6152771_b186095e22b6"></label>
-        <label><span>&nbsp;</span><span class="check"><input type="checkbox" name="watermark" {% if link.watermark %}checked{% endif %}> WATERMARK RELEASES (append unique marker; exact value is logged per download)</span></label>
+        <label><span>&nbsp;</span><span class="check"><input type="checkbox" name="watermark" {% if link.watermark %}checked{% endif %}> WATERMARK RELEASES {% tip "Appends a unique marker to every release; the value is logged per download so a leaked copy traces back to a specific hit." %}</span></label>
       </div>
       <div class="grid-3">
-        <label class="check"><input type="checkbox" name="requires_approval" {% if link.requires_approval %}checked{% endif %}> <span>VERIFICATION GATE (operator approves before release)</span></label>
-        <label class="check"><input type="checkbox" name="one_time" {% if link.one_time %}checked{% endif %}> <span>ONE-TIME (deactivate after first release)</span></label>
+        <label class="check"><input type="checkbox" name="requires_approval" {% if link.requires_approval %}checked{% endif %}> <span>VERIFICATION GATE {% tip "Submissions queue for an operator decision (panel, mobile, or Telegram). Auto-decision rules can pre-approve clean-looking ones." %}</span></label>
+        <label class="check"><input type="checkbox" name="one_time" {% if link.one_time %}checked{% endif %}> <span>ONE-TIME {% tip "The link deactivates after the first successful release - pairs well with replay dedupe." %}</span></label>
         <label class="check"><input type="checkbox" name="active" {% if link.active or link is None %}checked{% endif %}> <span>ACTIVE</span></label>
       </div>
       <div class="grid-2">
-        <label><span>MAX USES (0 = unlimited)</span><input class="field-input" type="number" min="0" name="max_uses" value="{{ link.max_uses|default:0 }}"></label>
+        <label><span>MAX USES {% tip "Hard cap on releases. 0 = unlimited. The counter is atomic, so concurrent requests cannot over-serve." %}</span><input class="field-input" type="number" min="0" name="max_uses" value="{{ link.max_uses|default:0 }}"></label>
         <label><span>EXPIRES AT (ISO, optional)</span><input class="field-input" type="datetime-local" name="expires_at" value="{{ link.expires_at|date:'Y-m-d\TH:i' }}"></label>
       </div>
     </fieldset>
     <fieldset data-feature-when="gate_type:network">
       <legend>NETWORK PROFILE (malleable contract - requests that don't match are dropped before any gate check)</legend>
       <div class="grid-2">
-        <label><span>ALLOWED SOURCE IPs / CIDRs (comma separated, empty = any)</span><input class="field-input mono" name="allowed_ips" value="{{ allowed_ips_csv }}" placeholder="203.0.113.0/24, 198.51.100.7"></label>
-        <label><span>ALLOWED UA PATTERNS (comma separated regex, empty = any)</span><input class="field-input mono" name="allowed_uas" value="{{ allowed_uas_csv }}" placeholder="^Mozilla/5.0.*Chrome/, ^MyAgent/\d"></label>
+        <label><span>ALLOWED SOURCE IPs {% tip "Only these IPs/ranges may even attempt the gate. Checked before credentials; failures look like a wrong token." %}</span><input class="field-input mono" name="allowed_ips" value="{{ allowed_ips_csv }}" placeholder="203.0.113.0/24, 198.51.100.7"></label>
+        <label><span>ALLOWED UA PATTERNS {% tip "User-Agent regex allow-list, e.g. ^MyAgent/2. Combined with the IP list this is the whole network gate." %}</span><input class="field-input mono" name="allowed_uas" value="{{ allowed_uas_csv }}" placeholder="^Mozilla/5.0.*Chrome/, ^MyAgent/\d"></label>
       </div>
-      <label><span>HEADER CONTRACT (JSON - exact "value" or regex "pattern" per header)</span><textarea class="field-input mono" name="header_contract" rows="3" placeholder='[{"name":"X-Api-Version","value":"2.1"},{"name":"Accept-Language","pattern":"^en-US"}]'>{{ link.header_contract|as_json }}</textarea></label>
+      <label><span>HEADER CONTRACT {% tip "Malleable-profile contract: every listed header must match (exact value or regex fullmatch). Non-conforming requests drop before the gate." %}</span><textarea class="field-input mono" name="header_contract" rows="3" placeholder='[{"name":"X-Api-Version","value":"2.1"},{"name":"Accept-Language","pattern":"^en-US"}]'>{{ link.header_contract|as_json }}</textarea></label>
       <div class="grid-3">
-        <label><span>SERVE AFTER (UTC, optional)</span><input class="field-input mono" type="time" name="active_window_start" value="{{ link.active_window_start|time:'H:i' }}"></label>
-        <label><span>SERVE UNTIL (UTC, optional)</span><input class="field-input mono" type="time" name="active_window_end" value="{{ link.active_window_end|time:'H:i' }}"></label>
-        <label class="check" style="align-self:end"><input type="checkbox" name="replay_dedupe" {% if link.replay_dedupe %}checked{% endif %}> <span>REFUSE REPLAYED REQUESTS (verbatim repeats are held)</span></label>
+        <label><span>SERVE AFTER {% tip "Daily availability window (UTC). Outside it the link looks expired (410). Windows may cross midnight." %}</span><input class="field-input mono" type="time" name="active_window_start" value="{{ link.active_window_start|time:'H:i' }}"></label>
+        <label><span>SERVE UNTIL {% tip "End of the daily window (UTC). Both empty = always available." %}</span><input class="field-input mono" type="time" name="active_window_end" value="{{ link.active_window_end|time:'H:i' }}"></label>
+        <label class="check" style="align-self:end"><input type="checkbox" name="replay_dedupe" {% if link.replay_dedupe %}checked{% endif %}> <span>REFUSE REPLAYED REQUESTS {% tip "Stores a digest of every accepted request; a verbatim repeat is held as suspicious." %}</span></label>
       </div>
       <p class="muted" style="font-size:.68rem">Time window: both empty = always available; windows may cross midnight (22:00-02:00). Outside the window the link looks expired (410).</p>
     </fieldset>

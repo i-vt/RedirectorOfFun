@@ -1,5 +1,14 @@
 {% extends "base.html" %}{% load static %}
 {% block head %}<script defer src="{% static 'js/chart.umd.min.js' %}"></script><script defer src="{% static 'js/dashboard.js' %}"></script>{% endblock %}
+{% block guide %}
+<p>The control-plane dashboard: 404 telemetry from the edge plus gate activity from the release system.</p>
+<h3>READING IT</h3>
+<ul>
+  <li>404 metrics come from the nginx JSON log (async collector) - spikes usually mean scanning.</li>
+  <li>Gate cards count active links, pending approvals, releases and suspicious hits in the last 24h.</li>
+  <li>Nothing here is public; visitors only ever see the decoy.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <div class="dashboard-grid">
   <div class="dashboard-primary">

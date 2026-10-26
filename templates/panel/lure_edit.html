@@ -2,6 +2,15 @@
 {% load ui_icons %}
 {% load static %}
 {% block head %}<script defer src="{% static 'js/site_editor.js' %}"></script>{% endblock %}
+{% block guide %}
+<p>The browser editor for this lure: pages, stylesheets, scripts - all text, all served as-is under the site's public path.</p>
+<h3>HOW REQUESTS MAP</h3>
+<ul>
+  <li>An empty path serves <code>index.html</code>. Subpaths map to files exactly (<code>css/style.css</code>).</li>
+  <li>Unknown paths serve the site's own <code>404.html</code> if it exists, else the global decoy.</li>
+  <li>Renaming the path field moves the file; Ctrl/&#8984;+S saves.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">

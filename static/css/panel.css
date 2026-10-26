@@ -136,3 +136,21 @@ label,.field-group{transition:opacity .15s ease}
 .grid-2:has(> .field-hidden){grid-template-columns:1fr}
 .grid-3:has(> .field-hidden){grid-template-columns:1fr}
 fieldset.field-featured{border-color:var(--s-accent);box-shadow:0 0 0 1px var(--s-accent) inset}
+
+/* Inline help: tooltips, help dots, per-page guide modal */
+.help-dot{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--s-muted);color:var(--s-muted);font-size:.58rem;font-style:normal;cursor:help;vertical-align:2px;margin-left:6px;user-select:none;-webkit-user-select:none}
+.help-dot:hover,.help-dot.tip-open{border-color:var(--s-accent);color:var(--s-accent)}
+[data-tip]{position:relative}
+[data-tip]::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%) translateY(4px);background:var(--s-surface);color:var(--s-text);border:var(--c-panel-border);border-left:2px solid var(--s-accent);border-radius:8px;padding:8px 12px;font-size:.66rem;font-weight:400;letter-spacing:0;text-transform:none;line-height:1.5;width:max-content;max-width:280px;white-space:normal;z-index:120;opacity:0;pointer-events:none;transition:opacity .12s ease,transform .12s ease;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+[data-tip]:hover::after,[data-tip].tip-open::after,[data-tip]:focus-visible::after{opacity:1;transform:translateX(-50%) translateY(0)}
+[data-tip].tip-left::after{left:auto;right:0;transform:translateY(4px)}
+[data-tip].tip-left:hover::after,[data-tip].tip-left.tip-open::after{transform:translateY(0)}
+.guide-body{font-size:.72rem;color:var(--s-muted);line-height:1.6;margin-top:10px}
+.guide-body h3{font-size:.66rem;color:var(--s-accent);margin:16px 0 4px;letter-spacing:.12em}
+.guide-body ul{padding-left:18px;margin:6px 0}
+.guide-body li{margin:5px 0}
+.guide-body p{margin:8px 0}
+.guide-body code{color:var(--s-accent);font-size:.64rem}
+.guide-body strong{color:var(--s-text)}
+.guide-body .kbd{background:var(--p-abyss);border:1px solid var(--s-border);border-radius:4px;padding:1px 5px;font-size:.62rem;color:var(--s-text)}
+#guide-open[hidden]{display:none}

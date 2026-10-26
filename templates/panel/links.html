@@ -1,5 +1,19 @@
 {% extends "base.html" %}
 {% load ui_icons %}
+{% block guide %}
+<p>Delivery links are the URLs you hand out or embed in agents. Each one serves a key, a file, or a pwndrop-proxied download behind whatever gate you set.</p>
+<h3>QUICK PATH</h3>
+<ul>
+  <li><strong>Quick drop</strong> - one file, one click, instant live URL. Gate it later from its edit page.</li>
+  <li><strong>New link</strong> - the full form: gates, network profile, approval flow, expiry, watermarks.</li>
+  <li>Filter by label or kind above; the table updates as you type.</li>
+</ul>
+<h3>READING A ROW</h3>
+<ul>
+  <li><strong>LIVE</strong> serves right now; <strong>PENDING</strong> waits on an approval; grey means inactive or exhausted.</li>
+  <li>Click a path for the detail page: download chart, received imagery, hits, QR code, burn notice.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">

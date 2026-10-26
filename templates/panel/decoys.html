@@ -1,5 +1,14 @@
 {% extends "base.html" %}
 {% load ui_icons %}
+{% block guide %}
+<p>Decoys are the cover story: anyone who hits an unknown path, is denied, or is banned sees the <strong>default</strong> decoy. Redirect decoys send them elsewhere entirely.</p>
+<h3>NOTES</h3>
+<ul>
+  <li>Built-in pages ship with the repo; upload your own or point at an external URL.</li>
+  <li>EDIT opens the browser editor: override the HTML inline and attach tied CSS/JS assets served from <code>/d/&lt;id&gt;/…</code>.</li>
+  <li>Deactivating the default auto-promotes a fallback so the surface never goes bare.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">

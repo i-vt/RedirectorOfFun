@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% load ui_icons %}
+{% block guide %}
+<p>404 events ingested from the edge's JSON access log - the raw surface telemetry. Anything that isn't a gate, lure, or agent path lands here.</p>
+<ul>
+  <li>Filter and drill to spot scanning patterns; top paths feed the overview.</li>
+  <li>Decoy responses are still 200s to the visitor; the 404 semantics live in this log.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading"><div><span class="section-label">NGINX LOG INTELLIGENCE</span><h2>404 event stream</h2><p>Search stored events by path, method, or any client identifier. Raw IPs and user agents are stored; the client column shows the hash unless you reveal identifiers.</p></div><span class="status-badge good">ASYNC INGESTION</span></div>

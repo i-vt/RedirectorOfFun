@@ -249,3 +249,38 @@
     counters.forEach(el => observer.observe(el));
   }
 })();
+
+// ─── Inline help: tooltips on touch, per-page guide modal ──────────────────
+(() => {
+  // Tooltips: hover works on desktop; tap toggles on touch devices.
+  document.addEventListener("click", (event) => {
+    const dot = event.target.closest("[data-tip]");
+    document.querySelectorAll("[data-tip].tip-open").forEach((el) => {
+      if (el !== dot) el.classList.remove("tip-open");
+    });
+    if (dot) dot.classList.toggle("tip-open");
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      document.querySelectorAll("[data-tip].tip-open").forEach((el) => el.classList.remove("tip-open"));
+    }
+  });
+
+  // Per-page guide: the ? button opens a modal with the page's guide block.
+  const openBtn = document.getElementById("guide-open");
+  const modal = document.getElementById("guide-modal");
+  if (!openBtn || !modal) return;
+  const body = modal.querySelector(".guide-body");
+  if (body && body.textContent.trim()) openBtn.hidden = false;
+  const close = () => { modal.hidden = true; };
+  openBtn.addEventListener("click", () => { modal.hidden = false; });
+  modal.addEventListener("click", (event) => { if (event.target === modal) close(); });
+  const closeBtn = modal.querySelector("#guide-close");
+  if (closeBtn) closeBtn.addEventListener("click", close);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !modal.hidden) close();
+    if (event.key === "?" && event.shiftKey && !/INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) {
+      if (!openBtn.hidden) { event.preventDefault(); modal.hidden = false; }
+    }
+  });
+})();

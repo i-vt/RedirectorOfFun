@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% load ui_icons %}
+{% block guide %}
+<p>Agent channels give each deployed beacon its own routed path; nginx proxies those paths to the C2 while everything else falls to the decoy.</p>
+<ul>
+  <li>Rotate burns the old token/path and mints a new one - redeploy the agent after rotating.</li>
+  <li>Hits and last-seen times show whether a channel is alive.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading"><div><span class="section-label">C2 EDGE</span><h2>Agent channels</h2><p>Per-agent beacon URLs under <code>{{ base_path }}</code>. nginx proxies matching traffic to the C2 backend; mismatched UAs get a bare 404. Rotate a token to burn a deployed agent.</p></div></div>
@@ -27,6 +34,6 @@
     </tr>
     {% endfor %}
   </tbody></table></div>
-  {% else %}<div class="empty-state"><strong>No agent channels</strong><p>Create per-agent beacon URLs to track and revoke individual agents.</p></div>{% endif %}
+  {% else %}<div class="empty-state"><strong>No agent channels</strong><p>Create per-agent beacon URLs to track and revoke individual agents.</p><p class="muted" style="font-size:.68rem">Add a channel with the form above.</p></div>{% endif %}
 </section>
 {% endblock %}

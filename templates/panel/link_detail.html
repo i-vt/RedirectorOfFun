@@ -3,6 +3,20 @@
 {% load gate_extras %}
 {% load static %}
 {% block head %}<script defer src="{% static 'js/chart.umd.min.js' %}"></script><script defer src="{% static 'js/link_chart.js' %}"></script><script defer src="{% static 'js/lightbox.js' %}"></script>{% endblock %}
+{% block guide %}
+<p>Everything about one link: status, limits, telemetry, and the imagery it collected.</p>
+<h3>LIFECYCLE</h3>
+<ul>
+  <li><strong>LIVE</strong> - serving. <strong>PENDING</strong> - a submission waits for your decision. <strong>EXPIRED/INACTIVE</strong> - looks dead to visitors.</li>
+  <li><strong>Burn notice</strong> deactivates the link, denies all traffic, and bans every visitor IP except the approved target. Use it when an op is blown.</li>
+</ul>
+<h3>SIGNALS</h3>
+<ul>
+  <li>The chart counts real releases (downloads + key serves), not raw hits.</li>
+  <li>The intel gallery shows images the gate decoded from submissions; click for full size.</li>
+  <li>QR / SHARE gives the absolute URL as a scannable SVG.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">

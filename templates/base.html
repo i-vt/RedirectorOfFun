@@ -63,11 +63,20 @@
   <div class="workspace">
     <header class="topbar">
       <div><span class="topbar-path">RoF / {% if request.resolver_match.namespace %}{{ request.resolver_match.namespace }} / {% endif %}CONTROL</span><h1>{{ title }}</h1></div>
-      <div class="topbar-status"><button id="sound-toggle" class="text-button" type="button">SOUND: ON</button><span class="status-dot"></span><span>LIVE MONITOR</span><time id="utc-clock">UTC</time></div>
+      <div class="topbar-status"><button id="guide-open" class="text-button" type="button" hidden>[ ? GUIDE ]</button><button id="sound-toggle" class="text-button" type="button">SOUND: ON</button><span class="status-dot"></span><span>LIVE MONITOR</span><time id="utc-clock">UTC</time></div>
     </header>
     {% if messages %}<div class="message-stack" aria-live="polite">{% for message in messages %}<div class="toast {{ message.tags }}"><span>{{ message }}</span><button type="button" class="toast-close" aria-label="Dismiss notification">×</button></div>{% endfor %}</div>{% endif %}
     <main id="main-content" class="main-content">{% block content %}{% endblock %}</main>
   </div>
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
+  <div id="guide-modal" class="rof-modal-overlay" hidden>
+    <div class="rof-modal-card" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div><span class="section-label">GUIDE</span><h2 id="guide-title">{{ title|default:"This page" }}</h2></div>
+        <button class="text-button" type="button" id="guide-close">[ CLOSE ]</button>
+      </div>
+      <div class="guide-body">{% block guide %}{% endblock %}</div>
+    </div>
+  </div>
 </body>
 </html>

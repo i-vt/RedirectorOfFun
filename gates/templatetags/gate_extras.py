@@ -1,8 +1,16 @@
 import json
 
 from django import template
+from django.utils.html import escape, format_html
 
 register = template.Library()
+
+
+@register.simple_tag
+def tip(text, cls=""):
+    """Inline help dot with a tooltip: {% tip "explainer" %}. Hover or tap."""
+    return format_html('<i class="help-dot{}" data-tip="{}" role="button" tabindex="0" '
+                       'aria-label="help">?</i>', f" {cls}" if cls else "", escape(str(text)))
 
 
 @register.filter

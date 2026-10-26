@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% load ui_icons %}
+{% block guide %}
+<p>Banned IPs get the decoy everywhere, forever (until you lift the ban). Auto-bans from rules and burn notices land here too.</p>
+<ul>
+  <li>Toggling a ban updates the nginx banlist include automatically.</li>
+  <li>The loopback footgun is guarded: you cannot ban 127.0.0.1/::1 from here.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading"><div><span class="section-label">EDGE DEFENSE</span><h2>Banned IPs</h2><p>Banned visitors receive the default decoy page. nginx-level denies are synced when include paths are configured.</p></div></div>
@@ -23,6 +30,6 @@
     {% endfor %}
   </tbody></table></div>
   {% if page.paginator.num_pages > 1 %}<nav class="pagination"><span>PAGE {{ page.number }} / {{ page.paginator.num_pages }}</span><div>{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">← Previous</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}">Next →</a>{% endif %}</div></nav>{% endif %}
-  {% else %}<div class="empty-state"><strong>No banned IPs</strong><p>Manual bans and auto-bans from suspicious-activity thresholds appear here.</p></div>{% endif %}
+  {% else %}<div class="empty-state"><strong>No banned IPs</strong><p>Manual bans and auto-bans from suspicious-activity thresholds appear here. Burn a link or enable auto-ban rules to populate this list.</p></div>{% endif %}
 </section>
 {% endblock %}

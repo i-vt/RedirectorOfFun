@@ -2723,3 +2723,59 @@ class NetworkGateAndFormUxTests(TestCase):
         self.assertIn(".field-hidden", css)
         self.assertIn(".field-dimmed", css)
         self.assertIn(".field-featured", css)
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class GuidanceUxTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="gxop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+
+    def test_guide_modal_shell_present_and_filled(self):
+        response = self.client.get(reverse("gate-links"))
+        self.assertContains(response, 'id="guide-open"')
+        self.assertContains(response, 'id="guide-modal"')
+        self.assertContains(response, "guide-body")
+        self.assertContains(response, "QUICK PATH")  # links guide content rendered
+
+    def test_link_form_tooltips_and_guide(self):
+        response = self.client.get(reverse("gate-link-create"))
+        content = response.content.decode()
+        self.assertGreaterEqual(content.count("help-dot"), 15)
+        self.assertContains(response, "CHOOSE A GATE")
+        self.assertContains(response, "data-tip=")
+
+    def test_submissions_guide_documents_shortcuts(self):
+        response = self.client.get(reverse("gate-submissions"))
+        self.assertContains(response, "kbd")
+
+    def test_tip_tag_escapes_content(self):
+        from django.template import Context, Template
+        rendered = Template('{% load gate_extras %}{% tip "a<b>c" %}').render(Context())
+        self.assertIn("a&lt;b&gt;c", rendered)
+        self.assertIn("help-dot", rendered)
+
+    def test_pages_without_guide_hide_button(self):
+        # audit page has no guide block; the button stays hidden in markup
+        response = self.client.get(reverse("audit-log"))
+        self.assertContains(response, 'id="guide-open"')
+        self.assertContains(response, 'id="guide-open" class="text-button" type="button" hidden')
+
+    def test_mobile_intel_gallery(self):
+        link = DeliveryLink.objects.create(path="/g/m/i", kind="file")
+        sub = Submission.objects.create(link=link, decoded_json={"hostname": "ws-5"})
+        SubmissionImage.objects.create(
+            submission=sub, field_name="screenshot",
+            image=ContentFile(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16, name="s.png"))
+        response = self.client.get(reverse("m-intel"))
+        self.assertContains(response, "shot-card")
+        self.assertContains(response, "ws-5")
+        self.assertContains(response, "INTEL")  # tab bar entry
+        # anonymous visitors are redirected to login
+        self.assertEqual(Client().get(reverse("m-intel")).status_code, 302)
+
+    def test_mobile_links_have_quick_drop(self):
+        response = self.client.get(reverse("m-links"))
+        self.assertContains(response, "QUICK DROP")
+        self.assertContains(response, "qd-file")

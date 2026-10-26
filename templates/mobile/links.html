@@ -1,5 +1,42 @@
 {% extends "mobile/base.html" %}
 {% block content %}
+<div class="card">
+  <div class="path">QUICK DROP</div>
+  <p class="muted" style="font-size:.78rem;margin:6px 0 0">Pick a file (or shoot a photo) - it goes live at a random URL immediately.</p>
+  <div class="row">
+    <label class="btn secondary" style="display:flex;align-items:center;justify-content:center">Choose file<input type="file" id="qd-file" style="display:none"></label>
+    <button class="btn primary" type="button" id="qd-go">Drop it</button>
+  </div>
+  <div id="qd-out" class="mono muted" style="font-size:.72rem;margin-top:10px;overflow-wrap:anywhere"></div>
+</div>
+<script>
+(() => {
+  const fileInput = document.getElementById("qd-file");
+  const out = document.getElementById("qd-out");
+  fileInput.addEventListener("change", () => {
+    out.textContent = fileInput.files[0] ? fileInput.files[0].name + " (" + fileInput.files[0].size + " B)" : "";
+  });
+  document.getElementById("qd-go").addEventListener("click", async () => {
+    if (!fileInput.files.length) { out.textContent = "Pick a file first."; return; }
+    out.textContent = "Uploading…";
+    const data = new FormData();
+    data.append("file", fileInput.files[0]);
+    const response = await fetch("{% url 'gate-link-quick-drop' %}", {
+      method: "POST", body: data,
+      headers: {"X-CSRFToken": document.querySelector('meta[name="csrf-token"]').content},
+    });
+    if (!response.ok) { out.textContent = "Drop failed."; return; }
+    const body = await response.json();
+    const url = location.origin + body.path;
+    out.innerHTML = "";
+    const link = document.createElement("a");
+    link.href = url; link.textContent = url; link.style.color = "var(--accent)";
+    out.appendChild(document.createTextNode("Live: "));
+    out.appendChild(link);
+    setTimeout(() => location.reload(), 1800);
+  });
+})();
+</script>
 {% for link in links %}
 <div class="card">
   <div class="path">{{ link.path }}</div>
@@ -12,6 +49,6 @@
   </div>
   <div class="row"><a class="btn secondary" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="{% url 'm-link' link.pk %}">Open</a></div>
 </div>
-{% empty %}<div class="empty"><strong>No links</strong></div>{% endfor %}
+{% empty %}<div class="empty"><strong>No links</strong><p style="font-size:.8rem;margin-top:8px">Drop a file above for an instant live URL.</p></div>{% endfor %}
 {% if page.paginator.num_pages > 1 %}<div class="pager">{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">← Newer</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}">Older →</a>{% endif %}</div>{% endif %}
 {% endblock %}

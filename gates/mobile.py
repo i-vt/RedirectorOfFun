@@ -9,7 +9,7 @@ from django.utils import timezone
 from audit.services import record_event
 
 from . import services
-from .models import DeliveryLink, HitEvent, Submission
+from .models import DeliveryLink, HitEvent, Submission, SubmissionImage
 
 
 @login_required
@@ -82,3 +82,14 @@ def events(request):
     paginator = Paginator(HitEvent.objects.select_related("link", "agent_channel"), 25)
     page = paginator.get_page(request.GET.get("page"))
     return render(request, "mobile/events.html", {"title": "Events", "page": page, "events": page.object_list})
+
+
+@login_required
+def intel(request):
+    """Gate imagery as a touch-friendly gallery."""
+    images = SubmissionImage.objects.select_related("submission__link").order_by("-created_at")
+    paginator = Paginator(images, 20)
+    page = paginator.get_page(request.GET.get("page"))
+    return render(request, "mobile/intel.html", {
+        "title": "Intel", "page": page, "images": page.object_list,
+    })

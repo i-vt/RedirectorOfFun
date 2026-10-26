@@ -1,6 +1,20 @@
 {% extends "base.html" %}
 {% load ui_icons %}
 {% load gate_extras %}
+{% block guide %}
+<p>The blocking chain decides who even reaches a gate. Rules live in ordered rulesets; the first match wins.</p>
+<h3>MODEL</h3>
+<ul>
+  <li>Conditions match on IP/CIDR, user-agent, ASN, ISP, country, or city (geo uses stored intel; unknown intel never matches).</li>
+  <li>Logic: <strong>all</strong> / <strong>any</strong> / <strong>not</strong> / <strong>xor</strong>; conditions can be negated individually.</li>
+  <li>Actions: <strong>block</strong> shows the decoy, <strong>allow</strong> stops the chain and lets the request through. Block can auto-ban.</li>
+</ul>
+<h3>TOOLS</h3>
+<ul>
+  <li>Presets are seeded disabled; enable selectively. The dry-run page tests an IP+UA against the whole chain before you ship a rule.</li>
+  <li>Import/export as JSON for versioning; <code>import_ip_feed</code> pulls remote vendor/scanner feeds into a set.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">

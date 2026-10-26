@@ -1,6 +1,19 @@
 {% extends "base.html" %}
 {% load static %}
 {% block head %}<script defer src="{% static 'js/lightbox.js' %}"></script>{% endblock %}
+{% block guide %}
+<p>Encrypted packages from droppers/loader agents, decrypted and queued for your decision. Approving releases the linked content; denying serves the deny response.</p>
+<h3>WORKFLOW</h3>
+<ul>
+  <li>Expand a row for the decoded JSON, screenshots, and an operator note field.</li>
+  <li>Auto-decision rules on the link can pre-approve or pre-deny; unmatched submissions wait for you.</li>
+  <li>Every decision has an undo window - the banner shows how long.</li>
+</ul>
+<h3>KEYBOARD</h3>
+<ul>
+  <li><span class="kbd">j</span> / <span class="kbd">k</span> move between submissions, <span class="kbd">a</span> approve, <span class="kbd">d</span> deny, <span class="kbd">u</span> undo.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">

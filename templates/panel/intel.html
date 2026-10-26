@@ -3,6 +3,15 @@
 {% load gate_extras %}
 {% load static %}
 {% block head %}<script defer src="{% static 'js/lightbox.js' %}"></script>{% endblock %}
+{% block guide %}
+<p>Every base64 image the gates decoded from submissions - screenshots, webcam grabs, proof shots - as a visual grid.</p>
+<h3>USING IT</h3>
+<ul>
+  <li>Filter by link path or field name (e.g. <code>screenshot</code>).</li>
+  <li>Click a card for full size; the caption carries field, link, and UTC time.</li>
+  <li>Cards link back to the owning link's detail page.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">

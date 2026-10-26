@@ -1,0 +1,22 @@
+{% extends "mobile/base.html" %}
+{% load gate_extras %}
+{% block content %}
+{% if images %}
+<div class="grid2">
+  {% for img in images %}
+  <a class="shot-card" href="{% url 'gate-submission-image' img.pk %}" target="_blank" rel="noopener">
+    <img src="{% url 'gate-submission-image' img.pk %}" alt="{{ img.field_name }}" loading="lazy">
+    <div class="meta">
+      <strong>{{ img.field_name }}</strong>
+      <span class="badge {% if img.submission.status == 'approved' %}good{% elif img.submission.status == 'pending' %}warn{% else %}bad{% endif %}">{{ img.submission.status|upper }}</span>
+      <small class="muted mono">{{ img.submission.link.path }}</small>
+      <small class="muted">{{ img.submission.decoded_json|get_item:"hostname"|default:"-" }} · {{ img.submission.created_at|date:"m-d H:i" }}</small>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% if page.paginator.num_pages > 1 %}<div class="pager">{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">← Newer</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}">Older →</a>{% endif %}</div>{% endif %}
+{% else %}
+<div class="empty"><strong>No imagery yet</strong><p style="font-size:.8rem;margin-top:8px">When a submission carries base64 images (screenshot fields and friends), they appear here the moment the gate decodes them.</p></div>
+{% endif %}
+{% endblock %}

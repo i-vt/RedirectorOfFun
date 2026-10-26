@@ -1,5 +1,14 @@
 {% extends "base.html" %}
 {% load ui_icons %}
+{% block guide %}
+<p>Lures are whole multi-page sites hosted on this redirector - the destination you point targets at. They are <strong>not</strong> decoys: decoys cover unknown and denied traffic, lures are deliberately reachable.</p>
+<h3>WORKFLOW</h3>
+<ul>
+  <li>Create a site; it goes live immediately at its public path with a starter index and stylesheet.</li>
+  <li>Edit pages and assets in the browser, or push files through the API.</li>
+  <li>Take a lure offline to make its paths fall back to the decoy.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">

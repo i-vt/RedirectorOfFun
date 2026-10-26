@@ -10,4 +10,4 @@
   <td><a class="text-button" href="{% url 'gate-link-edit' link.pk %}">EDIT</a></td>
 </tr>{% endfor %}</tbody></table></div>
 {% if page.paginator.num_pages > 1 %}<nav class="pagination" aria-label="Link pages"><span>PAGE {{ page.number }} / {{ page.paginator.num_pages }}</span><div>{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&label={{ request.GET.label|urlencode }}&kind={{ request.GET.kind|urlencode }}">← Previous</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}&label={{ request.GET.label|urlencode }}&kind={{ request.GET.kind|urlencode }}">Next →</a>{% endif %}</div></nav>{% endif %}
-{% else %}<div class="empty-state"><strong>No delivery links</strong><p>Create a link to distribute keys, gate payloads, or proxy pwndrop content.</p></div>{% endif %}
+{% else %}<div class="empty-state"><strong>No delivery links</strong><p>Fastest start: Quick drop a file above, or</p><a class="button secondary" href="{% url 'gate-link-create' %}">Create your first link</a></div>{% endif %}

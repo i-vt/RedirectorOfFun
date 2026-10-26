@@ -1,6 +1,19 @@
 {% extends "base.html" %}
 {% load ui_icons %}
 {% load gate_extras %}
+{% block guide %}
+<p>The file manager: every payload, benevolent fallback, and uploaded decoy the system holds, plus the intel each link collected.</p>
+<h3>ACTIONS</h3>
+<ul>
+  <li><strong>REPLACE</strong> swaps the file in place - the public URL never changes. Rotate a payload mid-op without re-sending links.</li>
+  <li><strong>CLEAR</strong> removes the file but keeps the link (it then fails closed).</li>
+</ul>
+<h3>GATE INTEL</h3>
+<ul>
+  <li>The amber badge counts submissions; the text shows the latest hostname, hashed IP, and how many images came with it.</li>
+  <li>Full imagery lives under <strong>Gate Intel</strong> in the sidebar.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading"><div><span class="section-label">FILE MANAGER</span><h2>Payloads</h2><p>Every file the gate system holds: payloads, benevolent fallbacks, uploaded decoys - with the gate intel (hostnames, screenshots, hashed IPs) each link collected. Replace swaps a payload without changing its URL.</p></div></div>

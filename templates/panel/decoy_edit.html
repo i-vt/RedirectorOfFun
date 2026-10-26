@@ -2,6 +2,14 @@
 {% load ui_icons %}
 {% load static %}
 {% block head %}<script defer src="{% static 'js/site_editor.js' %}"></script>{% endblock %}
+{% block guide %}
+<p>Edit the decoy's HTML in place (saving creates an override that beats the built-in or uploaded source) and attach tied assets.</p>
+<h3>ASSETS</h3>
+<ul>
+  <li>CSS/JS files are served publicly at <code>/d/&lt;page id&gt;/&lt;path&gt;</code> - reference them from the HTML and they load from any 404 context.</li>
+  <li>Revert to source clears the override and restores the original content.</li>
+</ul>
+{% endblock %}
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">
