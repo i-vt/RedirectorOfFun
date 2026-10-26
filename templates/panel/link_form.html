@@ -134,7 +134,7 @@
         <label><span>CUSTOM TARGET (optional) {% tip "Where the visitor goes after the download starts. Empty = the link's benevolent target, picked once at creation and never rotated." %}</span><input class="field-input mono" type="url" name="post_download_url" value="{{ link.post_download_url }}" placeholder="https://www.example.com/thank-you"></label>
         {% if link.benevolent_target %}<p class="muted" style="font-size:.66rem">Benevolent target for this link: <span class="mono">{{ link.benevolent_target }}</span></p>{% endif %}
       </details>
-    </fieldset> data-feature-when="gate_type:network" {% if link.allowed_ips or link.allowed_uas or link.header_contract or link.replay_dedupe or link.active_window_start or link.gate_type == "network" %}open{% endif %}>
+    </fieldset>
     <details class="adv" data-autoopen-when="gate_type:network" data-feature-when="gate_type:network" {% if link.allowed_ips or link.allowed_uas or link.header_contract or link.replay_dedupe or link.active_window_start or link.gate_type == "network" %}open{% endif %}>
       <summary>NETWORK PROFILE <span class="adv-hint">IP/UA allow-lists · header contract · time window · replay dedupe</span></summary>
       <p class="muted" style="font-size:.66rem;margin-top:0">Malleable contract - requests that don't match are dropped before any gate check, so failures look like wrong credentials.</p>

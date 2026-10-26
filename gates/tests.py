@@ -3753,3 +3753,27 @@ class AdmissionTtlAndLiveTests(TestCase):
         })
         link = DeliveryLink.objects.get(path="/g/tt/form")
         self.assertEqual(link.admission_ttl, 300)
+
+
+class TemplateIntegrityTests(TestCase):
+    """Rendered pages never leak raw template attributes as visible text."""
+
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="tiop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+
+    def test_link_form_has_no_stray_attribute_text(self):
+        response = self.client.get(reverse("gate-link-create"))
+        content = response.content.decode()
+        # the reported bug: attribute fragments rendered as visible text
+        self.assertNotIn("</fieldset> data-", content)
+        self.assertEqual(content.count("<details"), content.count("</details>"))
+
+    def test_link_form_details_balanced_for_edit(self):
+        link = DeliveryLink.objects.create(path="/g/ti/one", kind="file", gate_type="network",
+                                           allowed_ips=["10.0.0.0/8"], manual_admission=True)
+        response = self.client.get(reverse("gate-link-edit", args=[link.pk]))
+        content = response.content.decode()
+        self.assertEqual(content.count("<details"), content.count("</details>"))
+        self.assertIn("data-autoopen-when", content)
