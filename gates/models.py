@@ -488,7 +488,7 @@ BUILTIN_DECOYS = {
         "django_template": True,
     },
     "nysm-landing": {
-        "label": "NYSM landing page",
+        "label": "RoF landing page",
         "path": "decoy/index.html",
         "django_template": False,
     },

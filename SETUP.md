@@ -138,7 +138,7 @@ Proxy to C2 over HTTPS? [y/N] → y
 [+] Port 443 is free
 [+] Updating package lists
 [+] Installing nginx, certbot & tools
-[+] Disabling certbot systemd timer            ← we use nysm-cron instead
+[+] Disabling certbot systemd timer            ← we use rof-cron instead
 [+] Deploying certbot renewal cronjob
 [+] Fetching firehol_level1.netset             ← 23,000+ blocked IPs
 [+] Blocklist written (23262 entries)
@@ -184,7 +184,7 @@ Job for nginx.service failed
 
 **Cause:** Apache2 was pre-installed on the VPS image and was holding port 80. A Python uploadserver was also running on the same port.
 
-**Fix (now automatic):** The installer's `nysm_clear_ports()` function detects and stops whatever is on ports 80 and 443 before installing nginx. It uses a polling loop with SIGKILL escalation if SIGTERM doesn't work within 5 seconds.
+**Fix (now automatic):** The installer's `rof_clear_ports()` function detects and stops whatever is on ports 80 and 443 before installing nginx. It uses a polling loop with SIGKILL escalation if SIGTERM doesn't work within 5 seconds.
 
 Manual fix if needed:
 
@@ -212,9 +212,9 @@ cp: cannot create regular file '/var/www/html/index.html': No such file or direc
 Job for nginx.service failed
 ```
 
-**Cause:** The original code used `certbot --nginx`, which modifies the live nginx config inline (adds its own SSL server block). When the script then uncommented the `#nysm#` HTTPS block, nginx had two `server { listen 443; server_name 435pau.com; }` blocks and refused to start.
+**Cause:** The original code used `certbot --nginx`, which modifies the live nginx config inline (adds its own SSL server block). When the script then uncommented the `#rof#` HTTPS block, nginx had two `server { listen 443; server_name 435pau.com; }` blocks and refused to start.
 
-**Fix (now automatic):** The installer uses `certbot certonly --webroot -w /var/www/html` instead. This drops the ACME challenge token in the webroot and **never touches the nginx config**. Our `#nysm#` block mechanism then activates cleanly.
+**Fix (now automatic):** The installer uses `certbot certonly --webroot -w /var/www/html` instead. This drops the ACME challenge token in the webroot and **never touches the nginx config**. Our `#rof#` block mechanism then activates cleanly.
 
 ### Error 4: DNS resolving to 127.0.0.1
 
@@ -578,7 +578,7 @@ cat /var/log/nginx/access.log    # Should be empty
 
 ## Part 11 - Certificate Renewal
 
-The cron job in `/etc/cron.d/nysm` handles renewal automatically:
+The cron job in `/etc/cron.d/rof` handles renewal automatically:
 
 ```
 # Attempt renewal at 06:00 and 18:00 daily (random sleep up to 1hr to stagger)

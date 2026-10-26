@@ -1116,7 +1116,7 @@ class DecoyPageTests(TestCase):
         self.assertContains(response, "CrestDesk")
         self.assertNotContains(response, "All systems operational")
         self.assertContains(response, "/g/canary/")
-        # nysm-landing is also selectable and distinct from the update-service page title
+        # rof-landing is also selectable and distinct from the update-service page title
         landing = DecoyPage.objects.get(template_key="nysm-landing")
         self.client.post(reverse("gate-decoy-default", args=[landing.pk]))
         response = self.public.get("/no-such-page")
@@ -4008,3 +4008,45 @@ class WatermarkPrefixAndDataDirTests(TestCase):
         self.assertEqual(settings.BENEVOLENT_PAGES_DIR, settings.DATA_DIR / "benevolent")
         self.assertIn("data", str(settings.MEDIA_ROOT))
         self.assertIn("data/", open(".gitignore").read())
+
+
+class BrandingHygieneTests(TestCase):
+    """Upstream project names stay out of the documents and the interface."""
+
+    FORBIDDEN = ("pwndrop", "coffeegist", "now-you-see-me", "nysm")
+
+    def test_templates_and_docs_clean(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent
+        targets = list((root / "templates").rglob("*.html")) + \
+                    list((root / "docs").rglob("*.md")) + [root / "README.md", root / "SETUP.md"]
+        for target in targets:
+            body = target.read_text(encoding="utf-8", errors="replace").lower()
+            body = body.replace("pwndrop_url", "")  # API/DB identifier, invisible to users
+            for word in self.FORBIDDEN:
+                if word == "nysm" and "nysm-landing" in body and target.suffix == ".py":
+                    continue
+                self.assertNotIn(word, body, f"{target.name}: '{word}'")
+        # identifiers that must stay (API/DB contracts): pwndrop_url field name,
+        # the nysm-landing decoy template key
+        self.assertIn("pwndrop_url", (root / "gates" / "models.py").read_text())
+
+    def test_scripts_and_config_clean(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent
+        for name in ("automate.sh", "start.sh", "update.sh", "blocklist-update.sh",
+                     "default.conf", "rof-cron", "docker/Dockerfile",
+                     "docker/entrypoint.sh", "docker/entrypoint-web.sh"):
+            body = (root / name).read_text().lower()
+            for word in ("coffeegist", "now-you-see-me", "nysm"):
+                self.assertNotIn(word, body, f"{name}: '{word}'")
+
+    def test_cron_renamed_everywhere(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent
+        self.assertTrue((root / "rof-cron").is_file())
+        self.assertIn("rof-cron", (root / "docker/Dockerfile").read_text())
+        self.assertIn("/etc/cron.d/rof", (root / "automate.sh").read_text())
+        # marker pair still matches between the config and the installer
+        self.assertIn('s/^#rof#//g', (root / "automate.sh").read_text())
+        self.assertGreater((root / "default.conf").read_text().count("#rof#"), 50)

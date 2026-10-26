@@ -102,4 +102,4 @@ Load a preset from the link form. Replace the `{placeholder}` values.
 | `dropper-checkin` | encrypted environment package, approval before key release |
 | `key-drop-one-time` | TOTP-gated, single-retrieval key |
 | `loader-stage` | token-gated file with limited uses |
-| `file-drop` | pwndrop proxy, 10 uses, watermarking on |
+| `file-drop` | source proxy, 10 uses, watermarking on |

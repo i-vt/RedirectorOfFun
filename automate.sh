@@ -1,5 +1,4 @@
 #!/bin/bash
-# Modified Version of https://github.com/coffeegist/now-you-see-me
 # Enhanced with: root check, input validation, dry-run, verbose, teardown,
 # profiles, blocklist, UA filtering, log scrub, webhook notifications, status+
 
@@ -19,9 +18,9 @@ BLOCKLIST_FILE="/etc/nginx/blocklist.conf"
 WEBROOT="/var/www/html"
 
 # ─── Output helpers ─────────────────────────────────────────────────────────
-nysm_action()  { printf "\n${BGREEN}[+]${NORMAL} $1\n"; }
-nysm_warning() { printf "\n${BYELLOW}[!]${NORMAL} $1\n"; }
-nysm_error()   { printf "\n${BRED}[!] $1${NORMAL}\n"; }
+rof_action()  { printf "\n${BGREEN}[+]${NORMAL} $1\n"; }
+rof_warning() { printf "\n${BYELLOW}[!]${NORMAL} $1\n"; }
+rof_error()   { printf "\n${BRED}[!] $1${NORMAL}\n"; }
 
 error_exit() {
   echo -e "\n$1\n" 1>&2
@@ -30,12 +29,12 @@ error_exit() {
 
 check_errors() {
   if [ $? -ne 0 ]; then
-    nysm_error "An error occurred..."
+    rof_error "An error occurred..."
     error_exit "Exiting..."
   fi
 }
 
-nysm_confirm() {
+rof_confirm() {
   read -r -p "$1 [y/N] " response
   case "$response" in
     [yY][eE][sS]|[yY]) return 0 ;;
@@ -56,7 +55,7 @@ run_cmd() {
 # ─── Pre-flight checks ──────────────────────────────────────────────────────
 check_root() {
   if [[ $EUID -ne 0 ]]; then
-    nysm_error "This script must be run as root."
+    rof_error "This script must be run as root."
     exit 1
   fi
 
@@ -68,14 +67,14 @@ check_root() {
   hn=$(hostname 2>/dev/null || true)
   if [ -n "$hn" ] && ! grep -qP "^\S+\s+${hn}(\s|$)" /etc/hosts 2>/dev/null; then
     echo "127.0.1.1 $hn" >> /etc/hosts
-    nysm_action "Added '$hn' to /etc/hosts (fixes sudo hostname warning)."
+    rof_action "Added '$hn' to /etc/hosts (fixes sudo hostname warning)."
   fi
 }
 
 validate_domain() {
   local domain=$1
   if [[ ! "$domain" =~ ^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$ ]]; then
-    nysm_error "Invalid domain name: '$domain'"
+    rof_error "Invalid domain name: '$domain'"
     return 1
   fi
   return 0
@@ -84,12 +83,12 @@ validate_domain() {
 validate_c2() {
   local c2=$1
   if [[ ! "$c2" =~ ^[a-zA-Z0-9._-]+:[0-9]{1,5}$ ]]; then
-    nysm_error "Invalid C2 address: '$c2' (expected format: IP:Port or host:Port)"
+    rof_error "Invalid C2 address: '$c2' (expected format: IP:Port or host:Port)"
     return 1
   fi
   local port="${c2##*:}"
   if (( port < 1 || port > 65535 )); then
-    nysm_error "Invalid port: $port"
+    rof_error "Invalid port: $port"
     return 1
   fi
   return 0
@@ -99,8 +98,8 @@ validate_c2() {
 # Finds and stops anything occupying port 80 or 443 before nginx starts.
 # Uses a polling loop with SIGKILL escalation rather than a single sleep,
 # because systemctl stop is async and returns before the port is actually free.
-nysm_clear_ports() {
-  nysm_action "Checking for port conflicts on 80 and 443..."
+rof_clear_ports() {
+  rof_action "Checking for port conflicts on 80 and 443..."
 
   port_is_free() {
     ! ss -tlnp "sport = :$1" 2>/dev/null | grep -q ":$1"
@@ -108,7 +107,7 @@ nysm_clear_ports() {
 
   for port in 80 443; do
     if port_is_free "$port"; then
-      nysm_action "Port $port is free."
+      rof_action "Port $port is free."
       continue
     fi
 
@@ -119,7 +118,7 @@ nysm_clear_ports() {
     for pid in $pids; do
       local proc_name
       proc_name=$(ps -p "$pid" -o comm= 2>/dev/null | tr -d ' ')
-      nysm_warning "Port $port occupied by '$proc_name' (PID $pid) - stopping..."
+      rof_warning "Port $port occupied by '$proc_name' (PID $pid) - stopping..."
 
       case "$proc_name" in
         apache2|apache|httpd)
@@ -150,17 +149,17 @@ nysm_clear_ports() {
       elapsed=$(( elapsed + 1 ))
 
       if port_is_free "$port"; then
-        nysm_action "Port $port cleared (after ${elapsed}s)."
+        rof_action "Port $port cleared (after ${elapsed}s)."
         break
       fi
 
       if [ $elapsed -eq 5 ]; then
-        nysm_warning "Port $port still busy after 5s - escalating to SIGKILL..."
+        rof_warning "Port $port still busy after 5s - escalating to SIGKILL..."
         local stuck_pids
         stuck_pids=$(ss -tlnp "sport = :$port" 2>/dev/null \
                      | grep -oP 'pid=\K[0-9]+' | sort -u)
         for spid in $stuck_pids; do
-          nysm_warning "SIGKILL → PID $spid"
+          rof_warning "SIGKILL → PID $spid"
           kill -KILL "$spid" 2>/dev/null || true
         done
         # systemd may restart nginx automatically - stop that too
@@ -170,7 +169,7 @@ nysm_clear_ports() {
 
     # Final check - give up if still occupied
     if ! port_is_free "$port"; then
-      nysm_error "Port $port still in use after 10s."
+      rof_error "Port $port still in use after 10s."
       ss -tlnp "sport = :$port"
       error_exit "Could not free port $port. Check for processes outside systemd and re-run."
     fi
@@ -183,12 +182,12 @@ nysm_clear_ports() {
 verify_dns() {
   local domain=$1
 
-  nysm_action "Verifying DNS for $domain..."
+  rof_action "Verifying DNS for $domain..."
 
   # Remove any stale /etc/hosts entry for this domain left by a previous
   # failed run. If present it would shadow real DNS and fool the check below.
   if grep -qE "\s+${domain}(\s|$)" /etc/hosts 2>/dev/null; then
-    nysm_warning "Removing stale /etc/hosts entry for $domain (left by a previous run)..."
+    rof_warning "Removing stale /etc/hosts entry for $domain (left by a previous run)..."
     sed -i "/${domain}/d" /etc/hosts
   fi
 
@@ -215,8 +214,8 @@ except:
   fi
 
   if [ -z "$dns_ip" ]; then
-    nysm_error "DNS lookup for '$domain' returned nothing."
-    nysm_error "Make sure an A record exists: $domain → <this server's IP>"
+    rof_error "DNS lookup for '$domain' returned nothing."
+    rof_error "Make sure an A record exists: $domain → <this server's IP>"
     error_exit "Fix DNS and re-run."
   fi
 
@@ -227,16 +226,16 @@ except:
        || hostname -I | awk '{print $1}')
 
   if [ "$dns_ip" != "$my_ip" ]; then
-    nysm_error "DNS mismatch detected!"
-    nysm_error "  $domain resolves to : $dns_ip"
-    nysm_error "  This server's IP is  : $my_ip"
-    nysm_error "Let's Encrypt will try to reach $dns_ip on port 80 - the ACME challenge WILL fail."
-    nysm_error "Update your DNS A record so $domain → $my_ip and wait for propagation (~1 min at TTL 60)."
-    if ! nysm_confirm "DNS is correct and I want to continue anyway:"; then
+    rof_error "DNS mismatch detected!"
+    rof_error "  $domain resolves to : $dns_ip"
+    rof_error "  This server's IP is  : $my_ip"
+    rof_error "Let's Encrypt will try to reach $dns_ip on port 80 - the ACME challenge WILL fail."
+    rof_error "Update your DNS A record so $domain → $my_ip and wait for propagation (~1 min at TTL 60)."
+    if ! rof_confirm "DNS is correct and I want to continue anyway:"; then
       error_exit "Aborted. Fix DNS and re-run."
     fi
   else
-    nysm_action "DNS OK: $domain → $dns_ip (matches this server)"
+    rof_action "DNS OK: $domain → $dns_ip (matches this server)"
   fi
 }
 
@@ -245,40 +244,40 @@ send_webhook() {
   if [ -n "$WEBHOOK_URL" ]; then
     local message=$1
     curl -s -X POST -H 'Content-type: application/json' \
-      --data "{\"text\":\"[NYSM] $message\"}" \
+      --data "{\"text\":\"[RoF] $message\"}" \
       "$WEBHOOK_URL" > /dev/null 2>&1
-    nysm_action "Webhook notification sent."
+    rof_action "Webhook notification sent."
   fi
 }
 
 # ─── Install ─────────────────────────────────────────────────────────────────
-nysm_install() {
+rof_install() {
   # Clear any process holding ports 80/443 before apt tries to start nginx
   if [ $DRY_RUN -eq 0 ]; then
-    nysm_clear_ports
+    rof_clear_ports
   fi
 
-  nysm_action "Updating package lists..."
+  rof_action "Updating package lists..."
   run_cmd apt-get update
   check_errors
 
-  nysm_action "Installing nginx, certbot & tools..."
+  rof_action "Installing nginx, certbot & tools..."
   run_cmd apt-get install -y certbot python3-certbot-nginx nginx net-tools curl openssl
   check_errors
 
   # Certbot's apt package installs its own systemd timer (certbot.timer) that
-  # would double-run renewals alongside nysm-cron. Disable it; nysm-cron owns renewals.
+  # would double-run renewals alongside rof-cron. Disable it; rof-cron owns renewals.
   if systemctl is-enabled certbot.timer &>/dev/null; then
-    nysm_action "Disabling certbot systemd timer (using nysm-cron instead)..."
+    rof_action "Disabling certbot systemd timer (using rof-cron instead)..."
     run_cmd systemctl stop certbot.timer
     run_cmd systemctl disable certbot.timer
   fi
 
-  nysm_action "Deploying certbot renewal cronjob..."
-  run_cmd cp nysm-cron /etc/cron.d/nysm
+  rof_action "Deploying certbot renewal cronjob..."
+  run_cmd cp rof-cron /etc/cron.d/rof
   check_errors
 
-  nysm_action "Initialising blocklist file..."
+  rof_action "Initialising blocklist file..."
   if [ $DRY_RUN -eq 0 ]; then
     touch "$BLOCKLIST_FILE"
     bash blocklist-update.sh
@@ -286,7 +285,7 @@ nysm_install() {
 
   # /var/www/html may not exist if nginx has never started successfully,
   # so create it explicitly before copying the decoy pages in.
-  nysm_action "Creating webroot and deploying decoy pages..."
+  rof_action "Creating webroot and deploying decoy pages..."
   run_cmd mkdir -p "$WEBROOT"
   run_cmd cp decoy/index.html       "$WEBROOT/index.html"
   run_cmd cp decoy/maintenance.html "$WEBROOT/maintenance.html"
@@ -295,18 +294,18 @@ nysm_install() {
   # stopped a previous instance; apt does not always restart it)
   if [ $DRY_RUN -eq 0 ]; then
     if ! systemctl is-active --quiet nginx; then
-      nysm_action "Starting nginx..."
+      rof_action "Starting nginx..."
       systemctl start nginx
       check_errors
     fi
   fi
 
-  nysm_action "Finished installing dependencies!"
+  rof_action "Finished installing dependencies!"
 }
 
 # ─── Initialize ──────────────────────────────────────────────────────────────
-nysm_initialize() {
-  nysm_action "Configuring nginx redirector..."
+rof_initialize() {
+  rof_action "Configuring nginx redirector..."
 
   # Accept args or prompt interactively
   if [ "$#" -ge 2 ]; then
@@ -348,7 +347,7 @@ nysm_initialize() {
   run_cmd touch /etc/nginx/banlist.conf /etc/nginx/agent_routes.conf
 
   # ── Step 1: Deploy the HTTP-only config (serves the ACME webroot challenge)
-  nysm_action "Deploying initial HTTP config for ACME challenge..."
+  rof_action "Deploying initial HTTP config for ACME challenge..."
   run_cmd cp ./default.conf "$CONF_DST"
   run_cmd sed -i "s/<DOMAIN_NAME>/$safe_domain/g" "$CONF_DST"
   run_cmd sed -i "s/<C2_SERVER>/$safe_c2/g"       "$CONF_DST"
@@ -394,7 +393,7 @@ nysm_initialize() {
 
   # Reload nginx with the substituted HTTP config so it can serve
   # /.well-known/acme-challenge/ from /var/www/html during the ACME challenge
-  nysm_action "Reloading nginx with HTTP config..."
+  rof_action "Reloading nginx with HTTP config..."
   run_cmd nginx -t
   check_errors
   run_cmd systemctl reload nginx
@@ -402,11 +401,11 @@ nysm_initialize() {
 
   # ── Step 2: Obtain certificate using webroot authenticator
   # Use --webroot rather than --nginx: --nginx edits the live config inline,
-  # which produces a duplicate SSL server block once the #nysm# section is
+  # which produces a duplicate SSL server block once the #rof# section is
   # uncommented, and nginx then fails with "conflicting server name".
   # --webroot drops the challenge token under /var/www/html and leaves the
-  # nginx config completely untouched. Our #nysm# mechanism then works cleanly.
-  nysm_action "Obtaining SSL certificate via Let's Encrypt (webroot)..."
+  # nginx config completely untouched. Our #rof# mechanism then works cleanly.
+  rof_action "Obtaining SSL certificate via Let's Encrypt (webroot)..."
   if [ $DRY_RUN -eq 0 ]; then
     certbot certonly \
       --webroot \
@@ -418,43 +417,43 @@ nysm_initialize() {
   fi
 
   # ── Step 3: Activate the full HTTPS config
-  # Remove the HTTP proxy server block (between the NYSM_HTTP markers),
+  # Remove the HTTP proxy server block (between the RoF_HTTP markers),
   # then uncomment the HTTP→HTTPS redirect block and the HTTPS proxy block.
-  nysm_action "Activating HTTPS config (removing HTTP proxy block, enabling SSL block)..."
+  rof_action "Activating HTTPS config (removing HTTP proxy block, enabling SSL block)..."
   if [ $DRY_RUN -eq 0 ]; then
     # Remove the pre-cert HTTP proxy server block (marked in the template)
-    sed -i '/# ─── NYSM_HTTP_START/,/# ─── NYSM_HTTP_END/d' "$CONF_DST"
+    sed -i '/# ─── RoF_HTTP_START/,/# ─── RoF_HTTP_END/d' "$CONF_DST"
     # Uncomment the HTTPS proxy block
-    sed -i "s/^#nysm#//g" "$CONF_DST"
+    sed -i "s/^#rof#//g" "$CONF_DST"
     # Uncomment the HTTP → HTTPS redirect block
     sed -i "s/^#redirect#//g" "$CONF_DST"
   fi
 
   # Final config test and reload
-  nysm_action "Testing final nginx configuration..."
+  rof_action "Testing final nginx configuration..."
   run_cmd nginx -t
   check_errors
 
-  nysm_action "Restarting nginx with SSL..."
+  rof_action "Restarting nginx with SSL..."
   run_cmd systemctl restart nginx
   check_errors
 
-  nysm_save_profile "$domain_name" "$c2_server" "$ua_pattern" "$use_https_upstream"
+  rof_save_profile "$domain_name" "$c2_server" "$ua_pattern" "$use_https_upstream"
   send_webhook "Redirector online: $domain_name → $c2_server"
-  nysm_action "Done! Redirector is live at https://$domain_name"
+  rof_action "Done! Redirector is live at https://$domain_name"
 }
 
-nysm_setup() {
-  nysm_install
-  nysm_initialize "$@"
+rof_setup() {
+  rof_install
+  rof_initialize "$@"
 }
 
 # ─── Teardown ────────────────────────────────────────────────────────────────
-nysm_teardown() {
-  nysm_action "Teardown NYSM redirector"
+rof_teardown() {
+  rof_action "Teardown RoF redirector"
 
-  if ! nysm_confirm "This removes nginx, certificates, cron, and all configs. Continue?"; then
-    nysm_warning "Teardown aborted."
+  if ! rof_confirm "This removes nginx, certificates, cron, and all configs. Continue?"; then
+    rof_warning "Teardown aborted."
     return
   fi
 
@@ -462,34 +461,34 @@ nysm_teardown() {
   read -r -p "Domain name to revoke certificate for: " domain_name
   validate_domain "$domain_name" || error_exit "Invalid domain."
 
-  nysm_action "Revoking and removing SSL certificate..."
+  rof_action "Revoking and removing SSL certificate..."
   run_cmd certbot delete --cert-name "$domain_name"
 
-  nysm_action "Removing nginx config and blocklist..."
+  rof_action "Removing nginx config and blocklist..."
   run_cmd rm -f "$CONF_DST"
   run_cmd rm -f "$BLOCKLIST_FILE"
 
-  nysm_action "Removing cron job..."
-  run_cmd rm -f /etc/cron.d/nysm
+  rof_action "Removing cron job..."
+  run_cmd rm -f /etc/cron.d/rof
 
-  nysm_action "Stopping nginx..."
+  rof_action "Stopping nginx..."
   run_cmd systemctl stop nginx.service
 
-  if nysm_confirm "Purge nginx and certbot packages?"; then
+  if rof_confirm "Purge nginx and certbot packages?"; then
     run_cmd apt-get purge -y nginx certbot python3-certbot-nginx
     run_cmd apt-get autoremove -y
   fi
 
-  nysm_action "Scrubbing nginx logs..."
+  rof_action "Scrubbing nginx logs..."
   run_cmd truncate -s 0 /var/log/nginx/access.log 2>/dev/null || true
   run_cmd truncate -s 0 /var/log/nginx/error.log  2>/dev/null || true
 
   send_webhook "Redirector for $domain_name has been torn down and scrubbed."
-  nysm_action "Teardown complete."
+  rof_action "Teardown complete."
 }
 
 # ─── Profile management ──────────────────────────────────────────────────────
-nysm_save_profile() {
+rof_save_profile() {
   local domain=$1 c2=$2 ua=${3:-""} https=${4:-"0"} panel=${5:-"127.0.0.1:3000"}
   mkdir -p "$PROFILES_DIR"
   local profile_file="$PROFILES_DIR/${domain}.conf"
@@ -500,13 +499,13 @@ ua_pattern=$ua
 use_https_upstream=$https
 panel_upstream=$panel
 EOF
-  nysm_action "Profile saved → $profile_file"
+  rof_action "Profile saved → $profile_file"
 }
 
-nysm_load_profile() {
+rof_load_profile() {
   local profiles=("$PROFILES_DIR"/*.conf)
   if [ ! -f "${profiles[0]}" ]; then
-    nysm_warning "No profiles found in $PROFILES_DIR"
+    rof_warning "No profiles found in $PROFILES_DIR"
     return
   fi
 
@@ -520,36 +519,36 @@ nysm_load_profile() {
   read -r -p "Select profile number: " sel
   local chosen="${profiles[$((sel-1))]}"
   if [ ! -f "$chosen" ]; then
-    nysm_error "Invalid selection."
+    rof_error "Invalid selection."
     return
   fi
 
   source "$chosen"
-  nysm_action "Loaded profile: $(basename "$chosen")"
-  nysm_initialize "$domain_name" "$c2_server" "$ua_pattern" "${use_https_upstream:-0}" "${panel_upstream:-127.0.0.1:3000}"
+  rof_action "Loaded profile: $(basename "$chosen")"
+  rof_initialize "$domain_name" "$c2_server" "$ua_pattern" "${use_https_upstream:-0}" "${panel_upstream:-127.0.0.1:3000}"
 }
 
 # ─── Blocklist update ────────────────────────────────────────────────────────
-nysm_update_blocklist() {
-  nysm_action "Updating IP blocklist..."
+rof_update_blocklist() {
+  rof_action "Updating IP blocklist..."
   run_cmd bash blocklist-update.sh
   if [ $DRY_RUN -eq 0 ]; then
     nginx -t && systemctl reload nginx
   fi
-  nysm_action "Blocklist updated and nginx reloaded."
+  rof_action "Blocklist updated and nginx reloaded."
 }
 
 # ─── Log scrub ───────────────────────────────────────────────────────────────
-nysm_scrub_logs() {
-  nysm_action "Scrubbing nginx logs..."
+rof_scrub_logs() {
+  rof_action "Scrubbing nginx logs..."
   run_cmd truncate -s 0 /var/log/nginx/access.log
   run_cmd truncate -s 0 /var/log/nginx/error.log
-  nysm_action "Logs cleared."
+  rof_action "Logs cleared."
 }
 
 # ─── Status ──────────────────────────────────────────────────────────────────
-nysm_status() {
-  printf "\n${BGREEN}============= NYSM Status =============${NORMAL}\n"
+rof_status() {
+  printf "\n${BGREEN}============= RoF Status =============${NORMAL}\n"
 
   printf "\n${BYELLOW}--- nginx Processes ---${NORMAL}\n"
   ps aux | grep -E 'nginx' | grep -v grep
@@ -623,7 +622,7 @@ EOF
 # ─── Entry point ─────────────────────────────────────────────────────────────
 while getopts "dvw:h" opt; do
   case $opt in
-    d) DRY_RUN=1; nysm_warning "Dry-run mode - no changes will be applied." ;;
+    d) DRY_RUN=1; rof_warning "Dry-run mode - no changes will be applied." ;;
     v) VERBOSE=1 ;;
     w) WEBHOOK_URL="$OPTARG" ;;
     h) usage; exit 0 ;;
@@ -635,12 +634,12 @@ shift $((OPTIND - 1))
 check_root
 
 if [ "$#" -ge 2 ]; then
-  nysm_setup "$1" "$2"
+  rof_setup "$1" "$2"
   exit 0
 fi
 
 PS3="
-  NYSM - Select an Option:  "
+  RoF - Select an Option:  "
 
 finished=0
 while (( !finished )); do
@@ -656,14 +655,14 @@ while (( !finished )); do
   )
   select opt in "${options[@]}"; do
     case $opt in
-      "Setup Nginx Redirector") nysm_setup;            break ;;
-      "Load Profile")           nysm_load_profile;     break ;;
-      "Update Blocklist")       nysm_update_blocklist; break ;;
-      "Check Status")           nysm_status;           break ;;
-      "Scrub Logs")             nysm_scrub_logs;       break ;;
-      "Teardown Redirector")    nysm_teardown;         break ;;
+      "Setup Nginx Redirector") rof_setup;            break ;;
+      "Load Profile")           rof_load_profile;     break ;;
+      "Update Blocklist")       rof_update_blocklist; break ;;
+      "Check Status")           rof_status;           break ;;
+      "Scrub Logs")             rof_scrub_logs;       break ;;
+      "Teardown Redirector")    rof_teardown;         break ;;
       "Quit")                   finished=1;            break ;;
-      *)                        nysm_warning "Invalid option" ;;
+      *)                        rof_warning "Invalid option" ;;
     esac
   done
 done

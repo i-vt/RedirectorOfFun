@@ -12,7 +12,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: nysm-redirector
+    container_name: rof-redirector
     restart: unless-stopped
 
     environment:

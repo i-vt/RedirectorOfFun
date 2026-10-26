@@ -7,7 +7,6 @@ It serves payloads, keys, and lure sites behind gates that you control.
 Visitors that you do not expect get a decoy page. Operators get a panel, an
 API, a mobile UI, and Telegram approvals.
 
-Modified from [coffeegist/now-you-see-me](https://github.com/coffeegist/now-you-see-me).
 
 ---
 

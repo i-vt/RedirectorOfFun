@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load ui_icons %}
 {% block guide %}
-<p>Delivery links are the URLs you hand out or embed in agents. Each one serves a key, a file, or a pwndrop-proxied download behind whatever gate you set.</p>
+<p>Delivery links are the URLs you hand out or embed in agents. Each one serves a key, a file, or a proxied download behind whatever gate you set.</p>
 <h3>QUICK PATH</h3>
 <ul>
   <li><strong>Quick drop</strong> - one file, one click, instant live URL. Gate it later from its edit page.</li>
@@ -17,7 +17,7 @@
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">
-    <div><span class="section-label">RELEASE GATES</span><h2>Delivery links</h2><p>Operator-controlled URLs under <code>/g/</code>: key distribution, gated payload downloads, and pwndrop proxies.</p></div>
+    <div><span class="section-label">RELEASE GATES</span><h2>Delivery links</h2><p>Operator-controlled URLs under <code>/g/</code>: key distribution, gated payload downloads, and proxied sources.</p></div>
     <div><a class="button" href="{% url 'gate-link-create' %}">{% icon "plus" %}New link</a>
       <button class="button secondary" type="button" id="quick-drop-open">{% icon "upload" %}Quick drop</button>
       {% if pending_count %}<span class="status-badge warn">{{ pending_count }} AWAITING APPROVAL</span>{% else %}<span class="status-badge good">NO PENDING</span>{% endif %}</div>
