@@ -2779,3 +2779,84 @@ class GuidanceUxTests(TestCase):
         response = self.client.get(reverse("m-links"))
         self.assertContains(response, "QUICK DROP")
         self.assertContains(response, "qd-file")
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class ServeChanceTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="scop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _link(self, num=1, den=1):
+        return DeliveryLink.objects.create(path="/g/sc/one", kind="key", key_text="SEKRET",
+                                           placeholder="blank", serve_num=num, serve_den=den)
+
+    def test_default_ratio_always_serves(self):
+        self._link()
+        for _ in range(3):
+            self.assertEqual(self.public.get("/g/sc/one").status_code, 200)
+
+    def test_failed_roll_holds_without_consuming_uses(self):
+        self._link(num=1, den=2)
+        with mock.patch("secrets.randbelow", return_value=1):  # >= num -> rolled out
+            response = self.public.get("/g/sc/one")
+        self.assertEqual(response.status_code, 204)
+        link = DeliveryLink.objects.get(path="/g/sc/one")
+        self.assertEqual(link.hit_count, 0)  # no release consumed
+        roll_hit = HitEvent.objects.filter(category="hit").latest("created_at")
+        self.assertEqual(roll_hit.detail["chance_roll"], "1/2")
+        self.assertFalse(roll_hit.detail["served"])
+
+    def test_successful_roll_serves(self):
+        self._link(num=1, den=20)
+        with mock.patch("secrets.randbelow", return_value=0):  # < num -> serve
+            response = self.public.get("/g/sc/one")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"SEKRET", response.content)
+        self.assertTrue(HitEvent.objects.filter(category="key_served").exists())
+
+    def test_ratio_validation(self):
+        link = self._link(num=3, den=7)
+        link.full_clean()  # 3/7 valid
+        link.serve_num, link.serve_den = 7, 3
+        with self.assertRaises(ValidationError):
+            link.full_clean()
+        link.serve_num, link.serve_den = 0, 5
+        with self.assertRaises(ValidationError):
+            link.full_clean()
+
+    def test_form_saves_ratio(self):
+        response = self.client.post(reverse("gate-link-create"), {
+            "path": "/g/sc/form", "kind": "key", "key_text": "K", "gate_type": "none",
+            "cipher": "none", "placeholder": "blank", "on_deny": "not_found",
+            "serve_num": "3", "serve_den": "7", "active": "on",
+        })
+        link = DeliveryLink.objects.get(path="/g/sc/form")
+        self.assertEqual((link.serve_num, link.serve_den), (3, 7))
+        # bad ratio rejected with a form error, no crash
+        response = self.client.post(reverse("gate-link-create"), {
+            "path": "/g/sc/bad", "kind": "key", "key_text": "K", "gate_type": "none",
+            "cipher": "none", "placeholder": "blank", "on_deny": "not_found",
+            "serve_num": "7", "serve_den": "3", "active": "on",
+        })
+        self.assertEqual(response.status_code, 200)  # form re-rendered with error
+        self.assertFalse(DeliveryLink.objects.filter(path="/g/sc/bad").exists())
+
+    def test_api_ratio_validation_and_roundtrip(self):
+        _, raw = APIKey.create(operator=self.operator, name="ci")
+        auth = {"HTTP_AUTHORIZATION": f"ApiKey {raw}"}
+        bad = self.client.post("/api/v1/links/", data={
+            "path": "/g/sc/api", "kind": "key", "key_text": "K", "gate_type": "none",
+            "cipher": "none", "placeholder": "blank", "on_deny": "not_found",
+            "serve_num": 5, "serve_den": 2,
+        }, content_type="application/json", **auth)
+        self.assertEqual(bad.status_code, 400)
+        ok = self.client.post("/api/v1/links/", data={
+            "path": "/g/sc/api", "kind": "key", "key_text": "K", "gate_type": "none",
+            "cipher": "none", "placeholder": "blank", "on_deny": "not_found",
+            "serve_num": 1, "serve_den": 20,
+        }, content_type="application/json", **auth)
+        self.assertEqual(ok.status_code, 201)
+        self.assertEqual((ok.json()["serve_num"], ok.json()["serve_den"]), (1, 20))

@@ -31,7 +31,7 @@
   <div id="totp-codes"></div>
   <div class="stat-grid">
     <div class="stat-card"><span class="section-label">STATUS</span><strong>{% if not link.active %}INACTIVE{% elif link.expired %}EXPIRED{% elif link.requires_approval %}{{ link.get_approval_status_display|upper }}{% else %}LIVE{% endif %}</strong></div>
-    <div class="stat-card"><span class="section-label">RELEASES</span><strong class="mono">{{ link.hit_count }}{% if link.max_uses %} / {{ link.max_uses }}{% endif %}</strong></div>
+    <div class="stat-card"><span class="section-label">RELEASES</span><strong class="mono">{{ link.hit_count }}{% if link.max_uses %} / {{ link.max_uses }}{% endif %}{% if link.serve_den > 1 %} <span class="muted" style="font-size:.62rem">@ {{ link.serve_num }}/{{ link.serve_den }}</span>{% endif %}</strong></div>
     <div class="stat-card"><span class="section-label">EXPIRES</span><strong class="mono">{{ link.expires_at|date:"Y-m-d H:i e"|default:"never" }}</strong></div>
     <div class="stat-card"><span class="section-label">TAG</span><strong>{{ link.agent_label|default:"-" }}</strong></div>
     <div class="stat-card"><span class="section-label">DOMAIN</span><strong class="mono">{{ link.domain|default:"default" }}</strong></div>

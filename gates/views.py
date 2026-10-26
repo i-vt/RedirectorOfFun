@@ -156,6 +156,9 @@ def _link_from_post(request, link):
     link.one_time = request.POST.get("one_time") == "on"
     max_uses = request.POST.get("max_uses", "0").strip()
     link.max_uses = int(max_uses) if max_uses.isdigit() else 0
+    for field in ("serve_num", "serve_den"):
+        raw = request.POST.get(field, "1").strip()
+        setattr(link, field, int(raw) if raw.isdigit() and int(raw) >= 1 else 1)
     expires = request.POST.get("expires_at", "").strip()
     link.expires_at = None
     if expires:

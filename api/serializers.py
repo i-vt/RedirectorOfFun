@@ -54,7 +54,7 @@ class DeliveryLinkSerializer(serializers.ModelSerializer):
                   "approval_status", "one_time", "max_uses", "expires_at", "active", "hit_count",
                   "domain", "ja3_fingerprint", "ja4_fingerprint", "watermark",
                   "allowed_uas", "allowed_ips", "header_contract", "replay_dedupe",
-                  "active_window_start", "active_window_end",
+                  "active_window_start", "active_window_end", "serve_num", "serve_den",
                   "payload", "payload_size", "benevolent_file",
                   "created_at", "updated_at"]
         read_only_fields = ["approval_status", "hit_count", "payload_size", "created_at", "updated_at"]
@@ -112,6 +112,14 @@ class DeliveryLinkSerializer(serializers.ModelSerializer):
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages)
         return value
+
+    def validate(self, attrs):
+        num = attrs.get("serve_num", getattr(self.instance, "serve_num", 1))
+        den = attrs.get("serve_den", getattr(self.instance, "serve_den", 1))
+        if num < 1 or den < 1 or num > den:
+            raise serializers.ValidationError(
+                {"serve_num": "serve ratio must be N/M with 1 <= N <= M (1/1 serves always)."})
+        return attrs
 
 
 class SubmissionImageSerializer(serializers.ModelSerializer):

@@ -221,6 +221,10 @@ class DeliveryLink(models.Model):
 
     one_time = models.BooleanField(default=False, help_text="Deactivate automatically after the first successful release.")
     max_uses = models.PositiveIntegerField(default=0, help_text="0 = unlimited. Otherwise the link deactivates after this many releases.")
+    serve_num = models.PositiveIntegerField(default=1,
+                                            help_text="Serve the payload on N of every M passing requests (numerator). 1/1 = always.")
+    serve_den = models.PositiveIntegerField(default=1,
+                                            help_text="Denominator of the serve ratio, e.g. 3/7 serves ~43% of passing requests.")
     expires_at = models.DateTimeField(null=True, blank=True)
     active = models.BooleanField(default=True)
     hit_count = models.PositiveIntegerField(default=0)
@@ -241,6 +245,14 @@ class DeliveryLink(models.Model):
             raise ValidationError(
                 {"header_contract": "Header contracts already apply on their own; the "
                                     "network gate is IP/UA only - pick 'No gate' to combine."})
+        if self.serve_num < 1:
+            raise ValidationError({"serve_num": "The serve ratio numerator must be at least 1."})
+        if self.serve_den < 1:
+            raise ValidationError({"serve_den": "The serve ratio denominator must be at least 1."})
+        if self.serve_num > self.serve_den:
+            raise ValidationError(
+                {"serve_num": "The serve ratio numerator cannot exceed the denominator "
+                              "(3/7 is fine, 7/3 is not)."})
 
     def __str__(self):
         return f"{self.path} ({self.kind})"

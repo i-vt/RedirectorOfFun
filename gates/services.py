@@ -774,6 +774,15 @@ def dispatch(request, path):
         if link.approval_status != "approved":
             return hold_response(link, request)
 
+    if link.serve_den > 1:
+        # Probabilistic serving: N of every M passing requests get the payload,
+        # the rest see the held view. Failed rolls never consume uses.
+        import secrets
+        if secrets.randbelow(link.serve_den) >= link.serve_num:
+            record_hit("hit", request=request, path=normalized, link=link,
+                       detail={"chance_roll": f"{link.serve_num}/{link.serve_den}", "served": False})
+            return hold_response(link, request)
+
     try:
         return serve_link(link, request)
     except (RuntimeError, OSError) as exc:
