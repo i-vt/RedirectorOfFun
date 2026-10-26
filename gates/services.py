@@ -226,7 +226,12 @@ def surface_document(request, path):
     lure paths plus plausible seeded extras - nothing to write a detection
     rule against."""
     from pathlib import Path
-    configured = Path(settings.BASE_DIR) / path.lstrip("/")
+    data_dir = Path(getattr(settings, "DATA_DIR", settings.BASE_DIR / "data"))
+    configured = data_dir / path.lstrip("/")
+    if not configured.is_file():
+        legacy = Path(settings.BASE_DIR) / path.lstrip("/")
+        if legacy.is_file():
+            configured = legacy  # legacy root location still wins over generated
     if configured.is_file():
         try:
             content = configured.read_text(encoding="utf-8", errors="replace")

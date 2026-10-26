@@ -2,17 +2,17 @@
 
 **This page tells you how to write your own "loading", "fingerprint",
 "download", and "benevolent" pages.** Drop `.html` files into the matching
-folder next to `manage.py`, then pick them per link in the link form
+folder under `./data/`, then pick them per link in the link form
 (advanced sections).
 
 The folders:
 
 | Folder | Used for |
 |---|---|
-| `./loading/` | the `loading` held view (auto-retries until admitted) |
-| `./fingerprint/` | the `fingerprint` held view (collect intel, then load) |
-| `./download/` | the after-download interstitial |
-| `./benevolent/` | the deny response when `on_deny` is benevolent |
+| `./data/loading/` | the `loading` held view (auto-retries until admitted) |
+| `./data/fingerprint/` | the `fingerprint` held view (collect intel, then load) |
+| `./data/download/` | the after-download interstitial |
+| `./data/benevolent/` | the deny response when `on_deny` is benevolent |
 
 Only top-level `.html` files are listed. Anything else is ignored.
 

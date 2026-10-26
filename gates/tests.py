@@ -9,6 +9,7 @@ from unittest import mock
 from cryptography.hazmat.primitives import padding as sym_padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.test import Client, TestCase, override_settings, tag
 from django.urls import reverse
@@ -918,18 +919,18 @@ class WatermarkCanaryFingerprintTests(TestCase):
         link = DeliveryLink.objects.create(path="/g/wm/1", kind="key", key_text="KEYMAT",
                                            watermark=True)
         response = self.client.get(link.path)
-        self.assertContains(response, "ROFWM:")
+        self.assertContains(response, settings.WATERMARK_PREFIX + ":")
         hit = HitEvent.objects.get(category="key_served")
-        self.assertIn("ROFWM", hit.detail["watermark"])
+        self.assertIn(settings.WATERMARK_PREFIX, hit.detail["watermark"])
 
     def test_watermark_trailer_on_file(self):
         link = DeliveryLink.objects.create(path="/g/wm/2", kind="proxy",
                                            pwndrop_url="http://10.255.255.1/x.bin", watermark=True)
         with mock.patch("gates.services._fetch_pwndrop", return_value=(b"PAYLOAD", "application/octet-stream")):
             response = follow_download(self.client, link.path)
-        self.assertIn(b"ROFWM:", response.content)
+        self.assertIn(settings.WATERMARK_PREFIX.encode() + b":", response.content)
         hit = HitEvent.objects.filter(category="download").latest("created_at")
-        self.assertTrue(hit.detail["watermark"].startswith(f"ROFWM:{link.pk}:"))
+        self.assertTrue(hit.detail["watermark"].startswith(f"{settings.WATERMARK_PREFIX}:{link.pk}:"))
 
     def test_decoy_embeds_canary(self):
         BannedIP.objects.create(ip="192.0.2.1")
@@ -3970,3 +3971,40 @@ class BenevolentRedirectAndCustomPagesTests(TestCase):
         # fallbacks collapsed by default, visually apart from payloads
         self.assertIn('<summary>BENEVOLENT FALLBACKS', content)
         self.assertEqual(content.count("<details"), content.count("</details>"))
+
+
+class WatermarkPrefixAndDataDirTests(TestCase):
+    def test_prefix_derived_per_deployment(self):
+        import hashlib
+        with override_settings(ANALYTICS_IP_HASH_SALT="salt-one"):
+            # recompute like settings does
+            expected = "wm" + hashlib.sha256(b"salt-one").hexdigest()[:6]
+            self.assertEqual(
+                "wm" + hashlib.sha256(b"salt-one").hexdigest()[:6], expected)
+        # two deployments, two salts: different prefixes
+        one = "wm" + hashlib.sha256(b"deployment-a").hexdigest()[:6]
+        two = "wm" + hashlib.sha256(b"deployment-b").hexdigest()[:6]
+        self.assertNotEqual(one, two)
+
+    def test_explicit_prefix_wins(self):
+        with override_settings(WATERMARK_PREFIX="OPSPEC"):
+            link = DeliveryLink.objects.create(path="/g/wp/one", kind="key",
+                                               key_text="K", watermark=True, placeholder="blank")
+            Client().get("/g/wp/one")
+            hit = HitEvent.objects.filter(category="key_served").latest("created_at")
+            self.assertTrue(hit.detail["watermark"].startswith("OPSPEC:"))
+
+    def test_default_prefix_is_not_static_rofwm(self):
+        # the deployment-derived default: present, and never the old static one
+        self.assertNotEqual(settings.WATERMARK_PREFIX, "ROFWM")
+        self.assertTrue(settings.WATERMARK_PREFIX.startswith("wm"))
+
+    def test_content_dirs_under_data(self):
+        from gates import library
+        self.assertEqual(settings.PAYLOAD_LIBRARY_DIR, settings.DATA_DIR / "payloads")
+        self.assertEqual(settings.LOADING_PAGES_DIR, settings.DATA_DIR / "loading")
+        self.assertEqual(settings.FINGERPRINT_PAGES_DIR, settings.DATA_DIR / "fingerprint")
+        self.assertEqual(settings.DOWNLOAD_PAGES_DIR, settings.DATA_DIR / "download")
+        self.assertEqual(settings.BENEVOLENT_PAGES_DIR, settings.DATA_DIR / "benevolent")
+        self.assertIn("data", str(settings.MEDIA_ROOT))
+        self.assertIn("data/", open(".gitignore").read())

@@ -10,3 +10,5 @@ htmlcov/
 .test-deps/
 docker/certs/
 payloads/
+var/
+data/

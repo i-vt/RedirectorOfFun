@@ -110,6 +110,12 @@ Ipsum (score 3 and up). Three ban layers stay separate:
 2. Operator bans (manual)
 3. Auto-bans (from rules and burn notices)
 
+## Watermark prefix
+
+Watermarks mark every release from a watermarked link. The prefix derives
+from a per-deployment secret, so it differs across deployments by default.
+Set `WATERMARK_PREFIX` in `.env` only to force your own.
+
 ## Track all requests
 
 The events page stores 404s by default. Set `TRACK_ALL_REQUESTS=1` in `.env`
@@ -119,8 +125,8 @@ containers after a change.
 ## Backups
 
 1. Dump the database with `pg_dump`.
-2. Copy `var/media` (payloads, extracted images) and `payloads/` (the
-   library).
+2. Copy `./data/` (uploaded files, extracted images, the payload library,
+   your custom pages, and surface-document overrides).
 
 > [!WARNING]
 > The database holds link configurations, keys, and submission contents.

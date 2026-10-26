@@ -96,6 +96,18 @@ if [[ ! -f .env ]]; then
   create_env
 else
   echo "Using existing .env; no secrets were replaced."
+  # One-time migration: content directories moved under ./data/.
+  mkdir -p data
+  for legacy in payloads loading fingerprint download benevolent; do
+    if [ -d "$legacy" ] && [ ! -e "data/$legacy" ]; then
+      mv "$legacy" "data/$legacy"
+      echo "Note: moved ./$legacy to ./data/$legacy"
+    fi
+  done
+  if [ -d var/media ] && [ ! -e data/media ]; then
+    mv var/media data/media
+    echo "Note: moved ./var/media to ./data/media"
+  fi
   # One-time migration: the old default trusted loopback only, which behind
   # the docker web tier collapses every visitor onto the bridge IP.
   if grep -q '^TRUSTED_PROXIES=127.0.0.1,::1$' .env; then

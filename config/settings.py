@@ -170,7 +170,9 @@ OUTBOUND_USER_AGENT = os.getenv(
 )
 # Prefix embedded in watermarked releases; change it per engagement so a
 # leaked sample cannot be attributed to the default marker format.
-WATERMARK_PREFIX = os.getenv("WATERMARK_PREFIX", "ROFWM")
+WATERMARK_PREFIX = os.getenv("WATERMARK_PREFIX") or (
+    "wm" + __import__("hashlib").sha256(
+        (os.getenv("ANALYTICS_IP_HASH_SALT", "") or SECRET_KEY).encode()).hexdigest()[:6])
 DECISION_UNDO_SECONDS = int(os.getenv("DECISION_UNDO_SECONDS", "10"))
 DECOY_CANARIES = env_bool("DECOY_CANARIES", True)
 REDIRECTOR_DOMAINS = [d.strip() for d in os.getenv("REDIRECTOR_DOMAINS", "").split(",") if d.strip()]
@@ -187,14 +189,17 @@ VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "")
 VAPID_ADMIN_EMAIL = os.getenv("VAPID_ADMIN_EMAIL", "mailto:operators@example.com")
 MEDIA_URL = "/media/"
+# All operator content lives under ./data/: the payload library, the custom
+# page pools, uploaded files, and the surface-document overrides.
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
 # Payload library: one folder per bundle (files + notes.md + favicon.ico).
-PAYLOAD_LIBRARY_DIR = Path(os.getenv("PAYLOAD_LIBRARY_DIR", str(BASE_DIR / "payloads")))
-# Custom held-view pages: ./loading/*.html and ./fingerprint/*.html pools.
-LOADING_PAGES_DIR = Path(os.getenv("LOADING_PAGES_DIR", str(BASE_DIR / "loading")))
-FINGERPRINT_PAGES_DIR = Path(os.getenv("FINGERPRINT_PAGES_DIR", str(BASE_DIR / "fingerprint")))
-DOWNLOAD_PAGES_DIR = Path(os.getenv("DOWNLOAD_PAGES_DIR", str(BASE_DIR / "download")))
-BENEVOLENT_PAGES_DIR = Path(os.getenv("BENEVOLENT_PAGES_DIR", str(BASE_DIR / "benevolent")))
-MEDIA_ROOT = BASE_DIR / "var" / "media"
+PAYLOAD_LIBRARY_DIR = Path(os.getenv("PAYLOAD_LIBRARY_DIR", str(DATA_DIR / "payloads")))
+# Custom held-view pages: loading/fingerprint/download/benevolent pools.
+LOADING_PAGES_DIR = Path(os.getenv("LOADING_PAGES_DIR", str(DATA_DIR / "loading")))
+FINGERPRINT_PAGES_DIR = Path(os.getenv("FINGERPRINT_PAGES_DIR", str(DATA_DIR / "fingerprint")))
+DOWNLOAD_PAGES_DIR = Path(os.getenv("DOWNLOAD_PAGES_DIR", str(DATA_DIR / "download")))
+BENEVOLENT_PAGES_DIR = Path(os.getenv("BENEVOLENT_PAGES_DIR", str(DATA_DIR / "benevolent")))
+MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", str(DATA_DIR / "media")))
 
 LOGGING = {
     "version": 1,

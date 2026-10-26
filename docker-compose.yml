@@ -31,6 +31,7 @@ services:
     # ports:
     #   - "127.0.0.1:3000:3000"
     volumes:
+      - ./data:/app/data
       - nginx-logs:/var/log/nginx:ro
     depends_on:
       db:
@@ -79,6 +80,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-redirector}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-redirector_panel}
       NGINX_JSON_LOG_PATH: /var/log/nginx/access.json
     volumes:
+      - ./data:/app/data
       - nginx-logs:/var/log/nginx:ro
     depends_on:
       panel:

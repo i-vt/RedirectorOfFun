@@ -33,6 +33,18 @@ else
 fi
 
 echo "==> Pulling the latest code"
+mkdir -p data
+# One-time migration: content directories moved under ./data/.
+for legacy in payloads loading fingerprint download benevolent; do
+  if [ -d "$legacy" ] && [ ! -e "data/$legacy" ]; then
+    mv "$legacy" "data/$legacy"
+    echo "Note: moved ./$legacy to ./data/$legacy"
+  fi
+done
+if [ -d var/media ] && [ ! -e data/media ]; then
+  mv var/media data/media
+  echo "Note: moved ./var/media to ./data/media"
+fi
 if ! git pull --ff-only; then
   cat >&2 <<'EOF'
 Error: fast-forward pull failed - the local tree has diverged.
