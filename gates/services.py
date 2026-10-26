@@ -215,6 +215,90 @@ def _decoy(request=None, status=200):
     return decoy_response(request, status=status)
 
 
+# ─── Surface documents (robots.txt / sitemap.xml) ────────────────────────────
+
+def surface_document(request, path):
+    """Serve /robots.txt or /sitemap.xml.
+
+    An operator-provided file next to manage.py always wins (never
+    overwritten). Otherwise the document is generated: realistic, seeded per
+    deployment (stable within it, different across deployments), listing real
+    lure paths plus plausible seeded extras - nothing to write a detection
+    rule against."""
+    from pathlib import Path
+    configured = Path(settings.BASE_DIR) / path.lstrip("/")
+    if configured.is_file():
+        try:
+            content = configured.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            content = None
+    else:
+        content = None
+    if content is None:
+        content = _generate_surface_document(request, path)
+    ip = client_ip(request)
+    decision = evaluate_blocking_rules(request, ip, is_404=False)
+    if decision is not None:
+        rule, fired = decision
+        response = apply_blocking_rule(request, ip, rule, fired)
+        if response is not None:
+            return response
+    record_hit("hit", request=request, path=path, detail={"surface": path.lstrip("/")})
+    content_type = "text/plain" if path.endswith(".txt") else "application/xml"
+    return range_aware_response(request, content, content_type=content_type)
+
+
+def _generate_surface_document(request, path):
+    import random
+    salt = getattr(settings, "ANALYTICS_IP_HASH_SALT", "") or settings.SECRET_KEY
+    seed = int.from_bytes(hashlib.sha256(f"{salt}:{path}".encode()).digest()[:8], "big")
+    rnd = random.Random(seed)
+
+    lure_paths = []
+    for site in LureSite.objects.filter(active=True).prefetch_related("files")[:5]:
+        for file in list(site.files.all())[:12]:
+            lure_paths.append(site.public_path + file.path)
+    words = ["about", "contact", "products", "services", "news", "blog",
+             "support", "pricing", "team", "faq", "careers", "partners"]
+    rnd.shuffle(words)
+    extras = []
+    for word in words[:rnd.randint(3, 6)]:
+        extras.append(rnd.choice(["/{w}/", "/{w}", "/{w}.html", "/pages/{w}/",
+                                  "/{w}/index.html"]).format(w=word))
+    urls = lure_paths + extras
+
+    if path == "/robots.txt":
+        lines = [rnd.choice(["User-agent: *", "User-Agent: *", "user-agent: *"])]
+        if rnd.random() < 0.55:
+            lines.append(rnd.choice(["# site managed by the web team",
+                                     "# updated before publish",
+                                     "# crawling welcome"]))
+        for entry in rnd.sample(["/tmp/", "/search", "/internal/", "/staging/",
+                                 "/admin/", "/old/", "/test/"], rnd.randint(1, 3)):
+            lines.append(f"Disallow: {entry}")
+        if rnd.random() < 0.4:
+            lines.append("Allow: /")
+        if rnd.random() < 0.75:
+            lines += ["", f"Sitemap: {request.build_absolute_uri('/sitemap.xml')}"]
+        return "\n".join(lines) + "\n"
+
+    # sitemap.xml
+    today = timezone.now().date()
+    entries = []
+    for index, url in enumerate(urls):
+        jitter = rnd.randint(2, 300)
+        lastmod = (today - timezone.timedelta(days=jitter)).isoformat()
+        priority = rnd.choice(["0.8", "0.5", "0.3", "1.0"])
+        freq = rnd.choice(["weekly", "monthly", "daily"])
+        entries.append(
+            f"  <url><loc>{request.build_absolute_uri(url)}</loc>"
+            f"<lastmod>{lastmod}</lastmod>"
+            f"<changefreq>{freq}</changefreq><priority>{priority}</priority></url>")
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            + "\n".join(entries) + "\n</urlset>\n")
+
+
 # ─── Hosted sites (lures) and decoy asset bundles ──────────────────────────
 
 def serve_lure(request, rest):
@@ -892,6 +976,10 @@ def dispatch(request, path):
 
     link = DeliveryLink.objects.filter(path=normalized).first()
     if link is None:
+        # Public surface documents: operator files win, else generated per
+        # deployment (realistic, seeded, detection-resistant).
+        if normalized in ("/robots.txt", "/sitemap.xml"):
+            return surface_document(request, normalized)
         agent = AgentChannel.objects.filter(token=normalized.rsplit("/", 1)[-1], active=True).first()
         if agent is not None and normalized == agent.path:
             agent.hits += 1

@@ -117,7 +117,36 @@ def _render_link_form(request, link, title):
         "templates": LINK_TEMPLATES,
         "loading_pages": services.page_pool("loading"),
         "fingerprint_pages": services.page_pool("fingerprint"),
+        "library_files": _library_file_choices(),
     })
+
+
+def _library_file_choices():
+    """Flattened 'bundle/path' refs of every file in the payload library."""
+    choices = []
+    for bundle in library.list_bundles():
+        for file in bundle["files"]:
+            choices.append({
+                "ref": f"{bundle['name']}/{file['name']}",
+                "label": f"{bundle['name']}/{file['name']} ({file['size']} B)",
+            })
+    return choices
+
+
+def _payload_from_library(ref):
+    """ContentFile of a library file, or None. Confined to the library dir."""
+    from django.core.files.base import ContentFile
+    bundle, _, rel = (ref or "").partition("/")
+    if not bundle or not rel:
+        return None
+    try:
+        folder = library.bundle_path(bundle)
+        target = (folder / rel).resolve()
+    except ValueError:
+        return None
+    if not target.is_file() or folder not in target.parents:
+        return None
+    return ContentFile(target.read_bytes(), name=target.name)
 
 
 def _base_path():
@@ -147,6 +176,10 @@ def _link_from_post(request, link):
             library.register_upload(request.FILES["payload"], label=link.label)
         except (OSError, ValueError):
             pass  # the library is a convenience; never break a link save
+    elif request.POST.get("library_file"):
+        picked = _payload_from_library(request.POST["library_file"])
+        if picked is not None:
+            link.payload = picked
     link.serve_as = request.POST.get("serve_as", "").strip()[:200]
     link.post_download_redirect = request.POST.get("post_download_redirect") == "on"
     link.post_download_url = request.POST.get("post_download_url", "").strip()[:300]
@@ -609,6 +642,25 @@ def lure_edit(request, pk):
                 return back()
             messages.success(request, f"Created {file.path}.")
             return back(file.path)
+        if action == "add_from_library":
+            ref = request.POST.get("library_file", "")
+            bundle, _, rel = ref.partition("/")
+            picked = _payload_from_library(ref)
+            if picked is None:
+                messages.error(request, "That library file does not exist (or is not text).")
+                return back()
+            ext = ("." + rel.rsplit(".", 1)[-1].lower()) if "." in rel else ""
+            if ext not in library.TEXT_EXTS:
+                messages.error(request, "Only text files (HTML/CSS/JS/MD…) can join a lure.")
+                return back()
+            if site.files.filter(path=rel).exists():
+                messages.error(request, f"{rel} already exists in this lure.")
+                return back(rel)
+            site.files.create(path=rel, content=picked.read().decode("utf-8", errors="replace"))
+            record_event(action="gate.lure_file_saved", actor=request.user, target=site,
+                         metadata={"path": rel, "from_library": bundle}, request=request)
+            messages.success(request, f"Added {rel} from the library.")
+            return back(rel)
         if action == "delete_file":
             path = request.POST.get("path", "")
             site.files.filter(path=path).delete()
@@ -631,6 +683,7 @@ def lure_edit(request, pk):
         or files.filter(path="index.html").first() or files.first()
     return render(request, "panel/lure_edit.html", {
         "title": f"Lure {site.slug}", "site": site, "files": files, "current": current,
+        "library_files": _library_file_choices(),
     })
 
 

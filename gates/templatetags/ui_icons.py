@@ -53,3 +53,40 @@ def icon(name, cls="icon"):
         f'stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" '
         f'aria-hidden="true">{body}</svg>'
     )
+
+
+@register.simple_tag(takes_context=True)
+def palette_destinations(context):
+    """Navigation targets for the Ctrl+K command palette, as a JSON script."""
+    import json
+    from django.urls import reverse
+    from accounts.permissions import is_administrator
+    request = context.get("request")
+    items = [
+        {"group": "NAVIGATE", "label": "Overview", "url": reverse("overview"), "hint": "dashboard"},
+        {"group": "NAVIGATE", "label": "404 Events", "url": reverse("events"), "hint": "edge telemetry"},
+        {"group": "NAVIGATE", "label": "Delivery Links", "url": reverse("gate-links"), "hint": "gates"},
+        {"group": "NAVIGATE", "label": "Payloads", "url": reverse("gate-payloads"), "hint": "files + library"},
+        {"group": "NAVIGATE", "label": "Lures", "url": reverse("gate-lures"), "hint": "hosted sites"},
+        {"group": "NAVIGATE", "label": "Approvals", "url": reverse("gate-submissions"), "hint": "queue + admissions"},
+        {"group": "NAVIGATE", "label": "Gate Intel", "url": reverse("gate-intel"), "hint": "imagery"},
+        {"group": "ADMINISTER", "label": "Banned IPs", "url": reverse("gate-bans"), "hint": ""},
+        {"group": "ADMINISTER", "label": "Blocking Rules", "url": reverse("gate-block-rules"), "hint": ""},
+        {"group": "ADMINISTER", "label": "Agent Channels", "url": reverse("gate-agents"), "hint": ""},
+        {"group": "ADMINISTER", "label": "Gate Events", "url": reverse("gate-events"), "hint": ""},
+        {"group": "ADMINISTER", "label": "Decoy Pages", "url": reverse("gate-decoys"), "hint": ""},
+        {"group": "ADMINISTER", "label": "Audit Log", "url": reverse("audit-log"), "hint": ""},
+        {"group": "ADMINISTER", "label": "Settings", "url": reverse("settings"), "hint": ""},
+        {"group": "ADMINISTER", "label": "Security", "url": reverse("security"), "hint": "2FA + keys"},
+        {"group": "ADMINISTER", "label": "Service Health", "url": reverse("panel-health"), "hint": ""},
+        {"group": "ADMINISTER", "label": "Self-Test", "url": reverse("gate-selftest"), "hint": ""},
+        {"group": "CREATE", "label": "New delivery link", "url": reverse("gate-link-create"), "hint": "full form"},
+        {"group": "CREATE", "label": "New lure site", "url": reverse("gate-lures"), "hint": "create at top"},
+        {"group": "CREATE", "label": "Add decoy page", "url": reverse("gate-decoys"), "hint": "form at top"},
+        {"group": "CREATE", "label": "Mobile UI", "url": reverse("m-submissions"), "hint": "touch view"},
+    ]
+    if request is not None and is_administrator(request.user):
+        items.append({"group": "ADMINISTER", "label": "Operators", "url": reverse("operators"), "hint": "accounts"})
+    return mark_safe(
+        '<script id="palette-data" type="application/json">'
+        + json.dumps(items).replace("</", "<\\/") + "</script>")

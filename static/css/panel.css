@@ -165,3 +165,19 @@ details.adv>summary:hover{color:var(--s-text)}
 details.adv[open]{border-style:solid;border-color:var(--s-border);padding-bottom:14px}
 details.adv[open]>summary{border-bottom:1px solid var(--s-border);margin-bottom:12px;color:var(--s-text)}
 details.adv .adv-hint{font-size:.6rem;color:var(--s-dim);letter-spacing:0;margin-left:auto;font-style:normal}
+
+/* Sidebar: nav scrolls internally, brand and operator chip stay pinned */
+.sidebar{overflow:hidden}
+.primary-nav{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--s-border) transparent;margin-right:-8px;padding-right:8px}
+.primary-nav::-webkit-scrollbar{width:5px}
+.primary-nav::-webkit-scrollbar-thumb{background:var(--s-border);border-radius:3px}
+.primary-nav::-webkit-scrollbar-track{background:transparent}
+
+/* Command palette (Ctrl+K) */
+.palette-list{margin-top:12px;max-height:52vh;overflow-y:auto}
+.palette-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--s-muted);text-decoration:none;font-size:.74rem;cursor:pointer;border:1px solid transparent}
+.palette-item .kbd-hint{margin-left:auto;font-size:.56rem;color:var(--s-dim)}
+.palette-item:hover,.palette-item.active{color:var(--s-text);background:oklch(.82 .13 215/.07);border-color:var(--s-border)}
+.palette-item.active{color:var(--s-accent)}
+.palette-group{font-size:.54rem;letter-spacing:.14em;color:var(--s-dim);margin:10px 4px 4px}
+#palette-input{font-size:.85rem}

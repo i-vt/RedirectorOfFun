@@ -64,6 +64,14 @@
         <div class="drop-zone" data-file-input="payload-input">Drop a file here, or click to choose<input class="field-input" type="file" name="payload" id="payload-input" style="display:none"></div>
         <small class="mono muted" id="payload-input-chosen" style="font-size:.68rem">{% if link.payload %}current: {{ link.payload.name }}{% endif %}</small>
       </label>
+      {% if library_files %}
+      <label data-show-when="kind:file"><span>OR PICK FROM THE PAYLOAD LIBRARY {% tip "Attach a file that already exists in ./payloads/ (quick drops and previous uploads land there). Upload above wins if both are set." %}</span>
+        <select class="field-input mono" name="library_file">
+          <option value="">(no library file)</option>
+          {% for item in library_files %}<option value="{{ item.ref }}">{{ item.label }}</option>{% endfor %}
+        </select>
+      </label>
+      {% endif %}
       <div class="grid-2" data-show-when="on_deny:benevolent">
         <label><span>DENY RESPONSE TEXT (on_deny = benevolent)</span><textarea class="field-input mono" name="benevolent_text" rows="3">{{ link.benevolent_text }}</textarea></label>
         <label><span>DENY RESPONSE FILE</span>

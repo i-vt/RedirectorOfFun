@@ -14,6 +14,7 @@
   {% if theme == "obnoxious" %}<link rel="stylesheet" href="{% static 'css/theme-obnoxious.css' %}">{% endif %}
   <script defer src="{% static 'js/htmx.min.js' %}"></script>
   <script defer src="{% static 'js/conditional_fields.js' %}"></script>
+  <script defer src="{% static 'js/palette.js' %}"></script>
   <script defer src="{% static 'js/app.js' %}"></script>
   {% if theme == "obnoxious" %}<script defer src="{% static 'js/theme-obnoxious.js' %}"></script>{% endif %}
   {% block head %}{% endblock %}
@@ -69,6 +70,13 @@
     <main id="main-content" class="main-content">{% block content %}{% endblock %}</main>
   </div>
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
+  <div id="palette-modal" class="rof-modal-overlay" hidden>
+    <div class="rof-modal-card" role="dialog" aria-modal="true" aria-label="Command palette" style="max-width:640px">
+      <input id="palette-input" class="field-input" type="text" placeholder="Type to jump… (Ctrl+K / Esc)" autocomplete="off">
+      <div id="palette-list" class="palette-list"></div>
+    </div>
+  </div>
+  {% palette_destinations %}
   <div id="guide-modal" class="rof-modal-overlay" hidden>
     <div class="rof-modal-card" role="dialog" aria-modal="true" aria-labelledby="guide-title">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">

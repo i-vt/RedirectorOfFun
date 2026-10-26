@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load ui_icons %}
+{% load gate_extras %}
 {% load static %}
 {% block head %}<script defer src="{% static 'js/site_editor.js' %}"></script>{% endblock %}
 {% block guide %}
@@ -54,6 +55,17 @@
         <label><span class="section-label">ADD FILE</span><input class="field-input mono" name="path" maxlength="200" placeholder="about.html or js/app.js" style="margin-top:6px"></label>
         <button class="button secondary" type="submit" style="margin-top:8px">{% icon "plus" %}Add</button>
       </form>
+      {% if library_files %}
+      <form method="post" style="margin-top:12px">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_from_library">
+        <label><span class="section-label">ADD FROM LIBRARY {% tip "Copy a text file out of the payload library (./payloads/) into this lure." %}</span>
+          <select class="field-input mono" name="library_file" style="margin-top:6px">
+            {% for item in library_files %}<option value="{{ item.ref }}">{{ item.label }}</option>{% endfor %}
+          </select></label>
+        <button class="button secondary" type="submit" style="margin-top:8px">{% icon "payloads" %}Import file</button>
+      </form>
+      {% endif %}
       <p class="muted" style="font-size:.66rem;margin-top:12px">Requests under {{ site.public_path }} map to these files. An empty path serves <code>index.html</code>; unknown paths serve <code>404.html</code> when it exists, else the decoy.</p>
     </div>
     <div>
