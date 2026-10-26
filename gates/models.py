@@ -243,10 +243,12 @@ class DeliveryLink(models.Model):
 
     def clean(self):
         from django.core.exceptions import ValidationError
-        if self.gate_type == "network" and not self.allowed_uas and not self.allowed_ips:
+        if (self.gate_type == "network" and not self.allowed_uas and not self.allowed_ips
+                and not self.manual_admission):
             raise ValidationError(
                 {"allowed_uas": "The IP/User-Agent gate needs at least one allow-list "
-                                "(allowed IPs or UA patterns)."})
+                                "(allowed IPs or UA patterns) - or enable operator admission, "
+                                "which admits every visitor manually instead."})
         if self.gate_type == "network" and self.header_contract:
             raise ValidationError(
                 {"header_contract": "Header contracts already apply on their own; the "

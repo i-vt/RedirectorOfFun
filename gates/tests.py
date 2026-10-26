@@ -3306,3 +3306,43 @@ class GateLabelTests(TestCase):
         link = DeliveryLink.objects.get(path="/g/gl/one")
         detail = client.get(reverse("gate-link-detail", args=[link.pk]))
         self.assertContains(detail, "ip / user-agent only")
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class AdmissionOnlyNetworkGateTests(TestCase):
+    """Network gate with operator admission but no allow-lists is valid."""
+
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="aoop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def test_admission_alone_satisfies_network_gate(self):
+        link = DeliveryLink(path="/g/ao/one", kind="key", key_text="K",
+                            gate_type="network", manual_admission=True)
+        link.full_clean()  # no allow-lists, no error
+        link.save()
+        # any visitor passes the (empty) profile, then waits for admission
+        from gates.models import GateAdmission
+        held = self.public.get("/g/ao/one", HTTP_USER_AGENT="curl/8.0")
+        self.assertEqual(held.status_code, 204)
+        admission = GateAdmission.objects.get(link=link)
+        self.assertEqual(admission.status, "pending")
+        self.client.post(reverse("gate-admission-decide", args=[link.pk, admission.pk, "admit"]))
+        self.assertEqual(self.public.get("/g/ao/one", HTTP_USER_AGENT="curl/8.0").status_code, 200)
+
+    def test_still_invalid_without_admission_and_lists(self):
+        link = DeliveryLink(path="/g/ao/none", kind="key", key_text="K", gate_type="network")
+        with self.assertRaises(ValidationError):
+            link.full_clean()
+
+    def test_form_saves_admission_only_network_gate(self):
+        response = self.client.post(reverse("gate-link-create"), {
+            "path": "/g/ao/form", "kind": "key", "key_text": "K", "gate_type": "network",
+            "cipher": "none", "placeholder": "loading", "on_deny": "not_found",
+            "manual_admission": "on", "active": "on",
+        })
+        link = DeliveryLink.objects.get(path="/g/ao/form")
+        self.assertTrue(link.manual_admission)
+        self.assertEqual(response.status_code, 302)

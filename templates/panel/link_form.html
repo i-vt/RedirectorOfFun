@@ -13,7 +13,7 @@
   <li><strong>No gate</strong> - anyone with the URL gets the content.</li>
   <li><strong>Token / TOTP</strong> - the visitor presents a shared token or a timed code.</li>
   <li><strong>Submission</strong> - the agent POSTs an encrypted package (hostname, screenshots); an operator approves before release.</li>
-  <li><strong>IP / User-Agent only</strong> - no credentials; the NETWORK PROFILE below decides. Fields you don't need stay hidden until you pick the matching option.</li>
+  <li><strong>IP / User-Agent only</strong> - no credentials; the NETWORK PROFILE below decides. With operator admission on (the default), the allow-lists are optional: every visitor waits for your decision. Fields you don't need stay hidden until you pick the matching option.</li>
 </ul>
 <h3>WHILE HELD / ON DENY</h3>
 <ul>
@@ -128,7 +128,7 @@
     <details class="adv" data-autoopen-when="gate_type:network" data-feature-when="gate_type:network" {% if link.allowed_ips or link.allowed_uas or link.header_contract or link.replay_dedupe or link.active_window_start or link.gate_type == "network" %}open{% endif %}>
       <summary>NETWORK PROFILE <span class="adv-hint">IP/UA allow-lists · header contract · time window · replay dedupe</span></summary>
       <p class="muted" style="font-size:.66rem;margin-top:0">Malleable contract - requests that don't match are dropped before any gate check, so failures look like wrong credentials.</p>
-      <label class="check"><input type="checkbox" name="manual_admission" {% if link.manual_admission %}checked{% endif %} data-autocheck-when="gate_type:network"> <span>REQUIRE OPERATOR ADMISSION {% tip "Each new visitor IP waits for your decision after passing the gate (default for the network gate). Pair with the 'loading' or 'fingerprint' held view: the visitor sees a loading page until you admit them; the fingerprint page collects browser intel first." %}</span></label>
+      <label class="check"><input type="checkbox" name="manual_admission" {% if link.manual_admission %}checked{% endif %} data-autocheck-when="gate_type:network"> <span>REQUIRE OPERATOR ADMISSION {% tip "Each new visitor IP waits for your decision after passing the gate (default for the network gate). With admission on, the IP/UA allow-lists are optional - admission alone is the gate. Pair with the 'loading' or 'fingerprint' held view." %}</span></label>
       <div class="grid-2">
         <label><span>ALLOWED SOURCE IPs {% tip "Only these IPs/ranges may even attempt the gate. Checked before credentials; failures look like a wrong token." %}</span><input class="field-input mono" name="allowed_ips" value="{{ allowed_ips_csv }}" placeholder="203.0.113.0/24, 198.51.100.7"></label>
         <label><span>ALLOWED UA PATTERNS {% tip "User-Agent regex allow-list, e.g. ^MyAgent/2. Combined with the IP list this is the whole network gate." %}</span><input class="field-input mono" name="allowed_uas" value="{{ allowed_uas_csv }}" placeholder="^Mozilla/5.0.*Chrome/, ^MyAgent/\d"></label>
