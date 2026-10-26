@@ -463,6 +463,15 @@ def check_admission(link, request, path):
             "detail": f"{link.path}: new visitor {admission.ip_hash[:12]} waits for a decision.",
         })
     if admission.status == "admitted":
+        # Sticky window: the admission holds for admission_ttl seconds after
+        # the decision, then the visitor quietly goes back to pending (no new
+        # notification - creation already did that).
+        if link.admission_ttl and admission.decided_at:
+            expires = admission.decided_at + timezone.timedelta(seconds=link.admission_ttl)
+            if timezone.now() >= expires:
+                GateAdmission.objects.filter(pk=admission.pk).update(
+                    status="pending", decided_at=None, decided_by=None)
+                return hold_response(link, request)
         return None
     if admission.status == "denied":
         return gate_denied_response(link, request)

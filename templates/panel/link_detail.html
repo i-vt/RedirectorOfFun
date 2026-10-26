@@ -82,6 +82,7 @@
   </div>
   {% endif %}
   {% if link.manual_admission %}
+  <div id="admissions-live" data-autorefresh="5">
   <div class="panel-heading"><div><span class="section-label">VISITOR ADMISSIONS {% if pending_admissions %}<span class="status-badge warn">{{ pending_admissions }} PENDING</span>{% endif %}</span><h2>Who may pass</h2><p>Each new visitor IP waits for a decision after passing the gate. Admitted visitors pass from then on.</p></div><a class="text-link" href="?reveal={% if reveal_ids %}0{% else %}1{% endif %}">{% if reveal_ids %}HIDE IDENTIFIERS{% else %}REVEAL IDENTIFIERS{% endif %}</a></div>
   {% if admissions %}<div class="table-wrap"><table><thead><tr><th>FIRST SEEN / UTC</th><th>VISITOR</th><th>UA</th><th>HITS</th><th>STATUS</th><th>DECISION</th></tr></thead><tbody>
     {% for adm in admissions %}
@@ -99,6 +100,7 @@
     </tr>
     {% endfor %}
   </tbody></table></div>{% else %}<div class="empty-state"><strong>No visitors yet</strong><p>New visitors appear here when they pass the gate and wait for admission.</p></div>{% endif %}
+  </div>
   {% endif %}
   <div class="panel-heading"><div><span class="section-label">SUBMISSIONS</span><h2>Received packages</h2></div></div>
   {% include "panel/_submissions_table.html" with submissions=submissions page=None %}

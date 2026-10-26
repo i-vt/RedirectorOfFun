@@ -43,6 +43,23 @@ def admission_decide(request, link_pk, admission_pk, verdict):
 
 
 @login_required
+@transaction.atomic
+def admission_decide_all(request):
+    """Bulk-admit every pending admission (the queue-flood killer)."""
+    from .models import GateAdmission
+    if request.method == "POST":
+        updated = GateAdmission.objects.filter(status="pending").update(
+            status="admitted", decided_by=request.user, decided_at=timezone.now())
+        if updated:
+            record_event(action="gate.admissions_bulk_admitted", actor=request.user,
+                         metadata={"count": updated}, request=request)
+            messages.success(request, f"Admitted {updated} waiting visitor(s).")
+        else:
+            messages.info(request, "No pending admissions.")
+    return redirect(request.META.get("HTTP_REFERER", "gate-submissions"))
+
+
+@login_required
 def links_view(request):
     links = DeliveryLink.objects.all()
     label = request.GET.get("label", "").strip()
@@ -161,6 +178,8 @@ def _link_from_post(request, link):
     link.on_deny = request.POST.get("on_deny", "not_found")
     link.requires_approval = request.POST.get("requires_approval") == "on"
     link.manual_admission = request.POST.get("manual_admission") == "on"
+    ttl = request.POST.get("admission_ttl", "0").strip()
+    link.admission_ttl = int(ttl) if ttl.isdigit() else 0
     link.domain = request.POST.get("domain", "").strip()[:253]
     link.ja3_fingerprint = request.POST.get("ja3_fingerprint", "").strip()[:64]
     link.ja4_fingerprint = request.POST.get("ja4_fingerprint", "").strip()[:64]

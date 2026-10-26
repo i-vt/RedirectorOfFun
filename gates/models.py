@@ -225,6 +225,9 @@ class DeliveryLink(models.Model):
     requires_approval = models.BooleanField(default=False, help_text="Verification gate: an operator must approve before content is released.")
     manual_admission = models.BooleanField(default=False,
                                            help_text="Operator admits each new visitor (per source IP) after the gate passes. Default-on for the network gate.")
+    admission_ttl = models.PositiveIntegerField(
+        default=0,
+        help_text="Seconds an admission stays valid (sticky window). 0 = admitted forever.")
     auto_rules = models.JSONField(default=list, blank=True, validators=[validate_auto_rules],
                                   help_text="Optional auto-decision rules (JSON). First matching rule approves/denies; no match stays manual.")
     domain = models.CharField(max_length=253, blank=True, validators=[validate_redirector_domain],

@@ -284,3 +284,22 @@
     }
   });
 })();
+
+// ─── Live regions: auto-refresh without a page reload ──────────────────────
+// <div id="x" data-autorefresh="5"> re-fetches the page every N seconds and
+// swaps its content when it changed. Focused form fields inside survive.
+(() => {
+  document.querySelectorAll("[data-autorefresh]").forEach((el) => {
+    const seconds = parseInt(el.dataset.autorefresh, 10);
+    if (!seconds || seconds < 2) return;
+    setInterval(async () => {
+      if (el.querySelector("input:focus, textarea:focus, select:focus")) return;
+      try {
+        const response = await fetch(location.href);
+        const html = await response.text();
+        const fresh = new DOMParser().parseFromString(html, "text/html").getElementById(el.id);
+        if (fresh && fresh.innerHTML !== el.innerHTML) el.innerHTML = fresh.innerHTML;
+      } catch { /* offline hiccup: retry next tick */ }
+    }, seconds * 1000);
+  });
+})();

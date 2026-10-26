@@ -3669,3 +3669,87 @@ class ProxyTrustTests(TestCase):
              override_settings(TRUSTED_PROXIES=["127.0.0.1", "172.16.0.0/12"]):
             status, _ = selftest._check_proxy_trust()
         self.assertEqual(status, "pass")
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class AdmissionTtlAndLiveTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="ttop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _link(self, ttl=0):
+        return DeliveryLink.objects.create(
+            path="/g/tt/one", kind="key", key_text="K", gate_type="network",
+            allowed_ips=["0.0.0.0/0"], manual_admission=True, admission_ttl=ttl,
+            placeholder="blank")
+
+    def _admit(self, link):
+        from gates.models import GateAdmission
+        self.public.get("/g/tt/one", HTTP_USER_AGENT="Agent/1")
+        admission = GateAdmission.objects.get(link=link)
+        self.client.post(reverse("gate-admission-decide", args=[link.pk, admission.pk, "admit"]))
+        return admission
+
+    def test_zero_ttl_is_permanent(self):
+        from gates.models import GateAdmission
+        link = self._link(ttl=0)
+        self._admit(link)
+        admission = GateAdmission.objects.get(link=link)
+        # far past any window: still admitted
+        GateAdmission.objects.filter(pk=admission.pk).update(
+            decided_at=timezone.now() - timezone.timedelta(days=30))
+        self.assertEqual(self.public.get("/g/tt/one", HTTP_USER_AGENT="Agent/1").status_code, 200)
+        admission.refresh_from_db()
+        self.assertEqual(admission.status, "admitted")
+
+    def test_ttl_expiry_re_pends_quietly(self):
+        from gates.models import GateAdmission
+        link = self._link(ttl=60)
+        self._admit(link)
+        admission = GateAdmission.objects.get(link=link)
+        # inside the window: serves
+        self.assertEqual(self.public.get("/g/tt/one", HTTP_USER_AGENT="Agent/1").status_code, 200)
+        # past the window: pending again, held, NO new notification
+        GateAdmission.objects.filter(pk=admission.pk).update(
+            decided_at=timezone.now() - timezone.timedelta(seconds=61))
+        held = self.public.get("/g/tt/one", HTTP_USER_AGENT="Agent/1")
+        self.assertEqual(held.status_code, 204)
+        admission.refresh_from_db()
+        self.assertEqual(admission.status, "pending")
+        self.assertEqual(HitEvent.objects.filter(
+            category="awaiting_approval", link=link).count(), 1)  # creation only, once
+
+    def test_bulk_admit_all(self):
+        from gates.models import GateAdmission
+        link = self._link()
+        for _ in range(3):
+            self.public.get("/g/tt/one", HTTP_USER_AGENT="Agent/1",
+                            REMOTE_ADDR=f"198.51.100.{10 + GateAdmission.objects.count()}")
+        self.assertEqual(GateAdmission.objects.filter(status="pending").count(), 3)
+        response = self.client.post(reverse("gate-admissions-admit-all"))
+        self.assertRedirects(response, reverse("gate-submissions"))
+        self.assertEqual(GateAdmission.objects.filter(status="admitted").count(), 3)
+
+    def test_approvals_page_live_region_present(self):
+        link = self._link()
+        self.public.get("/g/tt/one", HTTP_USER_AGENT="Agent/1")  # one pending admission
+        response = self.client.get(reverse("gate-submissions"))
+        self.assertContains(response, 'id="approvals-live"')
+        self.assertContains(response, 'data-autorefresh="5"')
+        self.assertContains(response, "ADMIT ALL")
+
+    def test_link_detail_admissions_live_region(self):
+        link = self._link()
+        response = self.client.get(reverse("gate-link-detail", args=[link.pk]))
+        self.assertContains(response, 'id="admissions-live"')
+
+    def test_admission_ttl_via_form(self):
+        response = self.client.post(reverse("gate-link-create"), {
+            "path": "/g/tt/form", "kind": "key", "key_text": "K", "gate_type": "network",
+            "cipher": "none", "placeholder": "loading", "on_deny": "not_found",
+            "manual_admission": "on", "admission_ttl": "300", "active": "on",
+        })
+        link = DeliveryLink.objects.get(path="/g/tt/form")
+        self.assertEqual(link.admission_ttl, 300)

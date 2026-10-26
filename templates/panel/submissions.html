@@ -22,8 +22,9 @@
     <div><span class="section-label">VERIFICATION GATE</span><h2>Approval queue</h2><p>Decrypted submissions from droppers/loaders. Approve to release the linked content; deny to serve the deny response.</p></div>
     <span class="status-badge {% if pending_count %}warn{% else %}good{% endif %}">{{ pending_count }} PENDING</span>
   </div>
+  <div id="approvals-live" data-autorefresh="5">
   {% if pending_admissions %}
-  <div class="panel-heading"><div><span class="section-label">VISITOR ADMISSIONS</span><h3>Waiting visitors</h3><p>These visitors passed their gate and wait for admission (network-profile links). Admit or deny per source IP.</p></div><a class="text-link" href="?reveal={% if reveal_ids %}0{% else %}1{% endif %}">{% if reveal_ids %}HIDE IDENTIFIERS{% else %}REVEAL{% endif %}</a></div>
+  <div class="panel-heading"><div><span class="section-label">VISITOR ADMISSIONS</span><h3>Waiting visitors</h3><p>These visitors passed their gate and wait for admission (network-profile links). Admit or deny per source IP.</p></div><div><form method="post" action="{% url 'gate-admissions-admit-all' %}" style="display:inline">{% csrf_token %}<button class="button secondary" type="submit">ADMIT ALL</button></form> <a class="text-link" href="?reveal={% if reveal_ids %}0{% else %}1{% endif %}">{% if reveal_ids %}HIDE IDENTIFIERS{% else %}REVEAL{% endif %}</a></div></div>
   <div class="table-wrap"><table><thead><tr><th>WAITING SINCE / UTC</th><th>LINK</th><th>VISITOR</th><th>UA</th><th>DECISION</th></tr></thead><tbody>
     {% for adm in pending_admissions %}
     <tr>
@@ -48,6 +49,7 @@
     </select></label>
   </form>
   <div id="submissions-table">{% include "panel/_submissions_table.html" %}</div>
+  </div>
   <p class="muted mono" style="font-size:.66rem;margin-top:10px">KEYBOARD: <strong>j/k</strong> move · <strong>a</strong> approve · <strong>d</strong> deny · <strong>u</strong> undo · <a href="{% url 'm-submissions' %}">mobile view →</a></p>
 </section>
 <script>

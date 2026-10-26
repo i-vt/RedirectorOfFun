@@ -8,6 +8,7 @@ urlpatterns = [
     path("links/quick-drop/", views.link_quick_drop, name="gate-link-quick-drop"),
     path("links/<int:pk>/qr.svg", views.link_qr, name="gate-link-qr"),
     path("links/<int:link_pk>/admissions/<int:admission_pk>/<str:verdict>/", views.admission_decide, name="gate-admission-decide"),
+    path("admissions/admit-all/", views.admission_decide_all, name="gate-admissions-admit-all"),
     path("payloads/", views.payloads_view, name="gate-payloads"),
     path("payloads/library/<str:name>/", views.library_bundle, name="gate-library-bundle"),
     path("payloads/library/<str:name>/file/<path:path>", views.library_file, name="gate-library-file"),
