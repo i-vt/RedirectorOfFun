@@ -2898,3 +2898,133 @@ class ProgressiveDisclosureTests(TestCase):
         response = self.client.get(reverse("gate-block-rules"))
         self.assertContains(response, "LOGIC &amp; RAW CONDITIONS")
         self.assertContains(response, 'data-show-when="set_scope:link"')
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class PayloadLibraryTests(TestCase):
+    def setUp(self):
+        import shutil
+        import tempfile
+        lib = tempfile.mkdtemp(prefix="rof-lib-")
+        patch = override_settings(PAYLOAD_LIBRARY_DIR=lib)
+        patch.enable()
+        self.addCleanup(patch.disable)
+        self.addCleanup(shutil.rmtree, lib, True)
+        self.lib = lib
+        self.operator = Operator.objects.create_user(username="plop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _bundle(self, name="microsoft"):
+        from gates import library
+        root = library.library_dir()
+        folder = root / name
+        (folder / "js").mkdir(parents=True)
+        (folder / "index.html").write_text("<html><head><script>alert(1)</script></head></html>")
+        (folder / "js" / "app.js").write_text("console.log('x')")
+        (folder / "style.css").write_text("body{}")
+        return folder
+
+    def test_bundle_gets_notes_and_icon_automatically(self):
+        folder = self._bundle()
+        response = self.client.get(reverse("gate-library-bundle", args=["microsoft"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue((folder / "README.md").exists())
+        ico = folder / "favicon.ico"
+        self.assertTrue(ico.exists())
+        self.assertEqual(ico.read_bytes()[:4], b"\x00\x00\x01\x00")  # ICO magic
+        # notes render as escaped text: JS shows, never executes
+        self.assertContains(response, "README")
+        self.assertContains(response, "favicon.ico")
+
+    def test_notes_with_script_are_escaped(self):
+        from gates import library
+        folder = self._bundle()
+        library.save_notes(folder, "evil <script>alert(1)</script> notes")
+        response = self.client.get(reverse("gate-library-bundle", args=["microsoft"]))
+        self.assertContains(response, "&lt;script&gt;")
+        self.assertNotContains(response, "<script>alert(1)</script>")
+
+    def test_payloads_page_lists_library(self):
+        self._bundle()
+        response = self.client.get(reverse("gate-payloads"))
+        self.assertContains(response, "PAYLOAD LIBRARY")
+        self.assertContains(response, "microsoft")
+
+    def test_import_as_lure(self):
+        self._bundle()
+        response = self.client.post(reverse("gate-library-bundle", args=["microsoft"]),
+                                    {"action": "import_lure", "slug": "ms-portal"})
+        site = LureSite.objects.get(slug="ms-portal")
+        self.assertRedirects(response, reverse("gate-lure-edit", args=[site.pk]))
+        self.assertTrue(site.files.filter(path="index.html").exists())
+        self.assertTrue(site.files.filter(path="js/app.js").exists())  # nested files import too
+        self.assertIn(b"alert(1)", self.public.get("/l/ms-portal/").content)  # lures serve raw
+
+    def test_quick_drop_registers_bundle(self):
+        self.client.post(reverse("gate-link-quick-drop"),
+                         {"file": ContentFile(b"DATA", name="toolkit.exe")})
+        from gates import library
+        folder = library.library_dir() / "toolkit.exe"
+        self.assertTrue((folder / "toolkit.exe").exists())
+        self.assertTrue((folder / "README.md").exists())
+        self.assertTrue((folder / "favicon.ico").exists())
+
+    def test_library_file_serving_and_traversal(self):
+        folder = self._bundle()
+        from gates import library
+        library.ensure_icon(folder)
+        response = self.client.get(reverse("gate-library-file", args=["microsoft", "favicon.ico"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/vnd.microsoft.icon")
+        self.assertEqual(self.client.get(reverse("gate-library-file", args=["microsoft", "../settings.py"])).status_code, 404)
+        self.assertEqual(self.client.get("/panel/payloads/library/..%2Fevil/").status_code, 404)
+        self.assertEqual(self.public.get(reverse("gate-library-bundle", args=["microsoft"])).status_code, 302)
+
+    def test_delete_bundle(self):
+        self._bundle()
+        self.client.post(reverse("gate-library-bundle", args=["microsoft"]), {"action": "delete_bundle"})
+        from gates import library
+        self.assertFalse((library.library_dir() / "microsoft").exists())
+
+
+class TrackAllRequestsTests(TestCase):
+    def test_404_only_by_default(self):
+        from analytics.services import event_from_record
+        record = {"status": 200, "time": "2026-10-26T00:00:00+00:00", "request_id": "r1"}
+        self.assertIsNone(event_from_record(record))
+
+    @override_settings(TRACK_ALL_REQUESTS=True)
+    def test_all_statuses_stored_when_enabled(self):
+        from analytics.services import event_from_record
+        record = {"status": 200, "time": "2026-10-26T00:00:00+00:00", "request_id": "r1",
+                  "method": "get", "path": "/ok", "remote_addr": "203.0.113.9"}
+        event = event_from_record(record)
+        self.assertEqual(event.status, 200)
+        self.assertEqual(event.method, "GET")
+
+    @override_settings(TRACK_ALL_REQUESTS=True)
+    def test_status_class_filter(self):
+        from analytics.models import NotFoundEvent
+        from django.utils import timezone
+        NotFoundEvent.objects.create(request_id="a", occurred_at=timezone.now(), status=200, path="/fine")
+        NotFoundEvent.objects.create(request_id="b", occurred_at=timezone.now(), status=404, path="/gone")
+        operator = Operator.objects.create_user(username="taop", password="long-enough-password-123")
+        client = Client()
+        client.force_login(operator)
+        response = client.get(reverse("events") + "?status_class=2")
+        self.assertContains(response, "/fine")
+        self.assertNotContains(response, "/gone")
+        response = client.get(reverse("events"))
+        self.assertContains(response, "TRACKING ALL")
+
+
+class UpdateScriptTests(TestCase):
+    def test_update_script_shape(self):
+        from pathlib import Path
+        script = (Path(__file__).resolve().parent.parent / "update.sh").read_text()
+        self.assertIn("--reset", script)
+        self.assertIn("git pull --ff-only", script)
+        self.assertIn("start.sh --reset", script)
+        self.assertIn("builder prune", script)

@@ -131,6 +131,9 @@ BOOTSTRAP_TOKEN_TTL_MINUTES = int(os.getenv("BOOTSTRAP_TOKEN_TTL_MINUTES", "0"))
 INVITATION_TTL_HOURS = int(os.getenv("INVITATION_TTL_HOURS", "48"))
 ANALYTICS_RETENTION_DAYS = int(os.getenv("ANALYTICS_RETENTION_DAYS", "30"))
 ANALYTICS_ALERT_THRESHOLD = int(os.getenv("ANALYTICS_ALERT_THRESHOLD", "1000"))
+# Track every request in the events stream, not just 404s. nginx still writes
+# one JSON log; the collector stores all statuses when this is on.
+TRACK_ALL_REQUESTS = env_bool("TRACK_ALL_REQUESTS", False)
 ANALYTICS_IP_HASH_SALT = os.getenv("ANALYTICS_IP_HASH_SALT", "development-only-analytics-salt")
 NGINX_JSON_LOG_PATH = os.getenv("NGINX_JSON_LOG_PATH", "/var/log/nginx/access.json")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -184,6 +187,8 @@ VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "")
 VAPID_ADMIN_EMAIL = os.getenv("VAPID_ADMIN_EMAIL", "mailto:operators@example.com")
 MEDIA_URL = "/media/"
+# Payload library: one folder per bundle (files + notes.md + favicon.ico).
+PAYLOAD_LIBRARY_DIR = Path(os.getenv("PAYLOAD_LIBRARY_DIR", str(BASE_DIR / "payloads")))
 MEDIA_ROOT = BASE_DIR / "var" / "media"
 
 LOGGING = {

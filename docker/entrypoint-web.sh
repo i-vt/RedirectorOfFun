@@ -21,6 +21,12 @@ fi
 
 mkdir -p /etc/nginx/certs /var/www/acme
 
+# TRACK_ALL_REQUESTS=1 stores every request in the analytics stream, not just
+# 404s (the panel's events page gains 2xx/3xx/5xx visibility).
+if [ "${TRACK_ALL_REQUESTS:-0}" = "1" ]; then
+  sed -i 's/    default 0;/    default 1;/' "$CONF"
+fi
+
 if [ -n "${PANEL_DOMAIN:-}" ]; then
   LIVE="/etc/letsencrypt/live/${PANEL_DOMAIN}"
   if [ ! -f "$LIVE/fullchain.pem" ]; then

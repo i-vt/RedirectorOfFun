@@ -35,6 +35,9 @@ sed -i "s/<C2_SCHEME>/$C2_SCHEME/g" "$CONF"
 sed -i "s|<GATE_BASE>|$(printf '%s' "$GATE_BASE" | sed 's/[\/&]/\\&/g')|g" "$CONF"
 sed -i "s|<AGENT_BASE>|$(printf '%s' "$AGENT_BASE" | sed 's/[\/&]/\\&/g')|g" "$CONF"
 sed -i "s|<LURE_BASE>|$(printf '%s' "$LURE_BASE" | sed 's/[\/&]/\\&/g')|g" "$CONF"
+if [ "${TRACK_ALL_REQUESTS:-0}" = "1" ]; then
+  sed -i 's/    default 0;/    default 1;/' "$CONF"
+fi
 sed -i "s/<PANEL_UPSTREAM>/$(printf '%s' "$PANEL_UPSTREAM" | sed 's/[\/&]/\\&/g')/g" "$CONF"
 
 if [ -n "$UA_PATTERN" ]; then

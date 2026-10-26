@@ -19,7 +19,7 @@ from .models import (
     SubmissionImage, validate_auto_rules, validate_header_contract,
 )
 from .link_templates import LINK_TEMPLATES
-from . import services
+from . import library, services
 
 
 @login_required
@@ -104,6 +104,10 @@ def _link_from_post(request, link):
     link.pwndrop_url = request.POST.get("pwndrop_url", "").strip()
     if request.FILES.get("payload"):
         link.payload = request.FILES["payload"]
+        try:
+            library.register_upload(request.FILES["payload"], label=link.label)
+        except (OSError, ValueError):
+            pass  # the library is a convenience; never break a link save
     if request.FILES.get("benevolent_file"):
         link.benevolent_file = request.FILES["benevolent_file"]
     link.benevolent_text = request.POST.get("benevolent_text", "")
@@ -260,6 +264,11 @@ def link_quick_drop(request):
         path=path, kind="file", label=request.POST.get("name", "").strip()[:120] or file.name[:120],
         placeholder="blank", on_deny="not_found", payload=file, created_by=request.user,
     )
+    try:
+        file.seek(0)
+        library.register_upload(file, label=link.label)
+    except (OSError, ValueError):
+        pass  # the library is a convenience; never break a drop
     record_event(action="gate.link_quick_dropped", actor=request.user, target=link,
                  metadata={"size": file.size}, request=request)
     return JsonResponse({"path": link.path, "label": link.label, "id": link.pk})
@@ -315,7 +324,73 @@ def payloads_view(request):
         "benevolent_links": benevolent_links,
         "decoys": decoys,
         "intel": intel,
+        "bundles": library.list_bundles(),
     })
+
+
+@login_required
+def library_bundle(request, name):
+    """One bundle: notes (escaped text), files, icon, import-as-lure."""
+    from django.http import Http404
+    try:
+        folder = library.bundle_path(name)
+    except ValueError:
+        raise Http404
+    if not folder.is_dir():
+        raise Http404
+    library.ensure_icon(folder)
+    library.ensure_notes(folder)
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        if action == "save_notes":
+            library.save_notes(folder, request.POST.get("content", ""))
+            record_event(action="gate.bundle_noted", actor=request.user,
+                         metadata={"bundle": name}, request=request)
+            messages.success(request, "Notes saved.")
+        elif action == "import_lure":
+            import re as _re
+            slug = _re.sub(r"[^a-z0-9-]+", "-", request.POST.get("slug", "").strip().lower() or name)[:60]
+            if LureSite.objects.filter(slug=slug).exists():
+                messages.error(request, f"A lure with slug '{slug}' already exists.")
+                return redirect("gate-library-bundle", name=name)
+            site, skipped = library.import_as_lure(name, slug, request.user)
+            record_event(action="gate.bundle_imported", actor=request.user, target=site,
+                         metadata={"bundle": name, "skipped": skipped}, request=request)
+            note = f" (skipped non-text: {', '.join(skipped)})" if skipped else ""
+            messages.success(request, f"Bundle imported as lure at {site.public_path}{note}")
+            return redirect("gate-lure-edit", pk=site.pk)
+        elif action == "delete_bundle":
+            import shutil
+            shutil.rmtree(folder)
+            record_event(action="gate.bundle_deleted", actor=request.user,
+                         metadata={"bundle": name}, request=request)
+            messages.success(request, f"Bundle '{name}' deleted.")
+            return redirect("gate-payloads")
+        return redirect("gate-library-bundle", name=name)
+    return render(request, "panel/payload_bundle.html", {
+        "title": f"Bundle {name}", "bundle": name,
+        "notes": library.read_notes(folder),
+        "files": [library._file_info(f, folder) for f in sorted(folder.rglob("*")) if f.is_file()],
+        "icon": library.icon_file(folder),
+    })
+
+
+@login_required
+def library_file(request, name, path):
+    """Serve one file out of a bundle (icon preview, downloads)."""
+    from django.http import Http404
+    try:
+        folder = library.bundle_path(name)
+        target = (folder / path).resolve()
+    except ValueError:
+        raise Http404
+    if not target.is_file() or folder not in target.parents and target != folder:
+        raise Http404
+    import mimetypes
+    content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+    if target.suffix.lower() == ".ico":
+        content_type = "image/vnd.microsoft.icon"
+    return FileResponse(target.open("rb"), content_type=content_type)
 
 
 @login_required

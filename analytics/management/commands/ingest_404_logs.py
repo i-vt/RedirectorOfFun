@@ -27,7 +27,8 @@ class Command(BaseCommand):
                 if count:
                     self.stdout.write(f"{timezone.now().isoformat()} ingested={count}")
                     if count >= settings.ANALYTICS_ALERT_THRESHOLD:
-                        notify("analytics", {"title": "Elevated 404 volume", "detail": f"The collector ingested {count} events in one batch."})
+                        what = "request" if settings.TRACK_ALL_REQUESTS else "404"
+                        notify("analytics", {"title": f"Elevated {what} volume", "detail": f"The collector ingested {count} events in one batch."})
             except FileNotFoundError:
                 if options["once"]:
                     self.stdout.write("Log file does not exist yet; nothing to ingest.")

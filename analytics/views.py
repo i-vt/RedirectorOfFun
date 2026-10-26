@@ -1,4 +1,5 @@
 import json
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.shortcuts import render
@@ -55,6 +56,10 @@ def filtered_events(request):
         events = events.filter(Q(source_ip=client) | Q(source_ip_hash=client))
     if days.isdigit() and 1 <= int(days) <= 365:
         events = events.filter(occurred_at__gte=timezone.now() - timezone.timedelta(days=int(days)))
+    status_class = request.GET.get("status_class", "").strip()
+    if status_class in {"2", "3", "4", "5"}:
+        low = int(status_class) * 100
+        events = events.filter(status__gte=low, status__lte=low + 99)
     return events
 
 
@@ -72,6 +77,7 @@ def events_view(request):
         "title": "404 Events", "page": page, "events": page.object_list,
         "intel": intel,
         "show_identifiers": request.GET.get("identifiers") == "1",
+        "track_all": getattr(settings, "TRACK_ALL_REQUESTS", False),
     })
 
 

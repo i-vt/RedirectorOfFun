@@ -18,6 +18,25 @@
 <section class="panel page-panel">
   <div class="panel-heading"><div><span class="section-label">FILE MANAGER</span><h2>Payloads</h2><p>Every file the gate system holds: payloads, benevolent fallbacks, uploaded decoys - with the gate intel (hostnames, screenshots, hashed IPs) each link collected. Replace swaps a payload without changing its URL.</p></div></div>
 
+  <div class="panel-heading"><div><span class="section-label">PAYLOAD LIBRARY</span><h3>Bundles in ./payloads/ {% tip "One folder per bundle: the files, a README.md of operator notes (generated when missing, always shown as escaped text), and a favicon.ico (randomly generated when missing). Uploads via quick drop or the link form land here automatically." %}</h3></div></div>
+  {% if bundles %}
+  <div class="intel-grid">
+    {% for bundle in bundles %}
+    <figure class="intel-card">
+      <a href="{% url 'gate-library-bundle' bundle.name %}" style="display:flex;align-items:center;gap:12px;padding:14px">
+        {% if bundle.has_icon %}<img src="{% url 'gate-library-file' bundle.name 'favicon.ico' %}" alt="" style="width:32px;height:32px;border-radius:6px;image-rendering:pixelated">{% endif %}
+        <span>
+          <strong class="mono">{{ bundle.name }}</strong><br>
+          <span class="muted" style="font-size:.66rem">{{ bundle.files|length }} file{{ bundle.files|length|pluralize }}</span>
+        </span>
+      </a>
+    </figure>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state"><strong>The library is empty</strong><p>Drop a folder into <code>./payloads/</code> (e.g. <code>./payloads/microsoft/</code> with HTML/CSS/JS), or quick-drop a file - every upload becomes a bundle with notes and an icon.</p></div>
+  {% endif %}
+
   {% if file_links %}
   <div class="table-wrap"><table><thead><tr><th>FILE</th><th>LINK</th><th>SIZE</th><th>USES</th><th>GATE INTEL</th><th>ACTIONS</th></tr></thead><tbody>
     {% for link in file_links %}

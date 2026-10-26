@@ -212,7 +212,8 @@ if [[ -n "$SETUP_TOKEN" ]]; then
   print_access_urls "/${OP_SEGMENT}setup/${SETUP_TOKEN}/"
 fi
 printf '\nUseful commands:\n'
+printf '  Update:    ./update.sh        (pull, rebuild, restart, prune cache)\n'
 printf '  Logs:      docker compose logs -f panel collector notification-worker\n'
 printf '  Stop:      docker compose down\n'
-printf '  Reset all: ./start.sh --reset\n'
+printf '  Reset all: ./update.sh --reset\n'
 printf '  Full test: ./test.sh --all\n'

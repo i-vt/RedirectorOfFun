@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% load ui_icons %}
+{% load gate_extras %}
+{% load static %}
+{% block head %}<script defer src="{% static 'js/site_editor.js' %}"></script>{% endblock %}
+{% block guide %}
+<p>A bundle is one folder in the payload library: the files, a markdown notes file, and a favicon.</p>
+<ul>
+  <li>Notes are shown as <strong>escaped text</strong> - any HTML/JS inside is displayed, never executed. Edit and save them here.</li>
+  <li>Missing notes or icon are generated on first view.</li>
+  <li><strong>Import as lure</strong> copies the text files (HTML/CSS/JS/MD…) into a hosted multi-page site. Binary files (like the ico) are skipped.</li>
+</ul>
+{% endblock %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">PAYLOAD LIBRARY / BUNDLE</span><h2 class="mono">{% if icon %}<img src="{% url 'gate-library-file' bundle 'favicon.ico' %}" alt="" style="width:26px;height:26px;vertical-align:-6px;border-radius:5px;image-rendering:pixelated">{% endif %} {{ bundle }}</h2></div>
+    <div><a class="button secondary" href="{% url 'gate-payloads' %}">← Payloads</a></div>
+  </div>
+
+  <div class="panel-heading"><div><span class="section-label">OPERATOR NOTES</span><h3>README {% tip "Shown as escaped text on purpose: any JS/HTML inside a bundle's notes is displayed, never executed." %}</h3></div></div>
+  <pre class="mono" style="white-space:pre-wrap;background:var(--p-abyss);border:1px solid var(--s-border);border-radius:8px;padding:14px;font-size:.72rem;max-height:340px;overflow:auto">{{ notes }}</pre>
+  <form method="post" class="stacked-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save_notes">
+    <label><span>EDIT NOTES (markdown, plain text only)</span><textarea class="code-editor" name="content" data-code spellcheck="false" style="min-height:200px">{{ notes }}</textarea></label>
+    <button class="button secondary" type="submit">{% icon "check" %}Save notes</button>
+  </form>
+
+  <div class="panel-heading" style="margin-top:20px"><div><span class="section-label">FILES</span><h3>{{ files|length }} in bundle</h3></div></div>
+  <div class="table-wrap"><table><thead><tr><th>FILE</th><th>TYPE</th><th>SIZE</th><th></th></tr></thead><tbody>
+    {% for file in files %}
+    <tr>
+      <td class="mono">{{ file.name }}</td>
+      <td><span class="status-badge">{{ file.ext|default:"-" }}</span></td>
+      <td class="mono muted">{{ file.size }} B</td>
+      <td><a class="text-button" href="{% url 'gate-library-file' bundle file.name %}" download>{% icon "download" %}GET</a></td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+
+  <details class="adv">
+    <summary>IMPORT AS LURE <span class="adv-hint">host this bundle as a multi-page site</span></summary>
+    <form method="post" class="stacked-form">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="import_lure">
+      <label><span>LURE SLUG</span><input class="field-input mono" name="slug" maxlength="60" value="{{ bundle }}" placeholder="portal"></label>
+      <button class="button" type="submit">{% icon "lures" %}Import as lure</button>
+    </form>
+    <form method="post" data-confirm="Delete bundle '{{ bundle }}' from the library? Links already serving its content are unaffected." style="margin-top:10px">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="delete_bundle">
+      <button class="text-button" type="submit" style="color:var(--s-danger)">{% icon "trash" %}DELETE BUNDLE</button>
+    </form>
+  </details>
+</section>
+{% endblock %}

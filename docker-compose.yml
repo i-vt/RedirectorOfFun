@@ -61,6 +61,7 @@ services:
       PANEL_DOMAIN: ${PANEL_DOMAIN:-}
       LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-}
       HSTS_MAX_AGE: ${HSTS_MAX_AGE:-}
+      TRACK_ALL_REQUESTS: ${TRACK_ALL_REQUESTS:-0}
     depends_on:
       panel:
         condition: service_healthy

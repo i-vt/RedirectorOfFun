@@ -370,6 +370,10 @@ nysm_initialize() {
   local safe_lure
   safe_lure=$(printf '%s' "${LURE_BASE_PATH:-/l/}" | sed 's/[\/&]/\\&/g')
   run_cmd sed -i "s|<LURE_BASE>|$safe_lure|g" "$CONF_DST"
+  # TRACK_ALL_REQUESTS=1 logs every request to the analytics JSON, not just 404s.
+  if [ "${TRACK_ALL_REQUESTS:-0}" = "1" ]; then
+    run_cmd sed -i 's/    default 0;/    default 1;/' "$CONF_DST"
+  fi
 
   if [ -n "$ua_pattern" ]; then
     local safe_ua

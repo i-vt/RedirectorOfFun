@@ -15,8 +15,11 @@ def hash_address(address):
     return hashlib.sha256(f"{settings.ANALYTICS_IP_HASH_SALT}:{address}".encode()).hexdigest()
 
 
-def event_from_record(record, raw_line=""):
-    if int(record.get("status", 0)) != 404:
+def event_from_record(record, raw_line="", track_all=None):
+    status = int(record.get("status", 0) or 0)
+    if track_all is None:
+        track_all = getattr(settings, "TRACK_ALL_REQUESTS", False)
+    if not track_all and status != 404:
         return None
     request_id = str(record.get("request_id") or hashlib.sha256(raw_line.encode()).hexdigest())[:64]
     occurred_at = parse_datetime(str(record.get("time", ""))) or timezone.now()
@@ -28,7 +31,7 @@ def event_from_record(record, raw_line=""):
         occurred_at=occurred_at,
         method=str(record.get("method", "GET"))[:10].upper(),
         path=str(record.get("path", record.get("uri", "/")))[:8192],
-        status=404,
+        status=status,
         source_ip=remote_addr or None,
         source_ip_hash=hash_address(remote_addr),
         user_agent=str(record.get("user_agent", ""))[:1000],
