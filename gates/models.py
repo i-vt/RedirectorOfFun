@@ -154,6 +154,8 @@ class DeliveryLink(models.Model):
         ("blank", "Blank 204 response"),
         ("placeholder", "Placeholder page"),
         ("decoy", "Decoy page"),
+        ("loading", "Loading page (auto-retries until admitted)"),
+        ("fingerprint", "Fingerprint page, then loading (collects visitor intel)"),
     ]
     DENY_CHOICES = [
         ("not_found", "404"),
@@ -195,6 +197,8 @@ class DeliveryLink(models.Model):
     on_deny = models.CharField(max_length=12, choices=DENY_CHOICES, default="not_found")
 
     requires_approval = models.BooleanField(default=False, help_text="Verification gate: an operator must approve before content is released.")
+    manual_admission = models.BooleanField(default=False,
+                                           help_text="Operator admits each new visitor (per source IP) after the gate passes. Default-on for the network gate.")
     auto_rules = models.JSONField(default=list, blank=True, validators=[validate_auto_rules],
                                   help_text="Optional auto-decision rules (JSON). First matching rule approves/denies; no match stays manual.")
     domain = models.CharField(max_length=253, blank=True, validators=[validate_redirector_domain],
@@ -801,6 +805,40 @@ class GateConfig(models.Model):
     @classmethod
     def get_solo(cls):
         return cls.objects.get_or_create(key="main")[0]
+
+
+class GateAdmission(models.Model):
+    """One visitor (by source IP) asking to be admitted to a gated link.
+
+    Created when a request passes the gate but the link requires operator
+    admission. The operator admits or denies; a fingerprint page can attach
+    browser intel to the pending admission before the decision."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("admitted", "Admitted"),
+        ("denied", "Denied"),
+    ]
+
+    link = models.ForeignKey(DeliveryLink, on_delete=models.CASCADE, related_name="admissions")
+    ip = models.GenericIPAddressField()
+    ip_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    user_agent = models.TextField(blank=True)
+    fingerprint = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending", db_index=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="admission_decisions")
+    decided_at = models.DateTimeField(null=True, blank=True)
+    hits = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-last_seen_at"]
+        constraints = [models.UniqueConstraint(fields=["link", "ip"], name="unique_admission_per_link_ip")]
+
+    def __str__(self):
+        return f"{self.ip} -> {self.link.path} ({self.status})"
 
 
 class UsedGateCode(models.Model):

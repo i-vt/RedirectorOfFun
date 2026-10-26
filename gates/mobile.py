@@ -72,10 +72,21 @@ def link_detail(request, pk):
             link.active = not link.active
             link.save(update_fields=["active"])
             return redirect("m-link", pk=pk)
+        if action in {"admit", "deny"} and request.POST.get("admission"):
+            from .models import GateAdmission
+            admission = get_object_or_404(GateAdmission, pk=request.POST["admission"], link=link)
+            admission.status = "admitted" if action == "admit" else "denied"
+            admission.decided_by = request.user
+            admission.decided_at = timezone.now()
+            admission.save(update_fields=["status", "decided_by", "decided_at"])
+            record_event(action=f"gate.admission_{admission.status}", actor=request.user,
+                         target=link, metadata={"via": "mobile"}, request=request)
+            return redirect("m-link", pk=pk)
     return render(request, "mobile/link_detail.html", {
         "title": link.path, "link": link,
         "hits": link.hit_events.all()[:15],
         "submissions": link.submissions.select_related("decided_by")[:8],
+        "pending_admissions": link.admissions.filter(status="pending"),
     })
 
 

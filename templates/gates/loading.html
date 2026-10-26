@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="6">
+<title>Loading</title>
+<style>
+  html,body{margin:0;height:100%;background:#f4f5f7;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#3c4043}
+  .wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+  .spin{width:34px;height:34px;border-radius:50%;border:3px solid #d7dbe0;border-top-color:#7a828c;animation:sp 1s linear infinite}
+  p{font-size:14px;margin:0}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+  <div class="wrap"><div class="spin"></div><p>Loading, please wait&hellip;</p></div>
+</body>
+</html>

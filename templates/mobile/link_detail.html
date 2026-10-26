@@ -6,7 +6,7 @@
   <div>
     <span class="badge {% if link.active %}good{% else %}bad{% endif %}">{% if link.active %}ACTIVE{% else %}INACTIVE{% endif %}</span>
     <span class="badge mono">{{ link.get_kind_display }}</span>
-    <span class="badge mono">{{ link.get_gate_display }}</span>
+    <span class="badge mono">{{ link.get_gate_type_display }}</span>
     {% if link.watermark %}<span class="badge good">WM</span>{% endif %}
     {% if link.ja3_fingerprint or link.ja4_fingerprint %}<span class="badge good">JA</span>{% endif %}
   </div>
@@ -17,6 +17,23 @@
   <form method="post" style="flex:1">{% csrf_token %}<input type="hidden" name="action" value="toggle"><button class="btn secondary" type="submit" style="width:100%">{{ link.active|yesno:"Deactivate,Activate" }}</button></form>
   <form method="post" style="flex:1" data-confirm="BURN this link? It deactivates, denies everyone, and bans all visitor IPs except the approved target. This cannot be undone.">{% csrf_token %}<input type="hidden" name="action" value="burn"><button class="btn danger" type="submit" style="width:100%">Burn link</button></form>
 </div>
+
+{% if pending_admissions %}
+<div class="card">
+  <label class="muted" style="font-size:.72rem;letter-spacing:.1em">VISITORS WAITING ({{ pending_admissions|length }})</label>
+  {% for adm in pending_admissions %}
+    <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+      <div class="mono" style="font-size:.72rem">{{ adm.ip_hash|slice:":12" }} · {{ adm.hits }} hit(s)</div>
+      <div class="muted" style="font-size:.66rem;overflow-wrap:anywhere">{{ adm.user_agent|truncatechars:60|default:"no UA" }}</div>
+      {% if adm.fingerprint %}<div class="muted mono" style="font-size:.62rem">{{ adm.fingerprint|get_item:"gl_renderer"|default:"" }} · {{ adm.fingerprint|get_item:"tz"|default:"" }}</div>{% endif %}
+      <div class="row">
+        <form method="post" style="flex:1">{% csrf_token %}<input type="hidden" name="action" value="admit"><input type="hidden" name="admission" value="{{ adm.pk }}"><button class="btn primary" type="submit" style="width:100%">Admit</button></form>
+        <form method="post" style="flex:1" data-confirm="Deny this visitor?">{% csrf_token %}<input type="hidden" name="action" value="deny"><input type="hidden" name="admission" value="{{ adm.pk }}"><button class="btn danger" type="submit" style="width:100%">Deny</button></form>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
 
 {% if submissions %}
 <div class="card" style="margin-top:14px">

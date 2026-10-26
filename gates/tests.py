@@ -3189,3 +3189,120 @@ class RememberDecisionTests(TestCase):
         response = self.client.get(reverse("gate-submissions") + "?status=pending")
         self.assertContains(response, "REMEMBER")
         self.assertContains(response, f"remember-flag-{self.submission.pk}")
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class VisitorAdmissionTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="adop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _network_link(self, placeholder="blank", **kwargs):
+        return DeliveryLink.objects.create(
+            path="/g/ad/one", kind="key", key_text="SEKRET", gate_type="network",
+            allowed_uas=[r"^MyAgent/"], allowed_ips=["127.0.0.0/8"],
+            manual_admission=True, placeholder=placeholder, **kwargs)
+
+    def test_new_visitor_held_until_admitted(self):
+        from gates.models import GateAdmission
+        self._network_link()
+        held = self.public.get("/g/ad/one", HTTP_USER_AGENT="MyAgent/1")
+        self.assertEqual(held.status_code, 204)
+        admission = GateAdmission.objects.get()
+        self.assertEqual(admission.status, "pending")
+        # operator admits via the panel
+        self.client.post(reverse("gate-admission-decide", args=[admission.link.pk, admission.pk, "admit"]))
+        ok = self.public.get("/g/ad/one", HTTP_USER_AGENT="MyAgent/1")
+        self.assertEqual(ok.status_code, 200)
+        self.assertIn(b"SEKRET", ok.content)
+
+    def test_denied_visitor_gets_deny_response(self):
+        from gates.models import GateAdmission
+        self._network_link()
+        self.public.get("/g/ad/one", HTTP_USER_AGENT="MyAgent/1")
+        admission = GateAdmission.objects.get()
+        self.client.post(reverse("gate-admission-decide", args=[admission.link.pk, admission.pk, "deny"]))
+        denied = self.public.get("/g/ad/one", HTTP_USER_AGENT="MyAgent/1")
+        self.assertEqual(denied.status_code, 404)  # on_deny default: 404
+
+    def test_admission_only_after_gate_passes(self):
+        from gates.models import GateAdmission
+        self._network_link()
+        # wrong UA never creates an admission
+        self.public.get("/g/ad/one", HTTP_USER_AGENT="curl/8.0")
+        self.assertEqual(GateAdmission.objects.count(), 0)
+
+    def test_loading_placeholder_auto_retries(self):
+        self._network_link(placeholder="loading")
+        response = self.public.get("/g/ad/one", HTTP_USER_AGENT="MyAgent/1")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"http-equiv=\"refresh\"", response.content)
+        self.assertIn(b"Loading", response.content)
+        self.assertNotIn(b"RoF", response.content)  # no panel branding
+
+    def test_fingerprint_page_collects_then_loads(self):
+        from gates.models import GateAdmission
+        self._network_link(placeholder="fingerprint")
+        page = self.public.get("/g/ad/one", HTTP_USER_AGENT="MyAgent/1")
+        self.assertIn(b"Checking your browser", page.content)
+        # the page POSTs intel back to the same path
+        intel = {"ua": "MyAgent/1", "tz": "Europe/Berlin", "screen": [1920, 1080, 24]}
+        response = self.public.post("/g/ad/one", data=json.dumps({"fingerprint": intel}),
+                                    content_type="application/json", HTTP_USER_AGENT="MyAgent/1")
+        self.assertEqual(response.status_code, 204)
+        admission = GateAdmission.objects.get()
+        self.assertEqual(admission.fingerprint["tz"], "Europe/Berlin")
+        # operator sees the intel on the link page
+        detail = self.client.get(reverse("gate-link-detail", args=[self.link.pk if hasattr(self, 'link') else admission.link.pk]))
+        self.assertContains(detail, "Europe/Berlin")
+
+    def test_off_by_default_and_form_fields(self):
+        link = DeliveryLink.objects.create(path="/g/ad/plain", kind="key", key_text="K",
+                                           gate_type="none", placeholder="blank")
+        self.assertEqual(self.public.get("/g/ad/plain").status_code, 200)
+        response = self.client.get(reverse("gate-link-create"))
+        self.assertContains(response, 'name="manual_admission"')
+        self.assertContains(response, 'data-autocheck-when="gate_type:network"')
+        self.assertContains(response, 'value="loading"')
+        self.assertContains(response, 'value="fingerprint"')
+
+    def test_mobile_admit(self):
+        from gates.models import GateAdmission
+        self._network_link()
+        self.public.get("/g/ad/one", HTTP_USER_AGENT="MyAgent/1")
+        admission = GateAdmission.objects.get()
+        self.client.post(reverse("m-link", args=[admission.link.pk]),
+                         {"action": "admit", "admission": admission.pk})
+        admission.refresh_from_db()
+        self.assertEqual(admission.status, "admitted")
+
+
+class AdmissionSubmissionCoexistenceTests(TestCase):
+    """A submission gate with manual admission must still receive packages."""
+
+    @override_settings(AUTO_BAN_THRESHOLD=0)
+    def test_submission_post_bypasses_admission(self):
+        link = DeliveryLink.objects.create(
+            path="/g/adsub/x", kind="key", key_text="K", gate_type="submission",
+            cipher="base64", expected_fields=["hostname"], requires_approval=True,
+            manual_admission=True, placeholder="blank")
+        blob = base64.b64encode(json.dumps({"hostname": "ws-1"}).encode()).decode()
+        response = Client().post("/g/adsub/x", data=blob, content_type="application/octet-stream")
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(Submission.objects.get(link=link).decoded_json["hostname"], "ws-1")
+
+
+class GateLabelTests(TestCase):
+    def test_links_table_shows_gate_label(self):
+        operator = Operator.objects.create_user(username="glop", password="long-enough-password-123")
+        client = Client()
+        client.force_login(operator)
+        DeliveryLink.objects.create(path="/g/gl/one", kind="key", key_text="K", gate_type="network",
+                                    allowed_ips=["10.0.0.0/8"])
+        response = client.get(reverse("gate-links"))
+        self.assertContains(response, "IP / User-Agent only")
+        link = DeliveryLink.objects.get(path="/g/gl/one")
+        detail = client.get(reverse("gate-link-detail", args=[link.pk]))
+        self.assertContains(detail, "ip / user-agent only")

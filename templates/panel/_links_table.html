@@ -2,7 +2,7 @@
 <tr>
   <td class="path-cell mono"><a href="{% url 'gate-link-detail' link.pk %}">{{ link.path }}</a></td>
   <td><span class="method">{{ link.get_kind_display }}</span></td>
-  <td class="mono muted">{{ link.get_gate_display }}</td>
+  <td class="mono muted">{{ link.get_gate_type_display }}</td>
   <td>{{ link.label|default:"-" }}{% if link.agent_label %}<br><span class="muted mono">{{ link.agent_label }}</span>{% endif %}</td>
   <td class="mono">{{ link.hit_count }}{% if link.max_uses %}/{{ link.max_uses }}{% endif %}</td>
   <td class="mono muted nowrap">{{ link.expires_at|date:"Y-m-d H:i"|default:"-" }}</td>

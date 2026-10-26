@@ -20,7 +20,7 @@
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">
-    <div><span class="section-label">RELEASE GATES</span><h2 class="mono">{{ link.path }}</h2><p>{{ link.get_kind_display }} · gate: {{ link.get_gate_display|lower }} · cipher: {{ link.get_cipher_display }}</p></div>
+    <div><span class="section-label">RELEASE GATES</span><h2 class="mono">{{ link.path }}</h2><p>{{ link.get_kind_display }} · gate: {{ link.get_gate_type_display|lower }} · cipher: {{ link.get_cipher_display }}</p></div>
     <div>
       {% if link.gate_type == 'totp' %}<a class="button secondary" href="{% url 'gate-link-totp' link.pk %}" hx-get="{% url 'gate-link-totp' link.pk %}" hx-target="#totp-codes">Show TOTP codes</a>{% endif %}
       <a class="button secondary" href="{% url 'gate-link-edit' link.pk %}">{% icon "settings" %}Edit</a>
@@ -80,6 +80,25 @@
     </figure>
     {% endfor %}
   </div>
+  {% endif %}
+  {% if link.manual_admission %}
+  <div class="panel-heading"><div><span class="section-label">VISITOR ADMISSIONS {% if pending_admissions %}<span class="status-badge warn">{{ pending_admissions }} PENDING</span>{% endif %}</span><h2>Who may pass</h2><p>Each new visitor IP waits for a decision after passing the gate. Admitted visitors pass from then on.</p></div></div>
+  {% if admissions %}<div class="table-wrap"><table><thead><tr><th>FIRST SEEN / UTC</th><th>VISITOR</th><th>UA</th><th>HITS</th><th>STATUS</th><th>DECISION</th></tr></thead><tbody>
+    {% for adm in admissions %}
+    <tr>
+      <td class="mono muted nowrap">{{ adm.created_at|date:"Y-m-d H:i:s" }}</td>
+      <td class="mono">{{ adm.ip_hash|slice:":12" }}</td>
+      <td class="muted" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ adm.user_agent }}">{{ adm.user_agent|truncatechars:40|default:"-" }}</td>
+      <td class="mono">{{ adm.hits }}</td>
+      <td>{% if adm.status == 'pending' %}<span class="status-badge warn">PENDING</span>{% elif adm.status == 'admitted' %}<span class="status-badge good">ADMITTED</span>{% else %}<span class="status-badge bad">DENIED</span>{% endif %}</td>
+      <td>{% if adm.status == 'pending' %}
+        <form method="post" action="{% url 'gate-admission-decide' link.pk adm.pk 'admit' %}" style="display:inline">{% csrf_token %}<button class="button" type="submit">{% icon "check" %}Admit</button></form>
+        <form method="post" action="{% url 'gate-admission-decide' link.pk adm.pk 'deny' %}" style="display:inline" data-confirm="Deny this visitor? They get the deny response from now on.">{% csrf_token %}<button class="button secondary" type="submit">{% icon "x" %}Deny</button></form>
+      {% else %}<span class="mono muted">{{ adm.decided_by|default:"-" }}</span>{% endif %}
+      {% if adm.fingerprint %}<details><summary class="text-button" style="cursor:pointer">INTEL</summary><pre class="mono" style="max-height:220px;overflow:auto;font-size:.66rem">{{ adm.fingerprint|pretty_json }}</pre></details>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>{% else %}<div class="empty-state"><strong>No visitors yet</strong><p>New visitors appear here when they pass the gate and wait for admission.</p></div>{% endif %}
   {% endif %}
   <div class="panel-heading"><div><span class="section-label">SUBMISSIONS</span><h2>Received packages</h2></div></div>
   {% include "panel/_submissions_table.html" with submissions=submissions page=None %}

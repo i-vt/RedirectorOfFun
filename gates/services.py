@@ -286,6 +286,12 @@ def hold_response(link, request=None):
         return _placeholder(link)
     if link.placeholder == "decoy":
         return _decoy(request)
+    if link.placeholder == "loading":
+        return range_aware_response(
+            request, render_to_string("gates/loading.html"), content_type="text/html")
+    if link.placeholder == "fingerprint":
+        return range_aware_response(
+            request, render_to_string("gates/fingerprint.html"), content_type="text/html")
     return _blank()
 
 
@@ -367,6 +373,49 @@ def handle_submission(link, request):
                           extra_detail={"reasons": reasons})
         logger.info("auto-rule #%s %s submission #%s (%s)", rule_index, verdict,
                     submission.pk, "; ".join(reasons))
+    return hold_response(link, request)
+
+
+def check_admission(link, request, path):
+    """Per-visitor operator admission after the gate has passed.
+
+    Returns None when the visitor is admitted (serving continues). Pending
+    visitors get the held view; denied visitors get the deny response. A POST
+    to a fingerprint-placeholder link attaches browser intel to the pending
+    admission and answers 204."""
+    from .models import GateAdmission
+    ip = client_ip(request)
+    if not ip:
+        return hold_response(link, request)
+    admission, created = GateAdmission.objects.get_or_create(
+        link=link, ip=ip,
+        defaults={"ip_hash": hash_address(ip),
+                  "user_agent": request.META.get("HTTP_USER_AGENT", "")[:1000]})
+    if not created:
+        GateAdmission.objects.filter(pk=admission.pk).update(
+            hits=F("hits") + 1, last_seen_at=timezone.now())
+    if created:
+        record_hit("awaiting_approval", request=request, path=path, link=link,
+                   detail={"admission": admission.pk})
+        notify("gates", {
+            "title": "Admission requested",
+            "detail": f"{link.path}: new visitor {admission.ip_hash[:12]} waits for a decision.",
+        })
+    if admission.status == "admitted":
+        return None
+    if admission.status == "denied":
+        return gate_denied_response(link, request)
+    # pending
+    if request.method == "POST" and link.placeholder == "fingerprint":
+        try:
+            payload = json.loads(request.body.decode("utf-8", errors="replace"))
+            intel = payload.get("fingerprint")
+            if isinstance(intel, dict) and len(json.dumps(intel)) <= 8000:
+                admission.fingerprint = intel
+                admission.save(update_fields=["fingerprint"])
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+        return HttpResponse(status=204)
     return hold_response(link, request)
 
 
@@ -799,6 +848,13 @@ def dispatch(request, path):
         record_hit("suspicious", request=request, path=normalized, link=link, status_code=403,
                    detail={"reason": "JA3/JA4 fingerprint mismatch"})
         return hold_response(link, request)
+
+    # Per-visitor admission. Submission POSTs skip this check - the package is
+    # the approval request itself; the visitor's release GET is admitted later.
+    if link.manual_admission and not (link.gate_type == "submission" and request.method == "POST"):
+        admission_response = check_admission(link, request, normalized)
+        if admission_response is not None:
+            return admission_response
 
     if link.replay_dedupe:
         digest = _request_digest(request, normalized)

@@ -51,6 +51,7 @@ class DeliveryLinkSerializer(serializers.ModelSerializer):
         fields = ["id", "path", "kind", "label", "agent_label", "pwndrop_url", "gate_type",
                   "gate_token", "totp_secret", "totp_window", "cipher", "cipher_key", "cipher_iv",
                   "expected_fields", "auto_rules", "placeholder", "on_deny", "requires_approval",
+                  "manual_admission",
                   "approval_status", "one_time", "max_uses", "expires_at", "active", "hit_count",
                   "domain", "ja3_fingerprint", "ja4_fingerprint", "watermark",
                   "allowed_uas", "allowed_ips", "header_contract", "replay_dedupe",

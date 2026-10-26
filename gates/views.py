@@ -23,6 +23,26 @@ from . import library, services
 
 
 @login_required
+@transaction.atomic
+def admission_decide(request, link_pk, admission_pk, verdict):
+    """Admit or deny one visitor on a manual-admission link."""
+    from .models import GateAdmission
+    if request.method != "POST" or verdict not in {"admit", "deny"}:
+        return redirect("gate-links")
+    admission = get_object_or_404(
+        GateAdmission.objects.select_related("link"), pk=admission_pk, link__pk=link_pk)
+    admission.status = "admitted" if verdict == "admit" else "denied"
+    admission.decided_by = request.user
+    admission.decided_at = timezone.now()
+    admission.save(update_fields=["status", "decided_by", "decided_at"])
+    record_event(action=f"gate.admission_{admission.status}", actor=request.user,
+                 target=admission.link,
+                 metadata={"visitor": admission.ip_hash[:12], "via": "panel"}, request=request)
+    messages.success(request, f"Visitor {admission.ip_hash[:12]} {admission.status} on {admission.link.path}.")
+    return redirect(request.META.get("HTTP_REFERER", "gate-links"))
+
+
+@login_required
 def links_view(request):
     links = DeliveryLink.objects.all()
     label = request.GET.get("label", "").strip()
@@ -134,6 +154,7 @@ def _link_from_post(request, link):
     link.placeholder = request.POST.get("placeholder", "blank")
     link.on_deny = request.POST.get("on_deny", "not_found")
     link.requires_approval = request.POST.get("requires_approval") == "on"
+    link.manual_admission = request.POST.get("manual_admission") == "on"
     link.domain = request.POST.get("domain", "").strip()[:253]
     link.ja3_fingerprint = request.POST.get("ja3_fingerprint", "").strip()[:64]
     link.ja4_fingerprint = request.POST.get("ja4_fingerprint", "").strip()[:64]
@@ -200,6 +221,8 @@ def link_detail(request, pk):
         "undo_seconds": services_undo_window(), "series_json": series,
         "intel_images": intel_qs[:24], "intel_total": intel_qs.count(),
         "public_url": request.build_absolute_uri(link.path),
+        "admissions": link.admissions.select_related("decided_by")[:20],
+        "pending_admissions": link.admissions.filter(status="pending").count(),
     })
 
 

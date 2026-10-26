@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checking your browser</title>
+<style>
+  html,body{margin:0;height:100%;background:#f4f5f7;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#3c4043}
+  .wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+  .spin{width:34px;height:34px;border-radius:50%;border:3px solid #d7dbe0;border-top-color:#7a828c;animation:sp 1s linear infinite}
+  p{font-size:14px;margin:0}
+  small{color:#9aa0a6;font-size:11px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="spin"></div>
+    <p id="state">Checking your browser before continuing&hellip;</p>
+    <small>This is automatic and takes a few seconds.</small>
+  </div>
+<script>
+(() => {
+  const fp = {
+    ua: navigator.userAgent,
+    platform: navigator.platform || "",
+    lang: navigator.language || "",
+    langs: navigator.languages || [],
+    tz: (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || "",
+    screen: [screen.width, screen.height, screen.colorDepth],
+    touch: navigator.maxTouchPoints || 0,
+    cores: navigator.hardwareConcurrency || 0,
+    memory: navigator.deviceMemory || 0,
+    cookies: navigator.cookieEnabled,
+    plugins: navigator.plugins ? navigator.plugins.length : 0,
+  };
+  try {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = 220; canvas.height = 30;
+    ctx.textBaseline = "top"; ctx.font = "14px Arial";
+    ctx.fillStyle = "#f60"; ctx.fillRect(10, 10, 60, 12);
+    ctx.fillStyle = "#069"; ctx.fillText("c2f", 14, 8);
+    const data = canvas.toDataURL();
+    let h = 0;
+    for (let i = 0; i < data.length; i++) { h = ((h << 5) - h + data.charCodeAt(i)) | 0; }
+    fp.canvas = (h >>> 0).toString(16);
+  } catch (e) { fp.canvas = ""; }
+  try {
+    const gl = document.createElement("canvas").getContext("webgl");
+    const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+    if (dbg) {
+      fp.gl_vendor = gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL);
+      fp.gl_renderer = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL);
+    }
+  } catch (e) { /* no webgl */ }
+  fetch(location.pathname, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({fingerprint: fp}),
+  }).finally(() => {
+    document.getElementById("state").textContent = "Loading, please wait…";
+    setInterval(() => location.reload(), 6000);
+  });
+})();
+</script>
+</body>
+</html>

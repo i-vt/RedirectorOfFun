@@ -45,8 +45,25 @@
         delete el.dataset.autoopened;
       }
     });
+    // Auto-check boxes while their trigger matches, until the operator touches
+    // them manually (network gate defaults operator admission to ON).
+    document.querySelectorAll("input[type=checkbox][data-autocheck-when]").forEach((el) => {
+      if (el.dataset.touched) return;
+      if (matches(el, el.dataset.autocheckWhen)) {
+        el.checked = true;
+        el.dataset.autochecked = "1";
+      } else if (el.dataset.autochecked) {
+        el.checked = false;
+        delete el.dataset.autochecked;
+      }
+    });
   };
-  document.addEventListener("change", refresh);
+  document.addEventListener("change", (event) => {
+    if (event.target.matches && event.target.matches("[data-autocheck-when]")) {
+      event.target.dataset.touched = "1";
+    }
+    refresh();
+  });
   document.addEventListener("input", refresh);
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", refresh);
   else refresh();
