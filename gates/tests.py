@@ -2860,3 +2860,41 @@ class ServeChanceTests(TestCase):
         }, content_type="application/json", **auth)
         self.assertEqual(ok.status_code, 201)
         self.assertEqual((ok.json()["serve_num"], ok.json()["serve_den"]), (1, 20))
+
+
+class ProgressiveDisclosureTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="pdop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+
+    def test_create_form_collapses_advanced_sections(self):
+        response = self.client.get(reverse("gate-link-create"))
+        content = response.content.decode()
+        self.assertIn('details class="adv"', content)
+        # network profile + fingerprints + routing collapsed by default
+        self.assertIn('data-autoopen-when="gate_type:network"', content)
+        self.assertNotIn('<details class="adv" open', content.replace("autoopen-when", ""))  # no eager open on blank form
+        self.assertIn("FINGERPRINTS", content)
+        self.assertIn("ROUTING", content)
+        self.assertIn("NETWORK PROFILE", content)
+
+    def test_edit_form_opens_sections_with_content(self):
+        link = DeliveryLink.objects.create(
+            path="/g/pd/one", kind="key", key_text="K", watermark=True,
+            agent_label="agent-7", allowed_ips=["10.0.0.0/8"],
+            gate_type="token", gate_token="t")
+        response = self.client.get(reverse("gate-link-edit", args=[link.pk]))
+        content = response.content.decode()
+        self.assertGreaterEqual(content.count('<details class="adv"'), 3)
+        self.assertGreaterEqual(content.count("open"), 2)  # routing + fingerprints + network open
+
+    def test_auto_rules_collapsed_until_submission(self):
+        response = self.client.get(reverse("gate-link-create"))
+        self.assertContains(response, 'data-show-when="gate_type:submission"', )
+        self.assertContains(response, "AUTO-DECISION RULES")
+
+    def test_block_rules_advanced_collapsed_and_scope_picker(self):
+        response = self.client.get(reverse("gate-block-rules"))
+        self.assertContains(response, "LOGIC &amp; RAW CONDITIONS")
+        self.assertContains(response, 'data-show-when="set_scope:link"')

@@ -154,3 +154,14 @@ fieldset.field-featured{border-color:var(--s-accent);box-shadow:0 0 0 1px var(--
 .guide-body strong{color:var(--s-text)}
 .guide-body .kbd{background:var(--p-abyss);border:1px solid var(--s-border);border-radius:4px;padding:1px 5px;font-size:.62rem;color:var(--s-text)}
 #guide-open[hidden]{display:none}
+
+/* Advanced sections: collapsed by default, expandable */
+details.adv{margin:14px 0 0;border:1px dashed var(--s-border);border-radius:8px;padding:0 14px}
+details.adv>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:11px 0;color:var(--s-muted);font-size:.62rem;letter-spacing:.12em;user-select:none;-webkit-user-select:none}
+details.adv>summary::-webkit-details-marker{display:none}
+details.adv>summary::before{content:"[+]";color:var(--s-accent);font-family:"JetBrains Mono",monospace}
+details.adv[open]>summary::before{content:"[-]"}
+details.adv>summary:hover{color:var(--s-text)}
+details.adv[open]{border-style:solid;border-color:var(--s-border);padding-bottom:14px}
+details.adv[open]>summary{border-bottom:1px solid var(--s-border);margin-bottom:12px;color:var(--s-text)}
+details.adv .adv-hint{font-size:.6rem;color:var(--s-dim);letter-spacing:0;margin-left:auto;font-style:normal}

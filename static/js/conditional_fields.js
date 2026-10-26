@@ -33,6 +33,18 @@
     document.querySelectorAll("[data-feature-when]").forEach((el) => {
       el.classList.toggle("field-featured", matches(el, el.dataset.featureWhen));
     });
+    // Auto-open advanced <details> when their trigger matches (e.g. picking the
+    // network gate opens the NETWORK PROFILE section). Manual toggles win: we
+    // only close what we auto-opened.
+    document.querySelectorAll("details[data-autoopen-when]").forEach((el) => {
+      if (matches(el, el.dataset.autoopenWhen)) {
+        el.open = true;
+        el.dataset.autoopened = "1";
+      } else if (el.dataset.autoopened) {
+        el.open = false;
+        delete el.dataset.autoopened;
+      }
+    });
   };
   document.addEventListener("change", refresh);
   document.addEventListener("input", refresh);

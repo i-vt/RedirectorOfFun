@@ -74,12 +74,15 @@
         <label><span>RULESET</span><select class="field-input" name="ruleset"><option value="">Ungrouped (after all sets)</option>{% for s in rule_sets %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select></label>
         <label><span>ACTION</span><select class="field-input" name="action">{% for value, label in actions %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
       </div>
-      <div class="grid-2">
-        <label><span>LOGIC</span><select class="field-input" name="logic">{% for value, label in logics %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
-        <label class="check"><input type="checkbox" name="auto_ban"> <span>AUTO-BAN MATCHED IPs (block only)</span></label>
-      </div>
-      <label><span>CONDITIONS (JSON list of {"type", "pattern", "negate"?}; types: {% for t in condition_types %}{{ t }}{% if not forloop.last %}, {% endif %}{% endfor %})</span>
-        <textarea class="field-input mono" name="conditions" rows="3" placeholder='[{"type": "cidr", "pattern": "203.0.113.0/24"}]'>[]</textarea></label>
+      <details class="adv">
+        <summary>LOGIC &amp; RAW CONDITIONS <span class="adv-hint">advanced - most rules only need the quick generator above</span></summary>
+        <div class="grid-2">
+          <label><span>LOGIC {% tip "all = every condition must hit; any = one is enough; not = none may hit; xor = exactly one. Negate flips a single condition." %}</span><select class="field-input" name="logic">{% for value, label in logics %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+          <label class="check"><input type="checkbox" name="auto_ban"> <span>AUTO-BAN MATCHED IPs {% tip "Blocked visitors also get banned (decoy everywhere until lifted). Loopback addresses are never auto-banned." %}</span></label>
+        </div>
+        <label><span>CONDITIONS (JSON list of {"type", "pattern", "negate"?}; types: {% for t in condition_types %}{{ t }}{% if not forloop.last %}, {% endif %}{% endfor %}) {% tip "Raw conditions for full control. The quick-rule generator writes these for you; country/asn/isp/city match on stored intel and never fire when intel is unknown." %}</span>
+          <textarea class="field-input mono" name="conditions" rows="3" placeholder='[{"type": "cidr", "pattern": "203.0.113.0/24"}]'>[]</textarea></label>
+      </details>
       <button class="button" type="submit">{% icon "plus" %}Create rule</button>
     </fieldset>
   </form>
@@ -92,7 +95,7 @@
       <div class="grid-3">
         <label><span>NAME</span><input class="field-input" name="set_name" maxlength="120" placeholder="404 probes only"></label>
         <label><span>SCOPE</span><select class="field-input" name="set_scope"><option value="all">Everything</option><option value="not_found">404s only</option><option value="link">Specific link</option></select></label>
-        <label><span>LINK (scope = link)</span><select class="field-input" name="set_link"><option value="">-</option>{% for link in links %}<option value="{{ link.pk }}">{{ link.path }}</option>{% endfor %}</select></label>
+        <label data-show-when="set_scope:link"><span>LINK (scope = link)</span><select class="field-input" name="set_link"><option value="">-</option>{% for link in links %}<option value="{{ link.pk }}">{{ link.path }}</option>{% endfor %}</select></label>
       </div>
       <button class="button" type="submit">Create ruleset</button>
     </fieldset>
