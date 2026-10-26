@@ -96,6 +96,12 @@ if [[ ! -f .env ]]; then
   create_env
 else
   echo "Using existing .env; no secrets were replaced."
+  # One-time migration: the old default trusted loopback only, which behind
+  # the docker web tier collapses every visitor onto the bridge IP.
+  if grep -q '^TRUSTED_PROXIES=127.0.0.1,::1$' .env; then
+    sed -i 's|^TRUSTED_PROXIES=127.0.0.1,::1$|TRUSTED_PROXIES=127.0.0.1,::1,172.16.0.0/12|' .env
+    echo "Note: widened TRUSTED_PROXIES with 172.16.0.0/12 (docker web tier)."
+  fi
   if [[ $RESET -eq 0 ]]; then
     echo "Hint: if you rebuilt .env from scratch, old database volumes hold the"
     echo "old password. Use ./start.sh --reset to wipe them, or docker compose"

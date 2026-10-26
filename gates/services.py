@@ -99,9 +99,16 @@ def _is_loopback(ip):
         return False
 
 
+def _is_trusted_proxy_ip(ip):
+    """Never ban a proxy's own address: that blackholes everyone behind it."""
+    if not ip:
+        return True
+    return _remote_is_trusted(ip)
+
+
 def maybe_auto_ban(ip):
     threshold = getattr(settings, "AUTO_BAN_THRESHOLD", 0)
-    if not threshold or _is_loopback(ip):
+    if not threshold or _is_loopback(ip) or _is_trusted_proxy_ip(ip):
         return None
     ip_hash = hash_address(ip)
     if suspicious_count(ip_hash) < threshold:
@@ -1046,7 +1053,7 @@ def burn_link(link, *, actor, request=None):
     burner = client_ip(request) if request is not None else ""
     ips, seen = [], set()
     for ip in link.hit_events.exclude(raw_ip__isnull=True).values_list("raw_ip", flat=True).distinct():
-        if ip and ip != keep and ip != burner and not _is_loopback(ip) and ip not in seen and not BannedIP.is_banned(ip):
+        if ip and ip != keep and ip != burner and not _is_loopback(ip) and not _is_trusted_proxy_ip(ip) and ip not in seen and not BannedIP.is_banned(ip):
             seen.add(ip)
             ips.append(ip)
     created = [BannedIP.objects.get_or_create(
@@ -1237,7 +1244,7 @@ def apply_blocking_rule(request, ip, rule, fired):
     if rule.action == "allow":
         logger.info("rule '%s' allowed %s (%s)", rule.name, ip, ", ".join(fired))
         return None
-    if rule.auto_ban and ip and not _is_loopback(ip):
+    if rule.auto_ban and ip and not _is_loopback(ip) and not _is_trusted_proxy_ip(ip):
         ban, created = BannedIP.objects.get_or_create(
             ip=ip, defaults={"note": f"auto-ban by rule '{rule.name}'", "auto_created": True})
         detail["banned"] = created or ban.active

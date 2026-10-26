@@ -3623,3 +3623,49 @@ class VerificationGateScopeTests(TestCase):
         response = client.get(reverse("gate-link-create"))
         self.assertContains(response, 'data-show-when="gate_type:submission"')
         self.assertContains(response, "VERIFICATION GATE")
+
+
+@override_settings(AUTO_BAN_THRESHOLD=3, TRUSTED_PROXIES=["127.0.0.1", "::1", "172.16.0.0/12"])
+class ProxyTrustTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="ptop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def test_xff_honored_behind_docker_bridge_peer(self):
+        DeliveryLink.objects.create(path="/g/pt/one", kind="key", key_text="K", placeholder="blank")
+        response = self.public.get("/g/pt/one", REMOTE_ADDR="172.17.0.2",
+                                   HTTP_X_FORWARDED_FOR="203.0.113.55")
+        self.assertEqual(response.status_code, 200)
+        hit = HitEvent.objects.get(category="key_served")
+        self.assertEqual(hit.raw_ip, "203.0.113.55")  # real visitor, not the bridge
+
+    def test_bridge_ip_cannot_be_banned_anywhere(self):
+        # manual ban refused
+        response = self.client.post(reverse("gate-bans"), {"ip": "172.17.0.2", "note": "x"})
+        self.assertFalse(BannedIP.objects.filter(ip="172.17.0.2").exists())
+        # auto-ban refused
+        self.assertIsNone(services.maybe_auto_ban("172.17.0.2"))
+        # rule auto-ban refused
+        BlockingRule.objects.create(name="ban all", logic="any", enabled=True, auto_ban=True,
+                                    conditions=[{"type": "ua", "pattern": ".*"}])
+        self.public.get("/g/pt/none", REMOTE_ADDR="172.17.0.2", HTTP_USER_AGENT="probe/1")
+        self.assertFalse(BannedIP.objects.filter(ip="172.17.0.2").exists())
+        # real visitor behind the proxy still gets banned individually
+        self.public.get("/g/pt/none", REMOTE_ADDR="172.17.0.2",
+                        HTTP_X_FORWARDED_FOR="198.51.100.66", HTTP_USER_AGENT="probe/1")
+        self.assertTrue(BannedIP.objects.filter(ip="198.51.100.66").exists())
+
+    def test_selftest_warns_on_narrow_trust_in_docker(self):
+        from unittest import mock as _mock
+        from gates import selftest
+        with _mock.patch("os.path.exists", return_value=True), \
+             override_settings(TRUSTED_PROXIES=["127.0.0.1", "::1"]):
+            status, message = selftest._check_proxy_trust()
+        self.assertEqual(status, "warn")
+        self.assertIn("172.16.0.0/12", message)
+        with _mock.patch("os.path.exists", return_value=True), \
+             override_settings(TRUSTED_PROXIES=["127.0.0.1", "172.16.0.0/12"]):
+            status, _ = selftest._check_proxy_trust()
+        self.assertEqual(status, "pass")

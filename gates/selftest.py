@@ -114,6 +114,31 @@ def _check_secrets():
     return "pass", "secret key configured"
 
 
+def _check_proxy_trust():
+    """Behind the docker web tier, loopback-only TRUSTED_PROXIES collapses
+    every visitor onto the bridge IP (and a ban there blackholes everyone)."""
+    import ipaddress
+    import os
+    if not os.path.exists("/.dockerenv"):
+        return "skip", "not containerized; a narrow trust list is fine"
+    proxies = getattr(settings, "TRUSTED_PROXIES", ("127.0.0.1", "::1"))
+    covers_private = False
+    for entry in proxies:
+        try:
+            if "/" in entry:
+                network = ipaddress.ip_network(entry, strict=False)
+                if any(network.version == 4 and ipaddress.ip_address(candidate) in network
+                       for candidate in ("172.17.0.2", "172.18.0.2")):
+                    covers_private = True
+        except ValueError:
+            continue
+    if covers_private:
+        return "pass", "trusted proxies cover the docker web tier"
+    return "warn", ("TRUSTED_PROXIES does not cover the docker bridge range "
+                    "(172.16.0.0/12): every visitor would appear as the web "
+                    "tier's internal IP. Add it and restart.")
+
+
 CHECKS = [
     ("database", _check_database, True),
     ("crypto_templates", _check_crypto, True),
@@ -122,6 +147,7 @@ CHECKS = [
     ("telegram_config", _check_telegram, False),
     ("nginx_sync_paths", _check_nginx_sync_paths, False),
     ("secrets", _check_secrets, False),
+    ("proxy_trust", _check_proxy_trust, False),
 ]
 
 

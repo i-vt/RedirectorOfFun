@@ -90,6 +90,13 @@ See [openresty-ja3.md](openresty-ja3.md) for a working setup.
 
 ## Client addresses
 
+> [!WARNING]
+> Docker note: the web tier reaches the panel from a bridge address. Keep
+> `172.16.0.0/12` in `TRUSTED_PROXIES` (the default since this fix), or every
+> visitor appears as the web tier and bans blackhole all of them. The panel
+> refuses to ban proxy and loopback addresses.
+
+
 `TRUSTED_PROXIES` (default `127.0.0.1,::1`) lists the only peers whose
 `X-Forwarded-For` header the panel believes. Keep this list to your real edge
 proxies. This stops XFF spoofing from evading bans.

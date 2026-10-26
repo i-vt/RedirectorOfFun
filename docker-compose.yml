@@ -21,6 +21,10 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-redirector}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-redirector_panel}
       NGINX_JSON_LOG_PATH: /var/log/nginx/access.json
+      # The web tier reaches the panel from a docker bridge address; without
+      # this every visitor collapses onto the bridge IP (and bans blackhole
+      # all of them). An explicit value in .env wins.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1,::1,172.16.0.0/12}
     # Direct panel access is internal only; the web tier publishes 80/443.
     # To reach the panel directly (e.g. SSH tunnel when the edge profile
     # owns 80/443), uncomment a localhost bind:

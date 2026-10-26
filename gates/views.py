@@ -817,6 +817,11 @@ def bans_view(request):
         ip = request.POST.get("ip", "").strip()
         note = request.POST.get("note", "").strip()[:240]
         if services.valid_ip(ip):
+            if services._is_trusted_proxy_ip(ip) or services._is_loopback(ip):
+                messages.error(request,
+                    f"Refusing to ban {ip}: it is a proxy/loopback address - banning it would "
+                    f"blackhole everyone behind the proxy. Check TRUSTED_PROXIES instead.")
+                return redirect("gate-bans")
             ban, created = BannedIP.objects.get_or_create(
                 ip=ip, defaults={"note": note, "created_by": request.user})
             if not created:
