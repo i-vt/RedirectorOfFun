@@ -1,3 +1,4 @@
+{% load ui_icons %}
 {% if links %}<div class="table-wrap"><table><thead><tr><th>PATH</th><th>KIND</th><th>GATE</th><th>LABEL</th><th>USES</th><th>EXPIRES</th><th>STATUS</th><th></th></tr></thead><tbody>{% for link in links %}
 <tr>
   <td class="path-cell mono"><a href="{% url 'gate-link-detail' link.pk %}">{{ link.path }}</a></td>
@@ -7,7 +8,8 @@
   <td class="mono">{{ link.hit_count }}{% if link.max_uses %}/{{ link.max_uses }}{% endif %}</td>
   <td class="mono muted nowrap">{{ link.expires_at|date:"Y-m-d H:i"|default:"-" }}</td>
   <td>{% if not link.active %}<span class="status-badge">INACTIVE</span>{% elif link.expired %}<span class="status-badge warn">EXPIRED</span>{% elif link.requires_approval and link.approval_status == 'pending' %}<span class="status-badge warn">PENDING</span>{% elif link.requires_approval and link.approval_status == 'denied' %}<span class="status-badge bad">DENIED</span>{% else %}<span class="status-badge good">LIVE</span>{% endif %}</td>
-  <td><a class="text-button" href="{% url 'gate-link-edit' link.pk %}">EDIT</a></td>
+  <td class="nowrap"><a class="text-button" href="{% url 'gate-link-edit' link.pk %}">EDIT</a>
+    {% if link.active %}<form method="post" action="{% url 'gate-link-burn' link.pk %}" style="display:inline" data-confirm="BURN {{ link.path }}? It deactivates, denies all traffic, and bans every visitor IP except the approved target.">{% csrf_token %}<button class="text-button" type="submit" style="color:var(--s-danger)">{% icon "flame" %}BURN</button></form>{% endif %}</td>
 </tr>{% endfor %}</tbody></table></div>
 {% if page.paginator.num_pages > 1 %}<nav class="pagination" aria-label="Link pages"><span>PAGE {{ page.number }} / {{ page.paginator.num_pages }}</span><div>{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&label={{ request.GET.label|urlencode }}&kind={{ request.GET.kind|urlencode }}">← Previous</a>{% endif %}{% if page.has_next %}<a href="?page={{ page.next_page_number }}&label={{ request.GET.label|urlencode }}&kind={{ request.GET.kind|urlencode }}">Next →</a>{% endif %}</div></nav>{% endif %}
 {% else %}<div class="empty-state"><strong>No delivery links</strong><p>Fastest start: Quick drop a file above, or</p><a class="button secondary" href="{% url 'gate-link-create' %}">Create your first link</a></div>{% endif %}

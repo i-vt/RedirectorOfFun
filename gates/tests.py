@@ -4393,3 +4393,55 @@ class TemplateLibraryTests(TestCase):
         self.assertEqual(self.operator.theme, "paper")
         page = self.client.get(reverse("overview"))
         self.assertContains(page, "themes/paper")
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class BurnSurfaceTests(TestCase):
+    """Burn is reachable from the list, the detail page, mobile, and the API."""
+
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="bnop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def _link(self, path="/g/bn/one"):
+        return DeliveryLink.objects.create(path=path, kind="key", key_text="K", placeholder="blank")
+
+    def test_list_row_burns_with_confirm(self):
+        link = self._link()
+        response = self.client.get(reverse("gate-links"))
+        self.assertContains(response, reverse("gate-link-burn", args=[link.pk]))
+        self.assertContains(response, "BURN")
+        response = self.client.post(reverse("gate-link-burn", args=[link.pk]))
+        link.refresh_from_db()
+        self.assertFalse(link.active)
+
+    def test_burn_hidden_when_inactive(self):
+        link = self._link()
+        link.active = False
+        link.save(update_fields=["active"])
+        response = self.client.get(reverse("gate-links"))
+        self.assertNotContains(response, reverse("gate-link-burn", args=[link.pk]) + '"')
+        detail = self.client.get(reverse("gate-link-detail", args=[link.pk]))
+        self.assertNotContains(detail, f'action="{reverse("gate-link-burn", args=[link.pk])}"')
+
+    def test_burn_bans_real_visitors_not_loopback(self):
+        link = self._link()
+        self.public.get("/g/bn/one", REMOTE_ADDR="198.51.100.44")
+        self.public.get("/g/bn/one", REMOTE_ADDR="127.0.0.1")
+        self.client.post(reverse("gate-link-burn", args=[link.pk]))
+        self.assertTrue(BannedIP.objects.filter(ip="198.51.100.44").exists())
+        self.assertFalse(BannedIP.objects.filter(ip="127.0.0.1").exists())
+
+    def test_mobile_and_api_burn(self):
+        link = self._link("/g/bn/mob")
+        response = self.client.post(reverse("m-link", args=[link.pk]), {"action": "burn"})
+        link.refresh_from_db()
+        self.assertFalse(link.active)
+        _, raw = APIKey.create(operator=self.operator, name="ci")
+        link2 = self._link("/g/bn/api")
+        response = self.client.post(f"/api/v1/links/{link2.pk}/burn/", HTTP_AUTHORIZATION=f"ApiKey {raw}")
+        self.assertEqual(response.status_code, 200)
+        link2.refresh_from_db()
+        self.assertFalse(link2.active)
