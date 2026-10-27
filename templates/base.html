@@ -13,6 +13,7 @@
   {% if theme == "cozy" %}<link rel="stylesheet" href="{% static 'css/theme-cozy.css' %}">{% endif %}
   {% if theme == "obnoxious" %}<link rel="stylesheet" href="{% static 'css/theme-obnoxious.css' %}">{% endif %}
   <script defer src="{% static 'js/htmx.min.js' %}"></script>
+  <script>window.ROF_RECENT_URL = "{% url 'api-notifications-recent' %}";</script>
   <script defer src="{% static 'js/conditional_fields.js' %}"></script>
   <script defer src="{% static 'js/palette.js' %}"></script>
   <script defer src="{% static 'js/app.js' %}"></script>

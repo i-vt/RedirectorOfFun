@@ -76,9 +76,10 @@ def events_view(request):
     from gates.models import GateConfig
     show = request.GET.get("identifiers")
     show_identifiers = (show == "1") if show is not None else GateConfig.get_solo().reveal_identifiers
+    total = getattr(page.paginator, "count", 0)
     return render(request, template, {
         "title": "404 Events", "page": page, "events": page.object_list,
-        "intel": intel,
+        "intel": intel, "total": total,
         "show_identifiers": show_identifiers,
         "track_all": getattr(settings, "TRACK_ALL_REQUESTS", False),
     })

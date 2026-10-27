@@ -4221,3 +4221,52 @@ class ReviewFixRegressionTests(TestCase):
         self.public.get("/g/rf/mw", HTTP_USER_AGENT="probe/1")
         rule = BlockingRule.objects.get(name="allow all")
         self.assertEqual(rule.match_count, 1)  # not 2 (middleware + dispatch)
+
+
+@tag("functional")
+@override_settings(ROOT_URLCONF="config.test_urls", OPERATOR_PREFIX="testprefix")
+class PollPrefixTests(TestCase):
+    """The notification poll must hit the prefixed API (it 404'd into the
+    events stream on prefixed deployments)."""
+
+    def test_poll_url_carries_the_prefix(self):
+        from accounts.models import Operator
+        operator = Operator.objects.create_user(username="ppop", password="long-enough-password-123")
+        self.client.force_login(operator)
+        response = self.client.get("/testprefix/panel/")
+        self.assertContains(response, 'window.ROF_RECENT_URL = "/testprefix/api/v1/notifications/recent/"')
+        # and the endpoint answers there
+        response = self.client.get("/testprefix/api/v1/notifications/recent/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_unprefixed_poll_url_is_decoy(self):
+        response = self.client.get("/api/v1/notifications/recent/")
+        self.assertContains(response, "Update Service")
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class SearchUxTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="sxop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+
+    def test_filter_forms_push_state_to_url(self):
+        response = self.client.get(reverse("gate-submissions"))
+        self.assertContains(response, 'hx-push-url="true"')
+        response = self.client.get(reverse("gate-events"))
+        self.assertContains(response, 'hx-push-url="true"')
+        response = self.client.get(reverse("gate-links"))
+        self.assertContains(response, 'hx-push-url="true"')
+
+    def test_events_empty_state_explains_tracking_mode(self):
+        response = self.client.get(reverse("events") + "?status_class=2")
+        self.assertContains(response, "TRACK_ALL_REQUESTS")
+        self.assertContains(response, "Clear filters")
+
+    def test_events_count_shown(self):
+        from analytics.models import NotFoundEvent
+        from django.utils import timezone as tz
+        NotFoundEvent.objects.create(request_id="c1", occurred_at=tz.now(), status=404, path="/x")
+        response = self.client.get(reverse("events"))
+        self.assertContains(response, "1 STORED")

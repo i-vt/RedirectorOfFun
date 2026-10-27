@@ -203,7 +203,7 @@
     syncSoundToggle();
     async function pollNotifications() {
       try {
-        const response = await fetch(`/api/v1/notifications/recent/?after=${lastId}`, {headers: {"Accept": "application/json"}});
+        const response = await fetch(`${window.ROF_RECENT_URL || "/api/v1/notifications/recent/"}?after=${lastId}`, {headers: {"Accept": "application/json"}});
         if (!response.ok) return;
         const data = await response.json();
         const entries = Array.isArray(data) ? data : data.results || [];

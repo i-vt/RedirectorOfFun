@@ -40,7 +40,7 @@
     {% endfor %}
   </tbody></table></div>
   {% endif %}
-  <form class="filter-bar" method="get" action="{% url 'gate-submissions' %}" hx-get="{% url 'gate-submissions' %}" hx-target="#submissions-table" hx-trigger="submit, change from:#filter-status">
+  <form class="filter-bar" method="get" action="{% url 'gate-submissions' %}" hx-get="{% url 'gate-submissions' %}" hx-target="#submissions-table" hx-push-url="true" hx-trigger="submit, change from:#filter-status">
     <label><span>STATUS</span><select id="filter-status" class="field-input" name="status">
       <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pending</option>
       <option value="approved" {% if status == 'approved' %}selected{% endif %}>Approved</option>

@@ -9,7 +9,7 @@
 {% endblock %}
 {% block content %}
 <section class="panel page-panel">
-  <div class="panel-heading"><div><span class="section-label">NGINX LOG INTELLIGENCE</span><h2>{% if track_all %}Request stream{% else %}404 event stream{% endif %}</h2><p>Search stored events by path, method, or any client identifier. Raw IPs and user agents are stored; the client column shows the hash unless you reveal identifiers.</p></div><span class="status-badge {% if track_all %}warn{% else %}good{% endif %}" data-tip="TRACK_ALL_REQUESTS env. On: every request is stored (2xx included). Off: 404s only. Toggle in .env and recreate the web container.">{% if track_all %}TRACKING ALL{% else %}404s ONLY{% endif %}</span></div>
+  <div class="panel-heading"><div><span class="section-label">NGINX LOG INTELLIGENCE</span><h2>{% if track_all %}Request stream{% else %}404 event stream{% endif %}</h2><p>Search stored events by path, method, or any client identifier. Raw IPs and user agents are stored; the client column shows the hash unless you reveal identifiers.</p></div><span class="status-badge good" style="margin-right:8px">{{ total }} STORED</span><span class="status-badge {% if track_all %}warn{% else %}good{% endif %}" data-tip="TRACK_ALL_REQUESTS env. On: every request is stored (2xx included). Off: 404s only. Toggle in .env and recreate the web container.">{% if track_all %}TRACKING ALL{% else %}404s ONLY{% endif %}</span></div>
   <form id="event-filters" class="filter-bar" method="get" action="{% url 'events' %}" hx-get="{% url 'events' %}" hx-target="#events-table" hx-push-url="true" hx-trigger="submit, keyup changed delay:450ms from:#filter-path, keyup changed delay:450ms from:#filter-ua, keyup changed delay:450ms from:#filter-ip, keyup changed delay:450ms from:#filter-client, change from:#filter-method, change from:#filter-days, change from:#filter-status">
     <label><span>PATH CONTAINS</span><input id="filter-path" class="field-input" type="search" name="path" value="{{ request.GET.path }}" placeholder="/example" maxlength="200"></label>
     <label><span>USER AGENT CONTAINS</span><input id="filter-ua" class="field-input" type="search" name="ua" value="{{ request.GET.ua }}" placeholder="curl, python-requests, Mozilla" maxlength="200"></label>
@@ -21,6 +21,7 @@
     <label class="check"><input id="identifiers-toggle" type="checkbox" {% if show_identifiers %}checked{% endif %}> <span>REVEAL IDENTIFIERS (raw IPs)</span></label>
     <input type="hidden" name="identifiers" id="identifiers-field" value="{{ request.GET.identifiers }}">
     <button class="button secondary" type="submit">Apply filters</button>
+    <a class="text-button" href="{% url 'events' %}">CLEAR</a>
   </form>
   <div id="events-table">{% include "panel/_events_table.html" %}</div>
   <div style="margin-top:10px"><button class="text-button" type="button" id="expand-all">{% icon "eye" %} EXPAND ALL</button> <button class="text-button" type="button" id="condense-all">{% icon "x" %} CONDENSE ALL</button></div>

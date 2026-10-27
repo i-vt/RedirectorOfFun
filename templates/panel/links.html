@@ -84,7 +84,7 @@
     });
   })();
   </script>
-  <form class="filter-bar" method="get" action="{% url 'gate-links' %}" hx-get="{% url 'gate-links' %}" hx-target="#links-table" hx-trigger="submit, keyup changed delay:450ms from:#filter-label, change from:#filter-kind">
+  <form class="filter-bar" method="get" action="{% url 'gate-links' %}" hx-get="{% url 'gate-links' %}" hx-target="#links-table" hx-push-url="true" hx-trigger="submit, keyup changed delay:450ms from:#filter-label, change from:#filter-kind">
     <label><span>LABEL CONTAINS</span><input id="filter-label" class="field-input" type="search" name="label" value="{{ request.GET.label }}" maxlength="120"></label>
     <label><span>KIND</span><select id="filter-kind" class="field-input" name="kind"><option value="">All kinds</option><option value="key" {% if request.GET.kind == 'key' %}selected{% endif %}>Key</option><option value="file" {% if request.GET.kind == 'file' %}selected{% endif %}>File</option><option value="proxy" {% if request.GET.kind == 'proxy' %}selected{% endif %}>Proxy</option></select></label>
     <button class="button secondary" type="submit">Apply filters</button>
