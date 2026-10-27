@@ -777,6 +777,8 @@ def decoy_edit(request, pk):
         editor_html = page.html
     elif page.kind == "upload" and page.html_file:
         editor_html = page.html_file.read().decode("utf-8", errors="replace")
+    elif page.kind == "pool":
+        editor_html = services.read_pool_page("decoy", page.pool_file) or ""
     elif page.kind == "template":
         meta = BUILTIN_DECOYS.get(page.template_key, {})
         if meta.get("django_template"):
@@ -1027,6 +1029,8 @@ def decoys_view(request):
                 page.html_file = request.FILES["html_file"]
         elif kind == "redirect":
             page.redirect_url = request.POST.get("redirect_url", "").strip()
+        elif kind == "pool":
+            page.pool_file = request.POST.get("pool_file", "").strip()[:120]
         try:
             page.full_clean()
         except ValidationError as exc:
@@ -1041,6 +1045,7 @@ def decoys_view(request):
     return render(request, "panel/decoys.html", {
         "title": "Decoy Pages", "pages": pages,
         "builtin": BUILTIN_DECOYS, "kinds": DecoyPage.KIND_CHOICES,
+        "decoy_pool": services.page_pool("decoy"),
         "current_default": services.get_default_decoy(),
     })
 

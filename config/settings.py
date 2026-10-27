@@ -199,6 +199,7 @@ LOADING_PAGES_DIR = Path(os.getenv("LOADING_PAGES_DIR", str(DATA_DIR / "loading"
 FINGERPRINT_PAGES_DIR = Path(os.getenv("FINGERPRINT_PAGES_DIR", str(DATA_DIR / "fingerprint")))
 DOWNLOAD_PAGES_DIR = Path(os.getenv("DOWNLOAD_PAGES_DIR", str(DATA_DIR / "download")))
 BENEVOLENT_PAGES_DIR = Path(os.getenv("BENEVOLENT_PAGES_DIR", str(DATA_DIR / "benevolent")))
+DECOY_PAGES_DIR = Path(os.getenv("DECOY_PAGES_DIR", str(DATA_DIR / "decoys")))
 MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", str(DATA_DIR / "media")))
 
 LOGGING = {

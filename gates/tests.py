@@ -4050,3 +4050,80 @@ class BrandingHygieneTests(TestCase):
         # marker pair still matches between the config and the installer
         self.assertIn('s/^#rof#//g', (root / "automate.sh").read_text())
         self.assertGreater((root / "default.conf").read_text().count("#rof#"), 50)
+
+
+class DataSamplesTests(TestCase):
+    """./data/ ships curated samples; operator content stays untracked."""
+
+    def test_samples_ship_and_serve(self):
+        from gates import services
+        self.assertIn("example.html", services.page_pool("loading"))
+        self.assertIn("example.html", services.page_pool("fingerprint"))
+        self.assertIn("example.html", services.page_pool("download"))
+        self.assertIn("example.html", services.page_pool("benevolent"))
+        # the fingerprint sample honors the POST contract
+        fp = services.read_pool_page("fingerprint", "example.html")
+        self.assertIn('{"fingerprint"', fp.replace(" ", ""))
+        self.assertIn("location.pathname", fp)
+        # the download sample carries the tokens
+        dl = services.read_pool_page("download", "example.html")
+        for token in ("%DOWNLOAD_URL%", "%TARGET%", "%FILENAME%"):
+            self.assertIn(token, dl)
+        # the loading sample retries
+        self.assertIn("refresh", services.read_pool_page("loading", "example.html"))
+
+    def test_sample_bundle_loads_in_library(self):
+        from gates import library
+        bundles = library.list_bundles()
+        names = [b["name"] for b in bundles]
+        self.assertIn("example-bundle", names)
+        bundle = next(b for b in bundles if b["name"] == "example-bundle")
+        self.assertTrue(bundle["has_notes"])
+        self.assertTrue(bundle["has_icon"])
+
+
+class DecoyPoolTests(TestCase):
+    """./data/decoys/ is a decoy page pool; built-ins live there too."""
+
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="dtop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def test_pool_lists_shipped_pages(self):
+        from gates import services
+        pool = services.page_pool("decoy")
+        self.assertIn("landing.html", pool)
+        self.assertIn("maintenance.html", pool)
+        self.assertIn("crestfield.html", pool)
+
+    def test_create_pool_decoy_and_serve(self):
+        response = self.client.post(reverse("gate-decoys"), {
+            "kind": "pool", "name": "Landing", "pool_file": "landing.html"})
+        page = DecoyPage.objects.get(kind="pool", name="Landing")
+        DecoyPage.objects.exclude(pk=page.pk).update(is_default=False)
+        page.is_default = True
+        page.save()
+        response = self.public.get("/no-such-page")
+        self.assertContains(response, "Service Portal")
+        self.assertContains(response, "/g/canary/")  # canary injection applies
+
+    def test_pool_requires_valid_file(self):
+        page = DecoyPage(kind="pool", name="bad", pool_file="../secret.html")
+        with self.assertRaises(ValidationError):
+            page.full_clean()
+
+    def test_pool_kind_on_create_form(self):
+        response = self.client.get(reverse("gate-decoys"))
+        self.assertContains(response, 'data-show-when="kind:pool"')
+        self.assertContains(response, "landing.html")
+
+    def test_decoys_gitignore_semantics(self):
+        import subprocess
+        ignored = subprocess.run(["git", "check-ignore", "data/decoys/custom.html"],
+                                 capture_output=True).returncode == 0
+        tracked = subprocess.run(["git", "check-ignore", "data/decoys/landing.html"],
+                                 capture_output=True).returncode == 1
+        self.assertTrue(ignored)
+        self.assertTrue(tracked)

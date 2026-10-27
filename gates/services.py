@@ -175,6 +175,11 @@ def render_decoy(page, request):
         if not page.html_file:
             return None
         return _inject_canary(page.html_file.read().decode("utf-8", errors="replace"), request)
+    if page.kind == "pool":
+        html = read_pool_page("decoy", page.pool_file)
+        if html is None:
+            return None
+        return _inject_canary(html, request)
     meta = BUILTIN_DECOYS.get(page.template_key)
     if meta is None:
         return None

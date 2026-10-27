@@ -26,6 +26,11 @@ data/download/*
 !data/benevolent/
 data/benevolent/*
 !data/benevolent/example.html
+!data/decoys/
+data/decoys/*
+!data/decoys/landing.html
+!data/decoys/maintenance.html
+!data/decoys/crestfield.html
 !data/payloads/
 data/payloads/*
 !data/payloads/example-bundle/

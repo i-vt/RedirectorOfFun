@@ -489,17 +489,17 @@ BUILTIN_DECOYS = {
     },
     "nysm-landing": {
         "label": "RoF landing page",
-        "path": "decoy/index.html",
+        "path": "data/decoys/landing.html",
         "django_template": False,
     },
     "maintenance": {
         "label": "Maintenance page",
-        "path": "decoy/maintenance.html",
+        "path": "data/decoys/maintenance.html",
         "django_template": False,
     },
     "crestfield": {
         "label": "Crestfield status page (example)",
-        "path": "decoy_examples/Crestfield.html",
+        "path": "data/decoys/crestfield.html",
         "django_template": False,
     },
 }
@@ -526,12 +526,15 @@ class DecoyPage(models.Model):
         ("template", "Built-in page"),
         ("upload", "Uploaded HTML"),
         ("redirect", "Redirect to URL"),
+        ("pool", "Page from ./data/decoys/"),
     ]
 
     name = models.CharField(max_length=120)
     kind = models.CharField(max_length=10, choices=KIND_CHOICES)
     template_key = models.CharField(max_length=40, blank=True)
     html_file = models.FileField(upload_to="decoys/", blank=True, null=True)
+    pool_file = models.CharField(max_length=120, blank=True,
+                                 help_text="File inside ./data/decoys/ for kind=pool.")
     html = models.TextField(blank=True,
                             help_text="Editable HTML override. When set it beats both the uploaded file and the built-in template.")
     redirect_url = models.URLField(blank=True)
@@ -562,6 +565,10 @@ class DecoyPage(models.Model):
             raise ValidationError({"html_file": "upload an HTML file"})
         if self.kind == "redirect" and not self.redirect_url:
             raise ValidationError({"redirect_url": "set the redirect URL"})
+        if self.kind == "pool":
+            import re
+            if not self.pool_file or not re.fullmatch(r"[A-Za-z0-9._-]+\.html", self.pool_file):
+                raise ValidationError({"pool_file": "pick an .html file from ./data/decoys/"})
 
 
 def validate_site_file_path(value):

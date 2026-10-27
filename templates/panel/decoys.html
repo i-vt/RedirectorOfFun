@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load ui_icons %}
+{% load gate_extras %}
 {% block guide %}
 <p>Decoys are the cover story: anyone who hits an unknown path, is denied, or is banned sees the <strong>default</strong> decoy. Redirect decoys send them elsewhere entirely.</p>
 <h3>NOTES</h3>
@@ -24,6 +25,7 @@
           <option value="template">Built-in page from the repo</option>
           <option value="upload">Upload HTML</option>
           <option value="redirect">Redirect to URL</option>
+          <option value="pool">Page from ./data/decoys/ folder</option>
         </select></label>
       </div>
       <div class="grid-2">
@@ -33,6 +35,9 @@
         <label data-show-when="kind:upload"><span>UPLOADED HTML FILE (kind = upload)</span><input class="field-input" type="file" name="html_file" accept=".html,.htm"></label>
       </div>
       <label data-show-when="kind:redirect"><span>REDIRECT URL (kind = redirect)</span><input class="field-input mono" name="redirect_url" placeholder="https://www.microsoft.com/"></label>
+      {% if decoy_pool %}
+      <label data-show-when="kind:pool"><span>POOL PAGE (kind = pool) {% tip "Any .html file in ./data/decoys/ becomes a selectable decoy. The shipped samples are tracked in git; your own stay local." %}</span><select class="field-input mono" name="pool_file">{% for f in decoy_pool %}<option value="{{ f }}">{{ f }}</option>{% endfor %}</select></label>
+      {% endif %}
       <button class="button" type="submit">{% icon "decoys" %}Add decoy page</button>
     </fieldset>
   </form>
