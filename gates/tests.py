@@ -4305,3 +4305,16 @@ class OverviewTableLayoutTests(TestCase):
         self.assertContains(response, "<colgroup>")
         css = open("static/css/panel.css").read()
         self.assertIn(".table-wrap.contained{margin:14px 0 0", css)
+
+
+class SecurityPageLayoutTests(TestCase):
+    def test_security_page_uses_flat_sections(self):
+        from accounts.models import APIKey
+        operator = Operator.objects.create_user(username="se2", password="long-enough-password-123")
+        APIKey.create(operator=operator, name="ci")
+        client = Client()
+        client.force_login(operator)
+        response = client.get(reverse("security"))
+        content = response.content.decode()
+        self.assertIn("table-wrap contained", content)  # no bleeding tables
+        self.assertNotIn('class="panel" style="margin-top:18px"', content)  # no nested panels

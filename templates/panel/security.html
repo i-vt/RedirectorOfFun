@@ -5,33 +5,27 @@
   <div class="panel-heading"><div><span class="section-label">ACCOUNT</span><h2>Two-factor authentication</h2><p>TOTP second factor for your operator account. Enabling it protects the panel even if your password leaks.</p></div><span class="status-badge {% if enabled %}good{% else %}warn{% endif %}">{% if enabled %}ENABLED{% else %}DISABLED{% endif %}</span></div>
 
   {% if just_enabled %}
-  <div class="panel" style="margin-top:18px">
-    <div class="panel-heading"><div><span class="section-label">BACKUP CODES</span><h2>Save these now</h2><p>Each code works once if you lose your device. They are shown exactly once and stored only as hashes.</p></div></div>
-    <div class="grid-2" style="margin-top:12px">
-      {% for code in backup_codes %}<code class="mono" style="font-size:1rem;padding:8px 12px;border:var(--c-panel-border)">{{ code }}</code>{% endfor %}
-    </div>
-    <a class="button secondary" style="margin-top:16px" href="{% url 'security' %}">I saved them</a>
+  <div class="panel-heading" style="margin-top:18px"><div><span class="section-label">BACKUP CODES</span><h3>Save these now</h3><p>Each code works once if you lose your device. They are shown exactly once and stored only as hashes.</p></div></div>
+  <div class="grid-2" style="margin-top:12px">
+    {% for code in backup_codes %}<code class="mono" style="font-size:1rem;padding:8px 12px;border:var(--c-panel-border)">{{ code }}</code>{% endfor %}
   </div>
+  <a class="button secondary" style="margin-top:16px" href="{% url 'security' %}">I saved them</a>
   {% elif enabled %}
-  <div class="panel" style="margin-top:18px">
-    <div class="panel-heading"><div><span class="section-label">DISABLE</span><h2>Turn off 2FA</h2><p>Requires a current authenticator code or one of your {{ backup_code_count }} remaining backup codes. Disabling invalidates all existing sessions.</p></div></div>
-    <form method="post" class="filter-bar" style="margin-top:14px">{% csrf_token %}
-      <input type="hidden" name="action" value="disable">
-      <label><span>CURRENT CODE OR BACKUP CODE</span><input class="field-input mono" name="code" required autocomplete="one-time-code"></label>
-      <button class="button secondary" type="submit" data-confirm="Disable two-factor authentication?">Disable 2FA</button>
-    </form>
-  </div>
+  <div class="panel-heading" style="margin-top:18px"><div><span class="section-label">DISABLE</span><h3>Turn off 2FA</h3><p>Requires a current authenticator code or one of your {{ backup_code_count }} remaining backup codes. Disabling invalidates all existing sessions.</p></div></div>
+  <form method="post" class="filter-bar" style="margin-top:14px">{% csrf_token %}
+    <input type="hidden" name="action" value="disable">
+    <label><span>CURRENT CODE OR BACKUP CODE</span><input class="field-input mono" name="code" required autocomplete="one-time-code"></label>
+    <button class="button secondary" type="submit" data-confirm="Disable two-factor authentication?">Disable 2FA</button>
+  </form>
   {% elif pending_secret %}
-  <div class="panel" style="margin-top:18px">
-    <div class="panel-heading"><div><span class="section-label">ENROLLMENT</span><h2>Confirm your authenticator</h2><p>Add this secret to your authenticator app, then enter a generated code to activate.</p></div></div>
-    <p class="mono" style="margin-top:12px;word-break:break-all">{{ pending_secret }}</p>
-    <p class="mono muted" style="word-break:break-all;font-size:.62rem">{{ pending_uri }}</p>
-    <form method="post" class="filter-bar" style="margin-top:14px">{% csrf_token %}
-      <input type="hidden" name="action" value="confirm">
-      <label><span>6-DIGIT CODE</span><input class="field-input mono" name="code" inputmode="numeric" autocomplete="one-time-code" required></label>
-      <button class="button" type="submit">Enable 2FA</button>
-    </form>
-  </div>
+  <div class="panel-heading" style="margin-top:18px"><div><span class="section-label">ENROLLMENT</span><h3>Confirm your authenticator</h3><p>Add this secret to your authenticator app, then enter a generated code to activate.</p></div></div>
+  <p class="mono" style="margin-top:12px;word-break:break-all">{{ pending_secret }}</p>
+  <p class="mono muted" style="word-break:break-all;font-size:.62rem">{{ pending_uri }}</p>
+  <form method="post" class="filter-bar" style="margin-top:14px">{% csrf_token %}
+    <input type="hidden" name="action" value="confirm">
+    <label><span>6-DIGIT CODE</span><input class="field-input mono" name="code" inputmode="numeric" autocomplete="one-time-code" required></label>
+    <button class="button" type="submit">Enable 2FA</button>
+  </form>
   {% else %}
   <form method="post" style="margin-top:18px">{% csrf_token %}
     <input type="hidden" name="action" value="enroll">
@@ -39,40 +33,42 @@
   </form>
   {% endif %}
 
-  <div class="panel" style="margin-top:18px">
-    <div class="panel-heading"><div><span class="section-label">AUTOMATION</span><h2>API keys</h2><p>Script against <code>/api/v1/</code> with an <code>Authorization: ApiKey &lt;key&gt;</code> header. The key acts as you with your roles and does not use your 2FA. Shown once at creation; revocation is instant.</p></div></div>
-    {% if new_key %}
-    <div class="panel" style="margin-top:12px">
-      <div class="panel-heading"><div><span class="section-label">COPY NOW</span><h2>Your new API key</h2><p>It will never be displayed again.</p></div></div>
-      <div class="copy-row" style="margin-top:10px"><input id="new-api-key" class="field-input mono" readonly value="{{ new_key }}"><button class="button secondary" type="button" data-copy="#new-api-key">Copy</button></div>
-    </div>
-    {% endif %}
-    <form method="post" class="filter-bar" style="margin-top:12px">{% csrf_token %}
-      <input type="hidden" name="action" value="apikey_create">
-      <label><span>NAME</span><input class="field-input" name="name" maxlength="120" placeholder="CI pipeline"></label>
-      <button class="button" type="submit">{% icon "security" %}Create API key</button>
-    </form>
-    {% if api_keys %}
-    <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>NAME</th><th>PREFIX</th><th>LAST USED</th><th>STATUS</th><th></th></tr></thead><tbody>
-      {% for key in api_keys %}
-      <tr>
-        <td>{{ key.name }}</td>
-        <td class="mono muted">{{ key.prefix }}…</td>
-        <td class="mono muted">{{ key.last_used_at|date:"Y-m-d H:i"|default:"never" }}</td>
-        <td>{% if key.is_active %}<span class="status-badge good">ACTIVE</span>{% else %}<span class="status-badge">REVOKED</span>{% endif %}</td>
-        <td>{% if key.is_active %}<form method="post" data-confirm="Revoke this API key?">{% csrf_token %}<input type="hidden" name="action" value="apikey_revoke"><input type="hidden" name="key_id" value="{{ key.pk }}"><button class="text-button" type="submit">REVOKE</button></form>{% endif %}</td>
-      </tr>
-      {% endfor %}
-    </tbody></table></div>
-    {% endif %}
-    {% if all_api_keys %}
-    <p class="muted mono" style="font-size:.66rem;margin-top:12px">ADMIN VIEW - ALL OPERATOR KEYS</p>
-    <div class="table-wrap"><table><thead><tr><th>OPERATOR</th><th>NAME</th><th>PREFIX</th><th>LAST USED</th><th>STATUS</th></tr></thead><tbody>
-      {% for key in all_api_keys %}
-      <tr><td class="mono">{{ key.operator.username }}</td><td>{{ key.name }}</td><td class="mono muted">{{ key.prefix }}…</td><td class="mono muted">{{ key.last_used_at|date:"Y-m-d H:i"|default:"never" }}</td><td>{% if key.is_active %}<span class="status-badge good">ACTIVE</span>{% else %}<span class="status-badge">REVOKED</span>{% endif %}</td></tr>
-      {% endfor %}
-    </tbody></table></div>
-    {% endif %}
+  <div class="panel-heading" style="margin-top:26px;border-top:var(--c-panel-border);padding-top:22px"><div><span class="section-label">AUTOMATION</span><h3>API keys</h3><p>Script against <code>/api/v1/</code> with an <code>Authorization: ApiKey &lt;key&gt;</code> header. The key acts as you with your roles and does not use your 2FA. Shown once at creation; revocation is instant.</p></div></div>
+
+  {% if new_key %}
+  <div style="margin-top:14px;border:1px solid var(--s-accent);border-radius:10px;padding:14px">
+    <span class="section-label">COPY NOW - shown exactly once</span>
+    <div class="copy-row" style="margin-top:8px"><input id="new-api-key" class="field-input mono" readonly value="{{ new_key }}"><button class="button secondary" type="button" data-copy="#new-api-key">Copy</button></div>
   </div>
+  {% endif %}
+
+  <form method="post" class="filter-bar" style="margin-top:14px">{% csrf_token %}
+    <input type="hidden" name="action" value="apikey_create">
+    <label><span>NAME</span><input class="field-input" name="name" maxlength="120" placeholder="CI pipeline"></label>
+    <button class="button" type="submit">{% icon "security" %}Create API key</button>
+  </form>
+
+  {% if api_keys %}
+  <div class="table-wrap contained" style="margin-top:14px"><table><colgroup><col><col style="width:180px"><col style="width:150px"><col style="width:90px"><col style="width:90px"></colgroup><thead><tr><th>NAME</th><th>PREFIX</th><th>LAST USED</th><th>STATUS</th><th></th></tr></thead><tbody>
+    {% for key in api_keys %}
+    <tr>
+      <td>{{ key.name }}</td>
+      <td class="mono muted">{{ key.prefix }}…</td>
+      <td class="mono muted">{{ key.last_used_at|date:"Y-m-d H:i"|default:"never" }}</td>
+      <td>{% if key.is_active %}<span class="status-badge good">ACTIVE</span>{% else %}<span class="status-badge">REVOKED</span>{% endif %}</td>
+      <td style="text-align:right">{% if key.is_active %}<form method="post" data-confirm="Revoke this API key?" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="apikey_revoke"><input type="hidden" name="key_id" value="{{ key.pk }}"><button class="text-button" type="submit">REVOKE</button></form>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% endif %}
+
+  {% if all_api_keys %}
+  <p class="muted mono" style="font-size:.66rem;margin-top:16px">ADMIN VIEW - ALL OPERATOR KEYS</p>
+  <div class="table-wrap contained"><table><colgroup><col style="width:130px"><col><col style="width:180px"><col style="width:150px"><col style="width:90px"></colgroup><thead><tr><th>OPERATOR</th><th>NAME</th><th>PREFIX</th><th>LAST USED</th><th>STATUS</th></tr></thead><tbody>
+    {% for key in all_api_keys %}
+    <tr><td class="mono">{{ key.operator.username }}</td><td>{{ key.name }}</td><td class="mono muted">{{ key.prefix }}…</td><td class="mono muted">{{ key.last_used_at|date:"Y-m-d H:i"|default:"never" }}</td><td>{% if key.is_active %}<span class="status-badge good">ACTIVE</span>{% else %}<span class="status-badge">REVOKED</span>{% endif %}</td></tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% endif %}
 </section>
 {% endblock %}
