@@ -11,7 +11,7 @@ flowchart LR
     B -->|yes| C[Work the queue]
     B -->|no| D[Check suspicious<br/>events]
     C --> D
-    D --> E[Check releases<br/>and 404 volume]
+    D --> E[Check releases<br/>and surface volume]
 ```
 
 1. Open the panel. The gate strip shows pending approvals, releases in the

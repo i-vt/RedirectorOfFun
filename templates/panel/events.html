@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load ui_icons %}
 {% block guide %}
-<p>404 events ingested from the edge's JSON access log - the raw surface telemetry. Anything that isn't a gate, lure, or agent path lands here.</p>
+<p>Surface events: the edge request log. Anything that isn't a gate, lure, or agent path lands here (404s by default; everything with TRACK_ALL_REQUESTS).</p>
 <ul>
   <li>Filter and drill to spot scanning patterns; top paths feed the overview.</li>
   <li>Decoy responses are still 200s to the visitor; the 404 semantics live in this log.</li>
@@ -9,7 +9,7 @@
 {% endblock %}
 {% block content %}
 <section class="panel page-panel">
-  <div class="panel-heading"><div><span class="section-label">NGINX LOG INTELLIGENCE</span><h2>{% if track_all %}Request stream{% else %}404 event stream{% endif %}</h2><p>Search stored events by path, method, or any client identifier. Raw IPs and user agents are stored; the client column shows the hash unless you reveal identifiers.</p></div><span class="status-badge good" style="margin-right:8px">{{ total }} STORED</span><span class="status-badge {% if track_all %}warn{% else %}good{% endif %}" data-tip="TRACK_ALL_REQUESTS env. On: every request is stored (2xx included). Off: 404s only. Toggle in .env and recreate the web container.">{% if track_all %}TRACKING ALL{% else %}404s ONLY{% endif %}</span></div>
+  <div class="panel-heading"><div><span class="section-label">NGINX LOG INTELLIGENCE</span><h2>{% if track_all %}Request stream{% else %}Surface event stream{% endif %}</h2><p>Search stored events by path, method, or any client identifier. Raw IPs and user agents are stored; the client column shows the hash unless you reveal identifiers.</p></div><span class="status-badge good" style="margin-right:8px">{{ total }} STORED</span><span class="status-badge {% if track_all %}warn{% else %}good{% endif %}" data-tip="TRACK_ALL_REQUESTS env. On: every request is stored (2xx included). Off: 404s only. Toggle in .env and recreate the web container.">{% if track_all %}TRACKING ALL{% else %}404s ONLY{% endif %}</span></div>
   <form id="event-filters" class="filter-bar" method="get" action="{% url 'events' %}" hx-get="{% url 'events' %}" hx-target="#events-table" hx-push-url="true" hx-trigger="submit, keyup changed delay:450ms from:#filter-path, keyup changed delay:450ms from:#filter-ua, keyup changed delay:450ms from:#filter-ip, keyup changed delay:450ms from:#filter-client, change from:#filter-method, change from:#filter-days, change from:#filter-status">
     <label><span>PATH CONTAINS</span><input id="filter-path" class="field-input" type="search" name="path" value="{{ request.GET.path }}" placeholder="/example" maxlength="200"></label>
     <label><span>USER AGENT CONTAINS</span><input id="filter-ua" class="field-input" type="search" name="ua" value="{{ request.GET.ua }}" placeholder="curl, python-requests, Mozilla" maxlength="200"></label>

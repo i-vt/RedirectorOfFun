@@ -4270,3 +4270,16 @@ class SearchUxTests(TestCase):
         NotFoundEvent.objects.create(request_id="c1", occurred_at=tz.now(), status=404, path="/x")
         response = self.client.get(reverse("events"))
         self.assertContains(response, "1 STORED")
+
+
+class SurfaceRenameTests(TestCase):
+    def test_events_page_is_surface_events(self):
+        operator = Operator.objects.create_user(username="sr2", password="long-enough-password-123")
+        client = Client()
+        client.force_login(operator)
+        response = client.get(reverse("events"))
+        self.assertContains(response, "Surface event stream")
+        self.assertContains(response, "Surface Events")  # nav label
+        self.assertNotContains(response, "404 Events")
+        overview = client.get(reverse("overview"))
+        self.assertContains(overview, "Surface volume / 14 days")

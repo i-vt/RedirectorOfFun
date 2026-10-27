@@ -64,7 +64,7 @@ def palette_destinations(context):
     request = context.get("request")
     items = [
         {"group": "NAVIGATE", "label": "Overview", "url": reverse("overview"), "hint": "dashboard"},
-        {"group": "NAVIGATE", "label": "404 Events", "url": reverse("events"), "hint": "edge telemetry"},
+        {"group": "NAVIGATE", "label": "Surface Events", "url": reverse("events"), "hint": "edge telemetry"},
         {"group": "NAVIGATE", "label": "Delivery Links", "url": reverse("gate-links"), "hint": "gates"},
         {"group": "NAVIGATE", "label": "Payloads", "url": reverse("gate-payloads"), "hint": "files + library"},
         {"group": "NAVIGATE", "label": "Lures", "url": reverse("gate-lures"), "hint": "hosted sites"},

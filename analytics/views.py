@@ -78,7 +78,7 @@ def events_view(request):
     show_identifiers = (show == "1") if show is not None else GateConfig.get_solo().reveal_identifiers
     total = getattr(page.paginator, "count", 0)
     return render(request, template, {
-        "title": "404 Events", "page": page, "events": page.object_list,
+        "title": "Surface Events", "page": page, "events": page.object_list,
         "intel": intel, "total": total,
         "show_identifiers": show_identifiers,
         "track_all": getattr(settings, "TRACK_ALL_REQUESTS", False),

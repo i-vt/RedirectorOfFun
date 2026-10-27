@@ -6,7 +6,7 @@ from analytics.models import NotFoundEvent
 
 
 class Command(BaseCommand):
-    help = ("Delete 404 events older than the configured retention window, plus "
+    help = ("Delete surface events older than the configured retention window, plus "
             "stale gate telemetry and admissions so the tables stay bounded.")
 
     def add_arguments(self, parser):

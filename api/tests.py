@@ -184,7 +184,7 @@ class PanelFunctionalityTests(TestCase):
         NotFoundEvent.objects.create(request_id="panel-event", occurred_at=timezone.now(), method="GET", path="/panel-missing")
 
     def test_overview_and_health_pages(self):
-        self.assertContains(self.client.get(reverse("overview")), "404 volume / 14 days")
+        self.assertContains(self.client.get(reverse("overview")), "Surface volume / 14 days")
         self.assertContains(self.client.get(reverse("panel-health")), "Service health")
 
     def test_htmx_filter_returns_only_table_partial(self):
