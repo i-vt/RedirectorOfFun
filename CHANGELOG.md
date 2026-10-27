@@ -1,6 +1,55 @@
 # Changelog
 
+## v1.1.0 - 2026-10-27
+
+The operator-experience release: payload management, hosted lures, guided UI,
+per-visitor admissions, and a hardening audit. 448 tests, CI green.
+
+### Delivery and payloads
+
+- Quick drop: one file, one click, a live URL (with QR code) from the Links
+  page or a phone.
+- Payloads page: a file manager for payloads, benevolent fallbacks, and
+  decoys, with gate intel per link and in-place payload replacement.
+- Payload library at ./data/payloads/: bundle folders with notes (markdown,
+  shown as escaped text) and generated favicons; pick library files directly
+  when creating a link or building a lure.
+- Per-link download charts, drag-and-drop uploads, and serve-as filename
+  masquerade (store fwfafs.exe, serve helper.pdf.exe).
+- Serve ratios (1/20 style probabilistic serving) and a post-download
+  interstitial that redirects visitors to a stable, per-link benevolent page.
+
+### Gates
+
+- New network gate: IP / User-Agent allow-lists with no credentials at all.
+- Malleable header contracts, replay dedupe, daily availability windows,
+  JA3/JA4 pins, domain pinning (now enforced), and per-visitor operator
+  admission with sticky TTL.
+- Loading and fingerprint held pages: neutral auto-retry pages, and an
+  intel-collecting check page that feeds the operator before the decision.
+- Custom held/download/deny pages from pools under ./data/.
+- Auto-decision learning: remember a decision once and matching submissions
+  decide themselves (panel, mobile, API, Telegram).
+
+### Interface
+
+- Guided everywhere: per-page help modals, field tooltips, collapsed advanced
+  sections, a Ctrl+K command palette, a scrollable sidebar, live-refreshing
+  approval queues, and mobile parity (intel gallery, quick drop, admissions).
+- Settings toggle for full vs masked identifiers.
+
+### Operations and hardening
+
+- update.sh (pull, rebuild, prune; --reset for clean installs); ./data/ holds
+  all operator content, committed with default samples only.
+- robots.txt and sitemap.xml generated on the fly per deployment.
+- Track-all-requests mode for the event stream with status-class filters.
+- Audit: placeholder 500, replay/approval ordering, proxy-IP ban self-owns,
+  creation races, nginx config injection, rate-limit keying, and a dozen
+  smaller fixes (see the commit log).
+
 ## v1.0.0 - 2026-10-25
+
 
 First release. RedirectorOfFun started as an nginx C2 redirector fork and now
 ships with a full operator control plane.
