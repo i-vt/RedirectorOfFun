@@ -3446,7 +3446,9 @@ class InjectionHygieneTests(TestCase):
             response = self.client.get(url)
             self.assertNotContains(response, "<script>alert(1)</script>")
             self.assertContains(response, "&lt;script&gt;")
-            self.assertNotContains(response, "49", msg_prefix=url)  # SSTI not evaluated
+            # SSTI not evaluated: the literal probe shows, the computed value does not
+            self.assertContains(response, "{{7*7}}")
+            self.assertNotContains(response, '"user": "49"', msg_prefix=url)
 
     def test_xss_probe_in_admission_intel_escaped(self):
         link = DeliveryLink.objects.create(
@@ -4287,3 +4289,19 @@ class SurfaceRenameTests(TestCase):
         self.assertNotContains(response, "404 Events")
         overview = client.get(reverse("overview"))
         self.assertContains(overview, "Surface volume / 14 days")
+
+
+class OverviewTableLayoutTests(TestCase):
+    def test_recent_events_table_is_contained(self):
+        from analytics.models import NotFoundEvent
+        from django.utils import timezone as tz
+        operator = Operator.objects.create_user(username="ovop", password="long-enough-password-123")
+        client = Client()
+        client.force_login(operator)
+        NotFoundEvent.objects.create(request_id="ov1", occurred_at=tz.now(), status=404,
+                                     path="/api/v1/notifications/recent/")
+        response = client.get(reverse("overview"))
+        self.assertContains(response, 'table-wrap contained')
+        self.assertContains(response, "<colgroup>")
+        css = open("static/css/panel.css").read()
+        self.assertIn(".table-wrap.contained{margin:14px 0 0", css)

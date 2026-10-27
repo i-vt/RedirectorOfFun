@@ -1,0 +1,21 @@
+System check identified some issues:
+
+WARNINGS:
+?: (config.W001) DJANGO_SECRET_KEY must be set in production.
+?: (config.W002) ANALYTICS_IP_HASH_SALT must be set in production.
+
+System check identified 2 issues (0 silenced).
+[27/Oct/2026 02:46:19] "GET /login/ HTTP/1.1" 200 2148
+[27/Oct/2026 02:46:19] "GET /static/css/panel.c2410e5e12c7.css HTTP/1.1" 200 7991
+[27/Oct/2026 02:46:19] "GET /static/img/jester-hat.8ea62447c4c8.png HTTP/1.1" 200 2945
+[27/Oct/2026 02:46:20] "GET /static/fonts/jetbrains-mono.4d05bb0e4a69.ttf HTTP/1.1" 200 90579
+[27/Oct/2026 02:46:20] "GET /static/favicon.445a9a2acd81.svg HTTP/1.1" 200 226
+[27/Oct/2026 02:46:21] "POST /login/ HTTP/1.1" 302 0
+[27/Oct/2026 02:46:21] "GET /panel/ HTTP/1.1" 200 18413
+[27/Oct/2026 02:46:21] "GET /static/js/htmx.min.19a573773be4.js HTTP/1.1" 200 16355
+[27/Oct/2026 02:46:21] "GET /static/js/conditional_fields.b35a8a3757a4.js HTTP/1.1" 200 1157
+[27/Oct/2026 02:46:21] "GET /static/js/palette.dfb140b0905c.js HTTP/1.1" 200 1065
+[27/Oct/2026 02:46:21] "GET /static/js/app.bb37e89124c0.js HTTP/1.1" 200 4608
+[27/Oct/2026 02:46:21] "GET /static/js/chart.umd.min.7f22766e4a3f.js HTTP/1.1" 200 69688
+[27/Oct/2026 02:46:21] "GET /static/js/dashboard.c540510e564e.js HTTP/1.1" 200 795
+[27/Oct/2026 02:46:21] "GET /api/v1/notifications/recent/?after=0 HTTP/1.1" 200 2

@@ -188,3 +188,9 @@ details.adv .adv-hint{font-size:.6rem;color:var(--s-dim);letter-spacing:0;margin
 .bundle-card:hover{border-color:var(--s-accent);transform:translateY(-1px)}
 .bundle-card img{width:28px;height:28px;border-radius:6px;image-rendering:pixelated}
 .bundle-card .muted{font-size:.64rem}
+
+/* Contained in-card tables (no edge bleed, aligned with their heading) */
+.table-wrap.contained{margin:14px 0 0;border:var(--c-panel-border);border-radius:10px;overflow:hidden}
+.table-wrap.contained table{table-layout:fixed}
+.table-wrap.contained th,.table-wrap.contained td{padding:10px 14px;border-top:0}
+.table-wrap.contained .path-cell{max-width:none}
