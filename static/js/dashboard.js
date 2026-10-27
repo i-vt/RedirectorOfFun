@@ -23,7 +23,8 @@
       responsive: true, maintainAspectRatio: false, animation: {duration: 180},
       interaction: {intersect: false, mode: "index"},
       plugins: {legend: {display: false}, tooltip: {
-        backgroundColor: "#111a2b", borderColor: "#1a2540", borderWidth: 1,
+        backgroundColor: styles.getPropertyValue("--s-surface").trim() || "#111a2b",
+        borderColor: styles.getPropertyValue("--s-border").trim() || "#1a2540", borderWidth: 1,
         titleFont: {family: "JetBrains Mono", size: 11}, bodyFont: {family: "JetBrains Mono", size: 12},
         padding: 12, displayColors: false,
       }},

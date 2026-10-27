@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load ui_icons %}
+{% load gate_extras %}
 {% block guide %}
 <p>Banned IPs get the decoy everywhere, forever (until you lift the ban). Auto-bans from rules and burn notices land here too.</p>
 <ul>
@@ -16,6 +17,28 @@
     <label><span>NOTE</span><input class="field-input" name="note" maxlength="240" placeholder="scanner, sandbox egress, …"></label>
     <button class="button" type="submit">{% icon "bans" %}Ban IP</button>
   </form>
+  <details class="adv" style="margin-top:12px">
+    <summary>EXPORT / IMPORT <span class="adv-hint">share ban lists between deployments</span></summary>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px">
+      <a class="button secondary" href="{% url 'gate-bans-export' %}">{% icon "download" %}Export JSON</a>
+      <form method="post" action="{% url 'gate-bans-export' %}" style="display:inline-flex;gap:6px;align-items:center">{% csrf_token %}<input class="field-input mono" name="name" maxlength="80" placeholder="list-name" style="min-height:36px;font-size:.66rem"><input type="hidden" name="save" value="1"><button class="button secondary" type="submit" data-tip="Save the current bans as a file in ./data/templates/bans/">{% icon "payloads" %}Save to library</button></form>
+    </div>
+    <form method="post" enctype="multipart/form-data" class="stacked-form" style="margin-top:12px">
+      {% csrf_token %}
+      <div class="grid-2">
+        <label><span>PASTE LIST OR JSON {% tip "One IP per line (# comments ok), or a rof-bans JSON export. Proxy and loopback addresses are never imported." %}</span><textarea class="field-input mono" name="import_payload" rows="3" placeholder="203.0.113.0/24"></textarea></label>
+        <label><span>OR FILE</span><input class="field-input" type="file" name="import_file" accept=".json,.txt"></label>
+      </div>
+      {% if bans_library %}
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">
+        {% for name in bans_library %}
+        <button class="button secondary" type="submit" name="library_file" value="{{ name }}">{{ name }}</button>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <button class="button secondary" type="submit" style="margin-top:8px">{% icon "upload" %}Import bans</button>
+    </form>
+  </details>
   {% if bans %}
   <div class="table-wrap"><table><thead><tr><th>IP</th><th>NOTE</th><th>SOURCE</th><th>CREATED / UTC</th><th>STATUS</th><th></th></tr></thead><tbody>
     {% for ban in bans %}

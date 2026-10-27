@@ -1,0 +1,15 @@
+{
+  "label": "One-time key drop",
+  "description": "Single-retrieval key distribution (e.g. shellcode decryption key). Time-limited, one shot, gone.",
+  "defaults": {
+    "kind": "key",
+    "key_text": "{key material}",
+    "gate_type": "totp",
+    "totp_secret": "{shared secret}",
+    "totp_window": 30,
+    "one_time": true,
+    "expires_at": "{ISO datetime}",
+    "placeholder": "blank",
+    "on_deny": "not_found"
+  }
+}

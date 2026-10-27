@@ -23,6 +23,7 @@
       <button class="button" type="button" id="quick-rule-open">{% icon "plus" %}Quick rule generator</button>
       <a class="button secondary" href="{% url 'gate-block-rule-test' %}">{% icon "flask" %}Test rules</a>
       <a class="button secondary" href="{% url 'gate-block-rules-export' %}">{% icon "download" %}Export JSON</a>
+      <form method="post" action="{% url 'gate-block-rules-export-library' %}" style="display:inline-flex;gap:6px;align-items:center">{% csrf_token %}<input class="field-input mono" name="name" maxlength="80" placeholder="chain-name" style="min-height:36px;font-size:.66rem"><button class="button secondary" type="submit" data-tip="Save the whole chain as a versioned file in ./data/templates/rules/">{% icon "payloads" %}Save to library</button></form>
       <form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="seed_presets"><button class="button secondary" type="submit">Ensure presets</button></form>
     </div>
   </div>
@@ -111,6 +112,17 @@
       <button class="button secondary" type="submit">{% icon "upload" %}Import (created disabled)</button>
     </fieldset>
   </form>
+
+  {% if rules_library %}
+  <fieldset style="margin-top:14px">
+    <legend>IMPORT FROM LIBRARY (./data/templates/rules/)</legend>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+      {% for name in rules_library %}
+      <form method="post" action="{% url 'gate-block-rules-import-library' %}" style="display:inline">{% csrf_token %}<input type="hidden" name="name" value="{{ name }}"><button class="button secondary" type="submit">{{ name }}</button></form>
+      {% endfor %}
+    </div>
+  </fieldset>
+  {% endif %}
 
   <div id="sets-container" style="margin-top:20px;display:flex;flex-direction:column;gap:16px">
     {% for ruleset in rule_sets %}

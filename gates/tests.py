@@ -1534,7 +1534,7 @@ class QuickRuleGeneratorTests(TestCase):
         from django.conf import settings as dj_settings
         # the link-scoped sample references this path
         DeliveryLink.objects.create(path="/g/drop/example", kind="key", key_text="K")
-        sample_dir = Path(dj_settings.BASE_DIR) / "samples"
+        sample_dir = Path(dj_settings.DATA_DIR) / "templates" / "rules"
         for sample in sorted(sample_dir.glob("*.json")):
             payload = _json.loads(sample.read_text())
             sets_created, rules_created, errors = services.import_blocking_rules(payload)
@@ -4318,3 +4318,78 @@ class SecurityPageLayoutTests(TestCase):
         content = response.content.decode()
         self.assertIn("table-wrap contained", content)  # no bleeding tables
         self.assertNotIn('class="panel" style="margin-top:18px"', content)  # no nested panels
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class TemplateLibraryTests(TestCase):
+    def setUp(self):
+        import shutil
+        import tempfile
+        root = tempfile.mkdtemp(prefix="rof-tpl-")
+        patch = override_settings(TEMPLATES_DIR=root)
+        patch.enable()
+        self.addCleanup(patch.disable)
+        self.addCleanup(shutil.rmtree, root, True)
+        self.root = root
+        self.operator = Operator.objects.create_user(username="tlop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+
+    def test_builtin_templates_present_without_files(self):
+        from gates.link_templates import get_templates
+        templates = get_templates()
+        self.assertIn("file-drop", templates)
+
+    def test_export_template_then_picker_lists_it(self):
+        from pathlib import Path
+        link = DeliveryLink.objects.create(path="/g/tl/one", kind="file", gate_type="token",
+                                           gate_token="tok", placeholder="blank", watermark=True)
+        self.client.post(reverse("gate-link-export-template", args=[link.pk]),
+                         {"name": "My Op Template"})
+        self.assertTrue((Path(self.root) / "links" / "my-op-template.json").exists())
+        response = self.client.get(reverse("gate-link-create"))
+        self.assertContains(response, "My Op Template")
+        # loading it applies the defaults
+        from gates.link_templates import get_templates
+        tpl = get_templates()["my-op-template"]
+        self.assertTrue(tpl["defaults"]["watermark"])
+        self.assertEqual(tpl["defaults"]["gate_type"], "token")
+
+    def test_rules_library_roundtrip(self):
+        from pathlib import Path
+        BlockingRule.objects.create(name="block curl", logic="any", enabled=True,
+                                    conditions=[{"type": "ua", "pattern": "^curl"}])
+        self.client.post(reverse("gate-block-rules-export-library"), {"name": "my-chain"})
+        self.assertTrue((Path(self.root) / "rules" / "my-chain.json").exists())
+        BlockingRule.objects.all().delete()
+        response = self.client.post(reverse("gate-block-rules-import-library"), {"name": "my-chain.json"})
+        self.assertTrue(BlockingRule.objects.filter(name="block curl", enabled=False).exists())
+
+    def test_bans_export_import_and_library(self):
+        from pathlib import Path
+        BannedIP.objects.create(ip="203.0.113.7", note="scanner")
+        self.client.post(reverse("gate-bans-export"), {"save": "1", "name": "badnets"})
+        self.assertTrue((Path(self.root) / "bans" / "badnets.json").exists())
+        BannedIP.objects.all().delete()
+        self.client.post(reverse("gate-bans-import"), {"import_payload": "198.51.100.24\n# comment\n203.0.113.9"})
+        self.assertTrue(BannedIP.objects.filter(ip="198.51.100.24").exists())
+        self.assertTrue(BannedIP.objects.filter(ip="203.0.113.9").exists())
+        # proxy/loopback never imported
+        BannedIP.objects.all().delete()
+        self.client.post(reverse("gate-bans-import"), {"import_payload": "127.0.0.1\n172.17.0.2"})
+        self.assertEqual(BannedIP.objects.count(), 0)
+
+    def test_custom_theme_served_and_selectable(self):
+        from pathlib import Path
+        (Path(self.root) / "themes").mkdir(parents=True, exist_ok=True)
+        (Path(self.root) / "themes" / "paper.css").write_text(".theme-paper{--s-bg:#fff}")
+        response = self.client.get(reverse("gate-theme-css", args=["paper"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/css", response["Content-Type"])
+        self.assertEqual(self.client.get("/panel/themes/..%2Fevil").status_code, 404)
+        # selectable in settings
+        response = self.client.post(reverse("settings"), {"action": "theme", "theme": "paper"})
+        self.operator.refresh_from_db()
+        self.assertEqual(self.operator.theme, "paper")
+        page = self.client.get(reverse("overview"))
+        self.assertContains(page, "themes/paper")

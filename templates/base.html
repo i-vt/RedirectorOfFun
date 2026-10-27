@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="{% static 'css/panel.css' %}">
   {% if theme == "cozy" %}<link rel="stylesheet" href="{% static 'css/theme-cozy.css' %}">{% endif %}
   {% if theme == "obnoxious" %}<link rel="stylesheet" href="{% static 'css/theme-obnoxious.css' %}">{% endif %}
+  {% if theme != "default" and theme != "cozy" and theme != "obnoxious" %}<link rel="stylesheet" href="{% url 'gate-theme-css' theme %}">{% endif %}
   <script defer src="{% static 'js/htmx.min.js' %}"></script>
   <script>window.ROF_RECENT_URL = "{% url 'api-notifications-recent' %}";</script>
   <script defer src="{% static 'js/conditional_fields.js' %}"></script>

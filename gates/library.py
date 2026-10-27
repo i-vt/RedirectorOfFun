@@ -220,3 +220,47 @@ def import_as_lure(name, slug, user):
     if not site.files.exists():
         site.files.create(path="index.html", content=f"<h1>{site.name}</h1>")
     return site, skipped
+
+
+# ─── Template library (./data/templates/) ────────────────────────────────────
+
+def templates_dir(kind) -> Path:
+    """./data/templates/<kind>/ - confined by construction."""
+    root = templates_root() / kind
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def templates_root() -> Path:
+    root = Path(getattr(settings, "TEMPLATES_DIR", settings.DATA_DIR / "templates"))
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def list_template_files(kind, suffix):
+    directory = templates_dir(kind)
+    return sorted(p.name for p in directory.glob(f"*{suffix}") if p.is_file())
+
+
+def read_template_file(kind, name, suffix):
+    import re
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", name or "") or not name.endswith(suffix):
+        return None
+    path = (templates_dir(kind) / name).resolve()
+    if path.parent != templates_dir(kind).resolve() or not path.is_file():
+        return None
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def write_template_file(kind, name, suffix, content):
+    import re
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", name or ""):
+        raise ValueError("invalid template name")
+    if not name.endswith(suffix):
+        name = f"{name}{suffix}"
+    path = templates_dir(kind) / name
+    path.write_text(content, encoding="utf-8")
+    return path

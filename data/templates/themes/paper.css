@@ -1,0 +1,42 @@
+/* Paper - a light, quiet custom theme sample.
+   Custom themes live in ./data/templates/themes/<name>.css and override the
+   same variables the base skin uses. Copy this file and adjust. */
+
+.theme-paper {
+  --p-abyss: oklch(.97 .01 250);
+  --p-panel: oklch(.99 .005 250);
+  --p-raised: oklch(1 0 250);
+  --p-line: oklch(.88 .01 255);
+  --p-cyan: oklch(.55 .12 220);
+  --p-mint: oklch(.55 .14 155);
+  --p-amber: oklch(.6 .15 75);
+  --p-red: oklch(.58 .2 22);
+  --p-text: oklch(.25 .02 260);
+  --p-muted: oklch(.45 .03 260);
+  --p-dim: oklch(.6 .03 260);
+  --s-bg: oklch(.97 .01 250);
+  --s-surface: oklch(.99 .005 250);
+  --s-border: oklch(.88 .01 255);
+  --s-accent: oklch(.55 .12 220);
+  --s-positive: oklch(.55 .14 155);
+  --s-warning: oklch(.6 .15 75);
+  --s-danger: oklch(.58 .2 22);
+  --s-text: oklch(.25 .02 260);
+  --s-muted: oklch(.45 .03 260);
+  --s-dim: oklch(.6 .03 260);
+  --c-button-bg: oklch(.55 .12 220);
+  --c-button-text: oklch(.99 .005 250);
+  --c-panel-border: 1px solid oklch(.88 .01 255);
+  --c-focus: 0 0 0 3px oklch(.55 .12 220/.3);
+}
+
+.theme-paper body,
+.theme-paper {
+  color-scheme: light;
+}
+
+/* keep the frame quiet too */
+.theme-paper .sidebar { background: oklch(.975 .008 250); }
+.theme-paper .topbar { background: oklch(.975 .008 250); }
+.theme-paper .panel, .theme-paper .metric, .theme-paper .stat-card,
+.theme-paper .rail-section { background: oklch(1 0 250); }

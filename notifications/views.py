@@ -4,6 +4,12 @@ from django.shortcuts import redirect, render
 from django.db import transaction
 from audit.services import record_event
 from gates.models import GateConfig
+from gates.library import list_template_files as _list_template_files
+
+
+def custom_theme_choices():
+    return [(name[:-4], f"Custom: {name[:-4]}")
+            for name in _list_template_files("themes", ".css")]
 from .models import NotificationOutbox, NotificationPreference
 
 
@@ -14,7 +20,8 @@ def settings_view(request):
     if request.method == "POST":
         if request.POST.get("action") == "theme":
             theme = request.POST.get("theme", "default")
-            if theme in dict(request.user.THEME_CHOICES):
+            custom = {stem for stem, _ in custom_theme_choices()}
+            if theme in dict(request.user.THEME_CHOICES) or theme in custom:
                 request.user.theme = theme
                 request.user.save(update_fields=["theme"])
                 record_event(action="operator.theme_changed", actor=request.user, target=request.user,
@@ -63,7 +70,7 @@ def settings_view(request):
         "preference_matrix": preference_matrix,
         "recent_notifications": NotificationOutbox.objects.filter(recipient=request.user)[:8],
         "theme": request.user.theme,
-        "theme_choices": request.user.THEME_CHOICES,
+        "theme_choices": list(request.user.THEME_CHOICES) + custom_theme_choices(),
         "totp_style": GateConfig.get_solo().totp_style,
         "totp_style_choices": GateConfig.TOTP_STYLE_CHOICES,
         "reveal_identifiers": GateConfig.get_solo().reveal_identifiers,

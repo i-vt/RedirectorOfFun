@@ -1,0 +1,14 @@
+{
+  "label": "Loader stage",
+  "description": "Loader fetches its stage-2 through a token-gated URL with a benevolent fallback.",
+  "defaults": {
+    "kind": "file",
+    "gate_type": "token",
+    "gate_token": "{random token}",
+    "placeholder": "blank",
+    "on_deny": "benevolent",
+    "benevolent_text": "{clean exit response}",
+    "one_time": false,
+    "max_uses": 5
+  }
+}

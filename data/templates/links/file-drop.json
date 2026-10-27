@@ -1,0 +1,14 @@
+{
+  "label": "Time-boxed file drop",
+  "description": "pwndrop-backed payload with a use count and expiry; watermark enabled for leak tracing.",
+  "defaults": {
+    "kind": "proxy",
+    "pwndrop_url": "{pwndrop file URL}",
+    "gate_type": "token",
+    "gate_token": "{random token}",
+    "max_uses": 10,
+    "watermark": true,
+    "placeholder": "placeholder",
+    "on_deny": "decoy"
+  }
+}

@@ -24,6 +24,7 @@
     <div>
       {% if link.gate_type == 'totp' %}<a class="button secondary" href="{% url 'gate-link-totp' link.pk %}" hx-get="{% url 'gate-link-totp' link.pk %}" hx-target="#totp-codes">Show TOTP codes</a>{% endif %}
       <a class="button secondary" href="{% url 'gate-link-edit' link.pk %}">{% icon "settings" %}Edit</a>
+      <form method="post" action="{% url 'gate-link-export-template' link.pk %}" style="display:inline">{% csrf_token %}<input type="hidden" name="name" value="{{ link.label }}"><button class="button secondary" type="submit" data-tip="Save this configuration as a reusable template in ./data/templates/links/">{% icon "payloads" %}Export template</button></form>
       <form method="post" action="{% url 'gate-link-toggle' link.pk %}" style="display:inline">{% csrf_token %}<button class="button secondary" type="submit">{{ link.active|yesno:"Deactivate,Activate" }}</button></form>
       <form method="post" action="{% url 'gate-link-burn' link.pk %}" style="display:inline" data-confirm="BURN this link? It deactivates, denies all traffic, and bans every visitor IP except the approved target.">{% csrf_token %}<button class="button secondary" type="submit" style="color:var(--s-danger)">{% icon "flame" %}Burn notice</button></form>
     </div>

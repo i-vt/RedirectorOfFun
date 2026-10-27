@@ -18,7 +18,7 @@ from .models import (
     GateConfig, HitEvent, LureSite, RuleSet, seed_blocking_rule_presets, Submission,
     SubmissionImage, validate_auto_rules, validate_header_contract,
 )
-from .link_templates import LINK_TEMPLATES
+from .link_templates import get_templates
 from . import library, services
 
 
@@ -59,6 +59,59 @@ def admission_decide_all(request):
     return _safe_redirect_back(request, "gate-submissions")
 
 
+TEMPLATE_EXPORT_FIELDS = (
+    "kind", "key_text", "pwndrop_url", "gate_type", "gate_token", "totp_secret",
+    "totp_window", "cipher", "cipher_key", "cipher_iv", "expected_fields",
+    "auto_rules", "placeholder", "on_deny", "benevolent_text", "requires_approval",
+    "manual_admission", "admission_ttl", "one_time", "max_uses", "serve_num",
+    "serve_den", "watermark", "replay_dedupe", "allowed_ips", "allowed_uas",
+    "header_contract", "serve_as", "post_download_redirect", "post_download_url",
+    "ja3_fingerprint", "ja4_fingerprint", "loading_page", "fingerprint_page",
+    "download_page", "benevolent_page", "domain", "active_window_start",
+    "active_window_end",
+)
+
+
+@login_required
+@transaction.atomic
+def link_export_template(request, pk):
+    """Save a link's configuration as a reusable template in the library."""
+    if request.method != "POST":
+        return redirect("gate-link-detail", pk=pk)
+    link = get_object_or_404(DeliveryLink, pk=pk)
+    name = request.POST.get("name", "").strip()[:80] or link.label or f"template-{link.pk}"
+    slug = library.slugify_name(name)
+    defaults = {}
+    for field in TEMPLATE_EXPORT_FIELDS:
+        value = getattr(link, field)
+        if isinstance(value, bool):
+            defaults[field] = value
+        elif isinstance(value, (list, dict)):
+            defaults[field] = value
+        elif value not in (None, ""):
+            defaults[field] = value.isoformat() if hasattr(value, "isoformat") else str(value)
+    payload = json.dumps({
+        "label": name,
+        "description": f"Exported from {link.path} by {request.user.username}.",
+        "defaults": defaults,
+    }, indent=2) + "\n"
+    library.write_template_file("links", slug, ".json", payload)
+    record_event(action="gate.template_exported", actor=request.user, target=link,
+                 metadata={"template": slug}, request=request)
+    messages.success(request, f"Template '{slug}' saved to ./data/templates/links/ - it now appears in the form picker.")
+    return redirect("gate-link-detail", pk=pk)
+
+
+@login_required
+def theme_css(request, name):
+    """Serve a custom theme from ./data/templates/themes/<name>.css."""
+    from django.http import Http404
+    raw = library.read_template_file("themes", f"{name}.css", ".css")
+    if raw is None:
+        raise Http404
+    return HttpResponse(raw, content_type="text/css")
+
+
 @login_required
 def links_view(request):
     links = DeliveryLink.objects.all()
@@ -95,7 +148,7 @@ def link_create(request):
         return redirect("gate-link-detail", pk=link.pk)
     link = DeliveryLink()
     template_name = request.GET.get("template", "").strip()
-    template = LINK_TEMPLATES.get(template_name)
+    template = get_templates().get(template_name)
     if template:
         for field, value in template["defaults"].items():
             setattr(link, field, value)
@@ -114,7 +167,7 @@ def _render_link_form(request, link, title):
         "allowed_uas_csv": ", ".join(link.allowed_uas or []),
         "allowed_ips_csv": ", ".join(link.allowed_ips or []),
         "domains": getattr(settings, "REDIRECTOR_DOMAINS", []),
-        "templates": LINK_TEMPLATES,
+        "templates": get_templates(),
         "loading_pages": services.page_pool("loading"),
         "fingerprint_pages": services.page_pool("fingerprint"),
         "download_pages": services.page_pool("download"),
@@ -913,6 +966,87 @@ def submission_image(request, pk):
     return FileResponse(image.image.open("rb"), content_type=image.content_type)
 
 
+def _ban_export_payload():
+    return {"format": "rof-bans", "bans": [
+        {"ip": ban.ip, "note": ban.note, "active": ban.active}
+        for ban in BannedIP.objects.all()]}
+
+
+def _import_bans_text(text, actor, request):
+    """Import bans from JSON (rof-bans export) or one IP/CIDR per line."""
+    created = 0
+    entries = []
+    stripped = text.strip()
+    if stripped.startswith("{"):
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError:
+            return 0, ["not valid JSON"]
+        if payload.get("format") != "rof-bans":
+            return 0, ["not a rof-bans export"]
+        entries = payload.get("bans", [])
+    else:
+        entries = [{"ip": line.split("#", 1)[0].strip()} for line in stripped.splitlines()]
+        entries = [e for e in entries if e["ip"]]
+    for entry in entries:
+        ip = str(entry.get("ip", "")).strip()
+        if not services.valid_ip(ip):
+            continue
+        if services._is_loopback(ip) or services._is_trusted_proxy_ip(ip):
+            continue  # never ban the proxy/loopback (would blackhole everyone)
+        _, made = BannedIP.objects.get_or_create(
+            ip=ip, defaults={"note": str(entry.get("note", ""))[:240],
+                             "created_by": actor})
+        created += made
+    if created:
+        services.sync_nginx_files()
+    return created, []
+
+
+@login_required
+def bans_export(request):
+    if request.method == "POST" and request.POST.get("save"):
+        name = request.POST.get("name", "").strip()[:80] or "bans"
+        slug = library.slugify_name(name)
+        library.write_template_file("bans", slug, ".json",
+                                    json.dumps(_ban_export_payload(), indent=2) + "\n")
+        record_event(action="gate.bans_saved_library", actor=request.user,
+                     metadata={"template": slug}, request=request)
+        messages.success(request, f"Bans saved as '{slug}' in ./data/templates/bans/.")
+        return redirect("gate-bans")
+    payload = _ban_export_payload()
+    record_event(action="gate.bans_exported", actor=request.user, request=request)
+    response = JsonResponse(payload)
+    response["Content-Disposition"] = 'attachment; filename="rof-bans.json"'
+    return response
+
+
+@login_required
+@transaction.atomic
+def bans_import(request):
+    if request.method != "POST":
+        return redirect("gate-bans")
+    if request.FILES.get("import_file"):
+        raw = request.FILES["import_file"].read().decode("utf-8", errors="replace")
+    elif request.POST.get("library_file"):
+        raw = library.read_template_file("bans", request.POST["library_file"].strip(), ".json")
+        if raw is None:
+            messages.error(request, "Library file not found.")
+            return redirect("gate-bans")
+    else:
+        raw = request.POST.get("import_payload", "")
+    created, errors = _import_bans_text(raw, request.user, request)
+    for error in errors:
+        messages.error(request, error)
+    if created:
+        messages.success(request, f"Imported {created} ban(s).")
+        record_event(action="gate.bans_imported", actor=request.user,
+                     metadata={"created": created}, request=request)
+    else:
+        messages.info(request, "Nothing to import.")
+    return redirect("gate-bans")
+
+
 @login_required
 @transaction.atomic
 def bans_view(request):
@@ -940,7 +1074,8 @@ def bans_view(request):
     bans = BannedIP.objects.all()
     paginator = Paginator(bans, 30)
     page = paginator.get_page(request.GET.get("page"))
-    return render(request, "panel/bans.html", {"title": "Banned IPs", "page": page, "bans": page.object_list})
+    return render(request, "panel/bans.html", {"title": "Banned IPs", "page": page, "bans": page.object_list,
+                                               "bans_library": library.list_template_files("bans", ".json")})
 
 
 @login_required
@@ -1200,6 +1335,7 @@ def block_rules_view(request):
         "logics": BlockingRule.LOGIC_CHOICES,
         "actions": BlockingRule.ACTION_CHOICES,
         "condition_types": ["ip", "cidr", "ua", "asn", "isp", "country", "city"],
+        "rules_library": library.list_template_files("rules", ".json"),
     })
 
 
@@ -1269,6 +1405,45 @@ def block_rules_export(request):
     response = JsonResponse(payload)
     response["Content-Disposition"] = 'attachment; filename="rof-blocking-rules.json"'
     return response
+
+
+@login_required
+@transaction.atomic
+def block_rules_export_to_library(request):
+    """Save the full chain as a versioned JSON file in ./data/templates/rules/."""
+    if request.method != "POST":
+        return redirect("gate-block-rules")
+    name = request.POST.get("name", "").strip()[:80] or "chain-export"
+    slug = library.slugify_name(name)
+    payload = json.dumps(services.export_blocking_rules(), indent=2) + "\n"
+    library.write_template_file("rules", slug, ".json", payload)
+    record_event(action="gate.block_rules_saved_library", actor=request.user,
+                 metadata={"template": slug}, request=request)
+    messages.success(request, f"Chain saved as '{slug}' in ./data/templates/rules/.")
+    return redirect("gate-block-rules")
+
+
+@login_required
+@transaction.atomic
+def block_rules_import_library(request):
+    """One-click import of a chain file from ./data/templates/rules/."""
+    if request.method != "POST":
+        return redirect("gate-block-rules")
+    name = request.POST.get("name", "").strip()
+    raw = library.read_template_file("rules", name, ".json")
+    if raw is None:
+        messages.error(request, "Library file not found.")
+        return redirect("gate-block-rules")
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        messages.error(request, f"{name} is not valid JSON.")
+        return redirect("gate-block-rules")
+    sets_created, rules_created, errors = services.import_blocking_rules(payload, actor=request.user)
+    if errors:
+        messages.warning(request, "; ".join(errors[:3]))
+    messages.success(request, f"Imported {name}: {sets_created} set(s), {rules_created} rule(s) (disabled).")
+    return redirect("gate-block-rules")
 
 
 @login_required

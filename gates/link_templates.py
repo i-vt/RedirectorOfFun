@@ -49,3 +49,29 @@ LINK_TEMPLATES = {
         },
     },
 }
+
+
+def get_templates():
+    """Built-in templates overlaid with ./data/templates/links/*.json.
+
+    A file with the same key overrides the built-in; new keys extend the
+    picker. Invalid JSON files are skipped silently (the form never breaks).
+    """
+    import json
+    templates = dict(LINK_TEMPLATES)
+    from . import library
+    for name in library.list_template_files("links", ".json"):
+        raw = library.read_template_file("links", name, ".json")
+        if raw is None:
+            continue
+        try:
+            entry = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(entry, dict) and isinstance(entry.get("defaults"), dict):
+            templates[name[:-5]] = {
+                "label": str(entry.get("label") or name[:-5])[:80],
+                "description": str(entry.get("description", ""))[:300],
+                "defaults": entry["defaults"],
+            }
+    return templates

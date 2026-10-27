@@ -34,3 +34,21 @@ data/decoys/*
 !data/payloads/
 data/payloads/*
 !data/payloads/example-bundle/
+# Template library: shipped defaults tracked, operator files stay local.
+!data/templates/
+data/templates/*
+!data/templates/links/
+data/templates/links/*
+!data/templates/links/dropper-checkin.json
+!data/templates/links/file-drop.json
+!data/templates/links/key-drop-one-time.json
+!data/templates/links/loader-stage.json
+!data/templates/rules/
+data/templates/rules/*
+!data/templates/rules/404-probes-only.json
+!data/templates/rules/allow-soc-block-rest.json
+!data/templates/rules/scanner-defense.json
+!data/templates/rules/single-link-guard.json
+!data/templates/themes/
+data/templates/themes/*
+!data/templates/themes/paper.css
