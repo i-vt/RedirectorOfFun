@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="6">
+<title>Loading</title>
+<style>
+  html,body{margin:0;height:100%;background:#fbfbfd;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1d1d1f}
+  .wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px}
+  .bar-track{width:220px;height:4px;border-radius:2px;background:#e3e3e6;overflow:hidden}
+  .bar{height:100%;width:35%;border-radius:2px;background:#0071e3;animation:slide 1.2s ease-in-out infinite}
+  p{font-size:13px;color:#6e6e73;margin:0}
+  @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(320%)}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="bar-track"><div class="bar"></div></div>
+    <p>Loading content&hellip;</p>
+  </div>
+</body>
+</html>

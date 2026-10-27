@@ -11,4 +11,21 @@ htmlcov/
 docker/certs/
 payloads/
 var/
-data/
+# Operator content stays local; only the shipped samples are tracked.
+data/*
+!data/README.md
+!data/loading/
+data/loading/*
+!data/loading/example.html
+!data/fingerprint/
+data/fingerprint/*
+!data/fingerprint/example.html
+!data/download/
+data/download/*
+!data/download/example.html
+!data/benevolent/
+data/benevolent/*
+!data/benevolent/example.html
+!data/payloads/
+data/payloads/*
+!data/payloads/example-bundle/
