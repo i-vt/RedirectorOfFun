@@ -225,11 +225,10 @@ def _decoy(request=None, status=200):
 def surface_document(request, path):
     """Serve /robots.txt or /sitemap.xml.
 
-    An operator-provided file next to manage.py always wins (never
-    overwritten). Otherwise the document is generated: realistic, seeded per
-    deployment (stable within it, different across deployments), listing real
-    lure paths plus plausible seeded extras - nothing to write a detection
-    rule against."""
+    An operator-provided file next to manage.py (or in ./data/) always wins
+    (never overwritten). Otherwise the document is generated: realistic,
+    seeded per deployment (stable within it, different across deployments),
+    and fully synthetic - it never maps lures, payloads, or gate paths."""
     from pathlib import Path
     data_dir = Path(getattr(settings, "DATA_DIR", settings.BASE_DIR / "data"))
     configured = data_dir / path.lstrip("/")
@@ -264,18 +263,15 @@ def _generate_surface_document(request, path):
     seed = int.from_bytes(hashlib.sha256(f"{salt}:{path}".encode()).digest()[:8], "big")
     rnd = random.Random(seed)
 
-    lure_paths = []
-    for site in LureSite.objects.filter(active=True).prefetch_related("files")[:5]:
-        for file in list(site.files.all())[:12]:
-            lure_paths.append(site.public_path + file.path)
+    # Never list real lure paths: a sitemap that maps the operation hands
+    # scanners a target list. The documents are fully synthetic.
     words = ["about", "contact", "products", "services", "news", "blog",
              "support", "pricing", "team", "faq", "careers", "partners"]
     rnd.shuffle(words)
-    extras = []
+    urls = []
     for word in words[:rnd.randint(3, 6)]:
-        extras.append(rnd.choice(["/{w}/", "/{w}", "/{w}.html", "/pages/{w}/",
-                                  "/{w}/index.html"]).format(w=word))
-    urls = lure_paths + extras
+        urls.append(rnd.choice(["/{w}/", "/{w}", "/{w}.html", "/pages/{w}/",
+                                "/{w}/index.html"]).format(w=word))
 
     if path == "/robots.txt":
         lines = [rnd.choice(["User-agent: *", "User-Agent: *", "user-agent: *"])]

@@ -3864,12 +3864,16 @@ class SidebarPaletteLibraryRobotsTests(TestCase):
         self.assertNotIn(dj_settings.GATE_BASE_PATH.encode(), sitemap.content)
         self.assertNotIn(dj_settings.GATE_BASE_PATH.encode(), first.content)
 
-    def test_robots_lists_lure_paths(self):
+    def test_surface_documents_never_map_lures(self):
         site = LureSite.objects.create(name="Shop", slug="shop", active=True)
         site.files.create(path="index.html", content="x")
         site.files.create(path="css/style.css", content="y")
         sitemap = self.public.get("/sitemap.xml")
-        self.assertIn(b"/l/shop/index.html", sitemap.content)
+        robots = self.public.get("/robots.txt")
+        self.assertNotIn(b"/l/shop", sitemap.content)  # no free target list
+        self.assertNotIn(b"/l/shop", robots.content)
+        from django.conf import settings as dj_settings
+        self.assertNotIn(dj_settings.LURE_BASE_PATH.encode(), sitemap.content)
 
     def test_configured_surface_files_never_overwritten(self):
         from pathlib import Path
