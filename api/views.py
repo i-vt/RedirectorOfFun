@@ -132,7 +132,7 @@ class SubmissionDecide(APIView):
         submission = get_object_or_404(Submission.objects.select_related("link"), pk=pk)
         decided = gate_services.decide_submission(submission, verdict, actor=request.user,
                                                   via="api", request=request,
-                                                  remember=bool(request.data.get("remember")))
+                                                  remember=str(request.data.get("remember", "")).lower() in {"1", "true", "yes", "on"})
         if decided is None:
             return Response({"detail": f"Submission #{submission.pk} was already decided."},
                             status=status.HTTP_409_CONFLICT)
@@ -149,6 +149,9 @@ class BannedIPList(generics.ListCreateAPIView):
         ip = str(request.data.get("ip", "")).strip()
         if not gate_services.valid_ip(ip):
             return Response({"detail": f"'{ip}' is not a valid IP address."}, status=status.HTTP_400_BAD_REQUEST)
+        if gate_services._is_loopback(ip) or gate_services._is_trusted_proxy_ip(ip):
+            return Response({"detail": f"Refusing to ban {ip}: proxy/loopback addresses blackhole everyone behind them."},
+                            status=status.HTTP_400_BAD_REQUEST)
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         ban, created = BannedIP.objects.get_or_create(
@@ -471,7 +474,10 @@ class RuleSetDetail(generics.RetrieveUpdateDestroyAPIView):
 class BlockingRuleReorder(APIView):
     def post(self, request):
         kind = request.data.get("kind")
-        ids = request.data.get("ids", [])
+        try:
+            ids = [int(i) for i in request.data.get("ids", [])]
+        except (TypeError, ValueError):
+            return Response({"detail": "ids must be integers."}, status=status.HTTP_400_BAD_REQUEST)
         if kind == "rule":
             for index, rule_id in enumerate(ids):
                 BlockingRule.objects.filter(pk=rule_id).update(order=index)

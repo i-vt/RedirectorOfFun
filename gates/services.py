@@ -134,7 +134,7 @@ def _blank():
     return HttpResponse(status=204)
 
 
-def _placeholder(link=None):
+def _placeholder(request, link=None):
     return range_aware_response(request, render_to_string("gates/placeholder.html", {"link": link}), content_type="text/html")
 
 
@@ -396,7 +396,7 @@ def gate_denied_response(link, request=None):
 def hold_response(link, request=None):
     """What a not-yet-approved link returns until an operator releases it."""
     if link.placeholder == "placeholder":
-        return _placeholder(link)
+        return _placeholder(request, link)
     if link.placeholder == "decoy":
         return _decoy(request)
     if link.placeholder == "loading":
@@ -415,7 +415,11 @@ def hold_response(link, request=None):
 
 
 def _extract_blob(request):
-    body = request.body.decode("utf-8", errors="replace").strip()
+    max_bytes = getattr(settings, "SUBMISSION_MAX_BYTES", 4 * 1024 * 1024)
+    raw = request.body  # chunked uploads carry no CONTENT_LENGTH: measure now
+    if len(raw) > max_bytes:
+        raise GateCryptoError("submission body too large.")
+    body = raw.decode("utf-8", errors="replace").strip()
     if not body:
         raise GateCryptoError("empty submission body.")
     try:
@@ -568,27 +572,49 @@ def check_admission(link, request, path):
 
     Returns None when the visitor is admitted (serving continues). Pending
     visitors get the held view; denied visitors get the deny response. A POST
-    to a fingerprint-placeholder link attaches browser intel to the pending
-    admission and answers 204."""
-    from .crypto_utils import sanitize_text
+    to a fingerprint-placeholder link attaches browser intel to the visitor's
+    admission row and answers 204 - that row doubles as the intel store even
+    when admission gating is off (rows created auto-admitted)."""
+    from django.db import IntegrityError
+    from .crypto_utils import sanitize_json_text, sanitize_text
     from .models import GateAdmission
     ip = client_ip(request)
+    fingerprint_post = request.method == "POST" and link.placeholder == "fingerprint"
     if not ip:
-        return hold_response(link, request)
-    admission, created = GateAdmission.objects.get_or_create(
-        link=link, ip=ip,
-        defaults={"ip_hash": hash_address(ip),
-                  "user_agent": sanitize_text(request.META.get("HTTP_USER_AGENT", ""))})
+        return hold_response(link, request) if link.manual_admission else None
+    if not link.manual_admission and not fingerprint_post:
+        return None  # plain visitors create no rows
+    try:
+        admission, created = GateAdmission.objects.get_or_create(
+            link=link, ip=ip,
+            defaults={"ip_hash": hash_address(ip),
+                      "user_agent": sanitize_text(request.META.get("HTTP_USER_AGENT", "")),
+                      "status": "pending" if link.manual_admission else "admitted"})
+    except IntegrityError:
+        # parallel polls from the same visitor raced the insert
+        admission, created = GateAdmission.objects.get(link=link, ip=ip), False
     if not created:
         GateAdmission.objects.filter(pk=admission.pk).update(
             hits=F("hits") + 1, last_seen_at=timezone.now())
-    if created:
+    if created and link.manual_admission:
         record_hit("awaiting_approval", request=request, path=path, link=link,
                    detail={"admission": admission.pk})
         notify("gates", {
             "title": "Admission requested",
             "detail": f"{link.path}: new visitor {admission.ip_hash[:12]} waits for a decision.",
         })
+    if fingerprint_post:
+        try:
+            payload = json.loads(request.body.decode("utf-8", errors="replace"))
+            intel = payload.get("fingerprint")
+            if isinstance(intel, dict) and len(json.dumps(intel)) <= 8000:
+                admission.fingerprint = sanitize_json_text(intel)
+                admission.save(update_fields=["fingerprint"])
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+        return HttpResponse(status=204)
+    if not link.manual_admission:
+        return None  # intel stored; no gating
     if admission.status == "admitted":
         # Sticky window: the admission holds for admission_ttl seconds after
         # the decision, then the visitor quietly goes back to pending (no new
@@ -602,18 +628,6 @@ def check_admission(link, request, path):
         return None
     if admission.status == "denied":
         return gate_denied_response(link, request)
-    # pending
-    if request.method == "POST" and link.placeholder == "fingerprint":
-        try:
-            payload = json.loads(request.body.decode("utf-8", errors="replace"))
-            intel = payload.get("fingerprint")
-            if isinstance(intel, dict) and len(json.dumps(intel)) <= 8000:
-                from .crypto_utils import sanitize_json_text
-                admission.fingerprint = sanitize_json_text(intel)
-                admission.save(update_fields=["fingerprint"])
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
-        return HttpResponse(status=204)
     return hold_response(link, request)
 
 
@@ -640,6 +654,7 @@ def gate_passed(link, request) -> tuple:
     Network-profile checks (IP allow-list, UA pinning, header contract) run
     before any credential check: they need nothing from the visitor beyond
     the request itself, and a mismatch must not reveal which gate failed."""
+    import hmac
     if link.allowed_ips:
         ip = client_ip(request)
         if not ip or not any(_cidr_matches(entry, ip) for entry in link.allowed_ips):
@@ -660,7 +675,7 @@ def gate_passed(link, request) -> tuple:
         presented = request.headers.get(str(rule.get("name", "")), "")
         if not presented:
             return False, f"contract header missing: {rule.get('name')}"
-        if "value" in rule and presented != str(rule["value"]):
+        if "value" in rule and not hmac.compare_digest(presented, str(rule["value"])):
             return False, f"contract header mismatch: {rule.get('name')}"
         if "pattern" in rule:
             try:
@@ -674,11 +689,17 @@ def gate_passed(link, request) -> tuple:
         return True, None
     presented = client_presented_token(request)
     if link.gate_type == "token":
-        ok = bool(link.gate_token) and presented == link.gate_token
+        import hmac
+        ok = bool(link.gate_token) and hmac.compare_digest(presented, link.gate_token)
         return ok, None if ok else "token mismatch"
     if link.gate_type == "totp":
+        # A fingerprint-intel POST verifies but does not burn the code; the
+        # reload that follows carries the same code for the actual release.
+        intel_post = request.method == "POST" and link.placeholder == "fingerprint"
         if not verify_totp(link.totp_secret, presented, window_seconds=link.totp_window):
             return False, "code mismatch"
+        if intel_post:
+            return True, None
         # A gate code is single-use per link: the first claim wins, replays
         # are rejected and flagged as suspicious. The inner savepoint keeps a
         # rejected insert from poisoning the surrounding transaction.
@@ -719,7 +740,7 @@ def evaluate_auto_rules(link, submission):
         reasons, matched = [], True
         for field, pattern in when.get("fields_match", {}).items():
             candidate = decoded.get(field)
-            if candidate is None or not re.search(pattern, str(candidate)):
+            if candidate is None or not re.search(pattern, str(candidate)[:1000]):
                 matched, reasons = False, reasons + [f"field '{field}' does not match {pattern!r}"]
                 break
             reasons.append(f"field '{field}' matches {pattern!r}")
@@ -875,8 +896,11 @@ def range_aware_response(request, content, *, filename=None, content_type="appli
     if range_header.startswith("bytes="):
         try:
             start_s, _, end_s = range_header[6:].partition("-")
-            start = int(start_s) if start_s else 0
-            end = int(end_s) if end_s else total - 1
+            if start_s:  # "500-999"
+                start, end = int(start_s), (int(end_s) if end_s else total - 1)
+            else:  # suffix "-500" = the last 500 bytes
+                length = int(end_s) if end_s else 0
+                start, end = max(total - length, 0), total - 1
             if start > end or start >= total or start < 0:
                 raise ValueError("bad range")
             end = min(end, total - 1)
@@ -1017,9 +1041,8 @@ def dispatch(request, path):
             return surface_document(request, normalized)
         agent = AgentChannel.objects.filter(token=normalized.rsplit("/", 1)[-1], active=True).first()
         if agent is not None and normalized == agent.path:
-            agent.hits += 1
-            agent.last_seen_at = timezone.now()
-            agent.save(update_fields=["hits", "last_seen_at"])
+            AgentChannel.objects.filter(pk=agent.pk).update(
+                hits=F("hits") + 1, last_seen_at=timezone.now())
             record_hit("hit", request=request, path=normalized, agent_channel=agent,
                        detail={"label": agent.label})
         # Hosted content: lure sites and decoy asset bundles. Unknown slugs and
@@ -1059,12 +1082,23 @@ def dispatch(request, path):
             logger.exception("failed to write synthetic 404 record")
         return None
 
-    decision = evaluate_blocking_rules(request, ip, is_404=False, link=link)
-    if decision is not None:
-        rule, fired = decision
-        response = apply_blocking_rule(request, ip, rule, fired)
-        if response is not None:
-            return response
+    if getattr(request, "_rof_allowed", False):
+        pass  # middleware already stopped the chain at an allow rule
+    else:
+        decision = evaluate_blocking_rules(request, ip, is_404=False, link=link)
+        if decision is not None:
+            rule, fired = decision
+            response = apply_blocking_rule(request, ip, rule, fired)
+            if response is not None:
+                return response
+
+    if link.domain:
+        # Domain-pinned links only answer on their own host.
+        host = request.get_host().split(":")[0].lower()
+        if host != link.domain.lower():
+            record_hit("not_found", request=request, path=path, status_code=404,
+                       detail={"reason": "wrong domain", "expected": link.domain})
+            return None
 
     if not link.available:
         # A signed download-continuation token still serves the bytes: the
@@ -1096,19 +1130,6 @@ def dispatch(request, path):
         if admission_response is not None:
             return admission_response
 
-    if link.replay_dedupe:
-        digest = _request_digest(request, normalized)
-        horizon = timezone.now() - timezone.timedelta(days=7)
-        SeenRequest.objects.filter(link=link, created_at__lt=horizon).delete()
-        from django.db import IntegrityError, transaction
-        try:
-            with transaction.atomic():
-                SeenRequest.objects.create(link=link, digest=digest)
-        except IntegrityError:
-            record_hit("suspicious", request=request, path=normalized, link=link,
-                       status_code=403, detail={"reason": "replayed request"})
-            return hold_response(link, request)
-
     if link.gate_type == "submission" and request.method == "POST":
         return handle_submission(link, request)
 
@@ -1125,6 +1146,21 @@ def dispatch(request, path):
         if secrets.randbelow(link.serve_den) >= link.serve_num:
             record_hit("hit", request=request, path=normalized, link=link,
                        detail={"chance_roll": f"{link.serve_num}/{link.serve_den}", "served": False})
+            return hold_response(link, request)
+
+    if link.replay_dedupe:
+        # Only requests that actually reached the release point count as seen:
+        # held/pending polls are not "accepted" and must not poison the digest.
+        digest = _request_digest(request, normalized)
+        horizon = timezone.now() - timezone.timedelta(days=7)
+        SeenRequest.objects.filter(link=link, created_at__lt=horizon).delete()
+        from django.db import IntegrityError, transaction
+        try:
+            with transaction.atomic():
+                SeenRequest.objects.create(link=link, digest=digest)
+        except IntegrityError:
+            record_hit("suspicious", request=request, path=normalized, link=link,
+                       status_code=403, detail={"reason": "replayed request"})
             return hold_response(link, request)
 
     try:
@@ -1188,9 +1224,15 @@ def burn_link(link, *, actor, request=None):
         if ip and ip != keep and ip != burner and not _is_loopback(ip) and not _is_trusted_proxy_ip(ip) and ip not in seen and not BannedIP.is_banned(ip):
             seen.add(ip)
             ips.append(ip)
-    created = [BannedIP.objects.get_or_create(
-        ip=ip, defaults={"note": f"burn notice for {link.path}", "auto_created": True,
-                         "created_by": actor})[0] for ip in ips]
+    created = []
+    for ip in ips:
+        ban, _ = BannedIP.objects.get_or_create(
+            ip=ip, defaults={"note": f"burn notice for {link.path}", "auto_created": True,
+                             "created_by": actor})
+        if not ban.active:
+            ban.active = True
+            ban.save(update_fields=["active"])
+        created.append(ban)
     try:
         sync_nginx_files()
     except OSError as exc:
@@ -1212,17 +1254,26 @@ def fingerprint_passed(link, request) -> bool:
     """JA3/JA4 enforcement. The hashes must arrive as headers from an OpenResty
     fingerprint front layer; when the front layer is absent the headers are
     empty and fingerprint-gated links refuse to serve."""
+    import hmac
     ok = True
     if link.ja3_fingerprint:
-        ok = request.headers.get("X-JA3-Fingerprint", "") == link.ja3_fingerprint
+        ok = hmac.compare_digest(request.headers.get("X-JA3-Fingerprint", ""), link.ja3_fingerprint)
     if ok and link.ja4_fingerprint:
-        ok = request.headers.get("X-JA4-Fingerprint", "") == link.ja4_fingerprint
+        ok = hmac.compare_digest(request.headers.get("X-JA4-Fingerprint", ""), link.ja4_fingerprint)
     return ok
 
 
 # ─── Blocking rules ───────────────────────────────────────────────────────────
 
-_intel_cache = {}
+_intel_cache = {}  # bounded below; failures are never cached
+
+
+def _intel_cache_put(ip, intel):
+    if intel is None:
+        return
+    if len(_intel_cache) >= 2048:
+        _intel_cache.clear()
+    _intel_cache[ip] = intel
 
 
 def get_ip_intel(ip):
@@ -1234,12 +1285,13 @@ def get_ip_intel(ip):
     """
     if not ip:
         return None
-    if ip in _intel_cache:
-        return _intel_cache[ip]
+    cached = _intel_cache.get(ip)
+    if cached is not None:
+        return cached
     intel = IPIntel.objects.filter(ip=ip).first()
     if intel is None and getattr(settings, "IP_INTEL_ENABLED", True):
         intel = _fetch_ip_intel(ip)
-    _intel_cache[ip] = intel
+    _intel_cache_put(ip, intel)
     return intel
 
 
@@ -1255,14 +1307,16 @@ def _fetch_ip_intel(ip):
     if payload.get("status") != "success" or payload.get("query") != ip:
         return None
     asn, _, org = str(payload.get("as", "")).partition(" ")
-    return IPIntel.objects.create(
+    intel, _ = IPIntel.objects.get_or_create(
         ip=ip,
-        asn=asn.upper().removeprefix("AS").strip(),
-        org=(org or payload.get("isp", ""))[:200],
-        country_code=str(payload.get("countryCode", ""))[:2].upper(),
-        city=str(payload.get("city", ""))[:120],
-        source="ip-api.com",
-    )
+        defaults={
+            "asn": asn.upper().removeprefix("AS").strip(),
+            "org": (org or payload.get("isp", ""))[:200],
+            "country_code": str(payload.get("countryCode", ""))[:2].upper(),
+            "city": str(payload.get("city", ""))[:120],
+            "source": "ip-api.com",
+        })
+    return intel
 
 
 @functools.lru_cache(maxsize=256)
@@ -1524,8 +1578,17 @@ def sync_nginx_files():
     """Write nginx include files for bans and agent routes when paths are configured.
 
     Banned IPs get the default page from the app via the 404 handler anyway;
-    the nginx-level deny is a performance belt-and-suspenders layer.
+    the nginx-level deny is a performance belt-and-suspenders layer. Never
+    raises: the database is the source of truth; the files are a mirror.
     """
+    try:
+        return _sync_nginx_files_inner()
+    except OSError as exc:
+        logger.warning("nginx sync failed (non-fatal): %s", exc)
+        return {}
+
+
+def _sync_nginx_files_inner():
     written = {}
     ban_path = getattr(settings, "NGINX_BAN_INCLUDE", "")
     if ban_path:

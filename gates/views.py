@@ -39,7 +39,7 @@ def admission_decide(request, link_pk, admission_pk, verdict):
                  target=admission.link,
                  metadata={"visitor": admission.ip_hash[:12], "via": "panel"}, request=request)
     messages.success(request, f"Visitor {admission.ip_hash[:12]} {admission.status} on {admission.link.path}.")
-    return redirect(request.META.get("HTTP_REFERER", "gate-links"))
+    return _safe_redirect_back(request, "gate-links")
 
 
 @login_required
@@ -56,7 +56,7 @@ def admission_decide_all(request):
             messages.success(request, f"Admitted {updated} waiting visitor(s).")
         else:
             messages.info(request, "No pending admissions.")
-    return redirect(request.META.get("HTTP_REFERER", "gate-submissions"))
+    return _safe_redirect_back(request, "gate-submissions")
 
 
 @login_required
@@ -124,7 +124,7 @@ def _render_link_form(request, link, title):
 
 
 def _library_file_choices():
-    """Flattened 'bundle/path' refs of every file in the payload library."""
+    """Flattened 'bundle/path' refs of library files (capped for form speed)."""
     choices = []
     for bundle in library.list_bundles():
         for file in bundle["files"]:
@@ -132,6 +132,8 @@ def _library_file_choices():
                 "ref": f"{bundle['name']}/{file['name']}",
                 "label": f"{bundle['name']}/{file['name']} ({file['size']} B)",
             })
+            if len(choices) >= 500:
+                return choices
     return choices
 
 
@@ -253,7 +255,8 @@ def _link_from_post(request, link):
         from django.utils.dateparse import parse_datetime
         parsed = parse_datetime(expires)
         link.expires_at = parsed if parsed else None
-    link.active = request.POST.get("active", "on") == "on"
+    # Absent checkbox means off; the create form ships it checked.
+    link.active = request.POST.get("active") == "on"
     return link
 
 
@@ -354,11 +357,20 @@ def link_quick_drop(request):
     if not file:
         return JsonResponse({"detail": "Attach a file."}, status=400)
     base = _base_path()
-    path = f"{base}{secrets.token_urlsafe(6)}"
-    link = DeliveryLink.objects.create(
-        path=path, kind="file", label=request.POST.get("name", "").strip()[:120] or file.name[:120],
-        placeholder="blank", on_deny="not_found", payload=file, created_by=request.user,
-    )
+    from django.db import IntegrityError
+    link = None
+    for _ in range(3):
+        path = f"{base}{secrets.token_urlsafe(6)}"
+        try:
+            link = DeliveryLink.objects.create(
+                path=path, kind="file", label=request.POST.get("name", "").strip()[:120] or file.name[:120],
+                placeholder="blank", on_deny="not_found", payload=file, created_by=request.user,
+            )
+            break
+        except IntegrityError:
+            continue  # astronomically unlikely path collision: reroll
+    if link is None:
+        return JsonResponse({"detail": "Could not mint a unique path; retry."}, status=503)
     try:
         file.seek(0)
         library.register_upload(file, label=link.label)
@@ -375,7 +387,11 @@ def payloads_view(request):
     gate intel (submissions) attached to each link."""
     if request.method == "POST":
         action = request.POST.get("action", "")
-        link = get_object_or_404(DeliveryLink, pk=request.POST.get("link_id", ""))
+        link_id = request.POST.get("link_id", "")
+        if not str(link_id).isdigit():
+            messages.error(request, "Missing or invalid link id.")
+            return redirect("gate-payloads")
+        link = get_object_or_404(DeliveryLink, pk=int(link_id))
         if action == "replace" and request.FILES.get("payload"):
             old_name = link.payload.name if link.payload else ""
             link.payload = request.FILES["payload"]
@@ -569,6 +585,15 @@ def lures_view(request):
         "title": "Lures", "sites": sites,
         "lure_base": _base_path_setting("LURE_BASE_PATH", "/l/"),
     })
+
+
+def _safe_redirect_back(request, fallback):
+    """Redirect to the referer only when it is same-origin; else the fallback."""
+    from django.utils.http import url_has_allowed_host_and_scheme
+    referer = request.META.get("HTTP_REFERER", "")
+    if referer and url_has_allowed_host_and_scheme(referer, allowed_hosts={request.get_host()}):
+        return redirect(referer)
+    return redirect(fallback)
 
 
 def _file_form_error(request, exc):
@@ -823,7 +848,7 @@ def submission_decide(request, pk, verdict):
                                          remember=request.POST.get("remember") == "1")
     if decided is None:
         messages.info(request, f"Submission #{submission.pk} was already decided.")
-    return redirect(request.META.get("HTTP_REFERER", "gate-submissions"))
+    return _safe_redirect_back(request, "gate-submissions")
 
 
 @login_required
@@ -863,7 +888,7 @@ def submission_note(request, pk):
         submission.save(update_fields=["note", "note_by", "note_at"])
         record_event(action="gate.submission_noted", actor=request.user, target=submission, request=request)
         messages.success(request, f"Note saved on submission #{submission.pk}.")
-    return redirect(request.META.get("HTTP_REFERER", "gate-submissions"))
+    return _safe_redirect_back(request, "gate-submissions")
 
 
 @login_required
@@ -877,7 +902,7 @@ def submission_undo(request, pk):
             messages.success(request, f"Decision on submission #{submission.pk} undone.")
         else:
             messages.error(request, error)
-    return redirect(request.META.get("HTTP_REFERER", "gate-submissions"))
+    return _safe_redirect_back(request, "gate-submissions")
 
 
 @login_required
@@ -1210,6 +1235,7 @@ def rule_set_delete(request, pk):
 @login_required
 @transaction.atomic
 def block_rules_reorder(request):
+    """Reorder rules/sets from the drag-and-drop UI."""
     if request.method != "POST":
         return redirect("gate-block-rules")
     try:
@@ -1217,7 +1243,10 @@ def block_rules_reorder(request):
     except json.JSONDecodeError:
         payload = request.POST
     kind = payload.get("kind")
-    ids = payload.get("ids", [])
+    try:
+        ids = [int(i) for i in payload.get("ids", [])]
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "ids must be integers."}, status=400)
     if kind == "rule":
         for index, rule_id in enumerate(ids):
             BlockingRule.objects.filter(pk=rule_id).update(order=index)

@@ -6,12 +6,30 @@ from django.db import models
 from django.utils import timezone
 
 
+def validate_agent_ua_pattern(value):
+    """Agent UA patterns land in nginx config: must compile as a regex and
+    carry nothing that breaks out of the quoted nginx string."""
+    import re
+    from django.core.exceptions import ValidationError
+    if not value:
+        return
+    try:
+        re.compile(value)
+    except re.error as exc:
+        raise ValidationError(f"Invalid regex: {exc}")
+    if any(c in value for c in ('"', "}", "{", "\n", "\r")):
+        raise ValidationError('No quotes, braces, or newlines (the pattern lands in nginx config).')
+
+
 def validate_gate_path(value):
+    import re
     base = getattr(settings, "GATE_BASE_PATH", "/g/")
     if not value.startswith("/"):
         raise ValidationError("Path must start with '/'.")
     if not value.startswith(base):
         raise ValidationError(f"Gate paths must live under the public base path '{base}' so nginx can route them to the control plane.")
+    if not re.fullmatch(r"[A-Za-z0-9._~/-]+", value):
+        raise ValidationError("Only URL characters: letters, digits, '.', '_', '~', '-', '/'.")
 
 
 def validate_redirector_domain(value):
@@ -296,6 +314,10 @@ class DeliveryLink(models.Model):
             raise ValidationError(
                 {"serve_num": "The serve ratio numerator cannot exceed the denominator "
                               "(3/7 is fine, 7/3 is not)."})
+        if self.gate_type == "token" and not self.gate_token:
+            raise ValidationError({"gate_token": "A token gate needs a token - nothing can pass an empty one."})
+        if self.gate_type == "totp" and not self.totp_secret:
+            raise ValidationError({"totp_secret": "A TOTP gate needs a secret - nothing can pass without one."})
         if self.requires_approval and self.gate_type != "submission":
             raise ValidationError(
                 {"requires_approval": "The verification gate only works with submission links "
@@ -447,7 +469,7 @@ class AgentChannel(models.Model):
 
     label = models.CharField(max_length=120)
     token = models.CharField(max_length=32, unique=True, default=agent_token)
-    ua_pattern = models.CharField(max_length=240, blank=True, help_text="Regex; requests must match to be proxied to the C2. Empty allows all UAs.")
+    ua_pattern = models.CharField(max_length=240, blank=True, validators=[validate_agent_ua_pattern], help_text="Regex; requests must match to be proxied to the C2. Empty allows all UAs.")
     note = models.CharField(max_length=240, blank=True)
     active = models.BooleanField(default=True)
     hits = models.PositiveIntegerField(default=0)
@@ -933,7 +955,7 @@ class SeenRequest(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.link.path}:{self.code}"
+        return f"{self.link.path}:{self.digest[:12]}"
 
 
 class HitEvent(models.Model):

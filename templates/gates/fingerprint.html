@@ -54,7 +54,7 @@
       fp.gl_renderer = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL);
     }
   } catch (e) { /* no webgl */ }
-  fetch(location.pathname, {
+  fetch(location.pathname + location.search, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({fingerprint: fp}),

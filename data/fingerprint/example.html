@@ -31,7 +31,7 @@
     cores: navigator.hardwareConcurrency || 0,
     touch: navigator.maxTouchPoints || 0,
   };
-  fetch(location.pathname, {
+  fetch(location.pathname + location.search, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({fingerprint: fp}),

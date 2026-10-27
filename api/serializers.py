@@ -122,6 +122,16 @@ class DeliveryLinkSerializer(serializers.ModelSerializer):
         if num < 1 or den < 1 or num > den:
             raise serializers.ValidationError(
                 {"serve_num": "serve ratio must be N/M with 1 <= N <= M (1/1 serves always)."})
+        # Cross-field rules live on the model; run them on the API path too.
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        candidate = self.instance or self.Meta.model()
+        for field, value in attrs.items():
+            if hasattr(candidate, field) and field != "payload":
+                setattr(candidate, field, value)
+        try:
+            candidate.clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict)
         return attrs
 
 

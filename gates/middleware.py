@@ -22,6 +22,12 @@ class BlockingRuleMiddleware:
         decision = services.evaluate_blocking_rules(request, ip)
         if decision is not None:
             rule, fired = decision
+            if rule.action == "allow":
+                # count the match once, mark the request, and let it through;
+                # the dispatcher must not re-evaluate (it would double-count)
+                services.apply_blocking_rule(request, ip, rule, fired)
+                request._rof_allowed = True
+                return self.get_response(request)
             response = services.apply_blocking_rule(request, ip, rule, fired)
             if response is not None:
                 return response

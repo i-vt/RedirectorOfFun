@@ -8,8 +8,12 @@ def rate_limit(prefix, limit=20, window=300):
         @wraps(view)
         def wrapped(request, *args, **kwargs):
             if request.method == "POST":
-                address = request.META.get("REMOTE_ADDR", "unknown")
-                key = f"rate:{prefix}:{address}"
+                from gates.services import client_ip
+                address = client_ip(request) or "unknown"
+                # login-ish endpoints also key on the username so one fumbling
+                # operator cannot lock out everyone behind a shared proxy
+                username = request.POST.get("username", "")[:80]
+                key = f"rate:{prefix}:{address}:{username}"
                 added = cache.add(key, 1, window)
                 count = 1 if added else cache.incr(key)
                 if count > limit:

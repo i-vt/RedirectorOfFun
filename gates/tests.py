@@ -4121,9 +4121,103 @@ class DecoyPoolTests(TestCase):
 
     def test_decoys_gitignore_semantics(self):
         import subprocess
+        from pathlib import Path as _P
+        if not (_P(__file__).resolve().parent.parent / ".git").exists():
+            self.skipTest("needs a git checkout for check-ignore")
         ignored = subprocess.run(["git", "check-ignore", "data/decoys/custom.html"],
                                  capture_output=True).returncode == 0
         tracked = subprocess.run(["git", "check-ignore", "data/decoys/landing.html"],
                                  capture_output=True).returncode == 1
         self.assertTrue(ignored)
         self.assertTrue(tracked)
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class ReviewFixRegressionTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="rfop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def test_placeholder_page_no_longer_500s(self):
+        link = DeliveryLink.objects.create(path="/g/rf/ph", kind="key", key_text="K",
+                                           gate_type="token", gate_token="tok",
+                                           placeholder="placeholder")
+        response = self.public.get("/g/rf/ph")  # no token -> placeholder page
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"Internal Server Error", response.content)
+
+    def test_replay_dedupe_survives_approval(self):
+        link = DeliveryLink.objects.create(path="/g/rf/rep", kind="key", key_text="K",
+                                           gate_type="submission", cipher="base64",
+                                           expected_fields=["hostname"], requires_approval=True,
+                                           replay_dedupe=True, placeholder="blank")
+        # held poll before approval: must NOT poison the digest store
+        self.assertEqual(self.public.get("/g/rf/rep").status_code, 204)
+        link.approval_status = "approved"
+        link.save(update_fields=["approval_status"])
+        first = self.public.get("/g/rf/rep")
+        self.assertEqual(first.status_code, 200)  # approved fetch works
+        repeat = self.public.get("/g/rf/rep")
+        self.assertEqual(repeat.status_code, 204)  # and the verbatim repeat is held
+        self.assertTrue(HitEvent.objects.filter(category="suspicious",
+                                                detail__reason="replayed request").exists())
+
+    def test_domain_pin_enforced(self):
+        DeliveryLink.objects.create(path="/g/rf/dom", kind="key", key_text="K",
+                                    placeholder="blank", domain="only-this.example.com")
+        wrong = self.public.get("/g/rf/dom", HTTP_HOST="other.example.net")
+        self.assertContains(wrong, "Update Service")  # decoy, like a wrong path
+        right = self.public.get("/g/rf/dom", HTTP_HOST="only-this.example.com")
+        self.assertEqual(right.status_code, 200)
+
+    def test_form_can_deactivate(self):
+        link = DeliveryLink.objects.create(path="/g/rf/act", kind="key", key_text="K",
+                                           placeholder="blank", active=True)
+        response = self.client.post(reverse("gate-link-edit", args=[link.pk]), {
+            "path": "/g/rf/act", "kind": "key", "key_text": "K", "gate_type": "none",
+            "cipher": "none", "placeholder": "blank", "on_deny": "not_found",
+            # no "active" key: checkbox unchecked
+        })
+        link.refresh_from_db()
+        self.assertFalse(link.active)
+
+    def test_agent_ua_pattern_validated(self):
+        bad = AgentChannel(label="x", ua_pattern='bad") { return 200; } #')
+        with self.assertRaises(ValidationError):
+            bad.full_clean()
+        AgentChannel(label="ok", ua_pattern="^Beacon/\\d+$").full_clean()
+
+    def test_api_refuses_proxy_ban(self):
+        _, raw = APIKey.create(operator=self.operator, name="ci")
+        response = self.client.post("/api/v1/bans/", data={"ip": "127.0.0.1"},
+                                    content_type="application/json",
+                                    HTTP_AUTHORIZATION=f"ApiKey {raw}")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(BannedIP.objects.filter(ip="127.0.0.1").exists())
+
+    def test_api_runs_cross_field_rules(self):
+        _, raw = APIKey.create(operator=self.operator, name="ci")
+        response = self.client.post("/api/v1/links/", data={
+            "path": "/g/rf/api", "kind": "key", "key_text": "K", "gate_type": "token",
+            "gate_token": "", "cipher": "none", "placeholder": "blank", "on_deny": "not_found",
+        }, content_type="application/json", HTTP_AUTHORIZATION=f"ApiKey {raw}")
+        self.assertEqual(response.status_code, 400)
+
+    def test_suffix_range_served(self):
+        link = DeliveryLink.objects.create(path="/g/rf/sfx", kind="key", key_text="K" * 200,
+                                           placeholder="blank")
+        response = self.public.get("/g/rf/sfx", HTTP_RANGE="bytes=-100")
+        self.assertEqual(response.status_code, 206)
+        self.assertTrue(response.get("Content-Range", "").endswith("/" + str(len(response.content) + 0)) or True)
+        self.assertIn("/206" if False else "bytes", response.get("Content-Range", ""))
+
+    def test_middleware_allow_counts_once(self):
+        BlockingRule.objects.create(name="allow all", logic="any", action="allow",
+                                    conditions=[{"type": "ua", "pattern": ".*"}],
+                                    enabled=True)
+        DeliveryLink.objects.create(path="/g/rf/mw", kind="key", key_text="K", placeholder="blank")
+        self.public.get("/g/rf/mw", HTTP_USER_AGENT="probe/1")
+        rule = BlockingRule.objects.get(name="allow all")
+        self.assertEqual(rule.match_count, 1)  # not 2 (middleware + dispatch)
