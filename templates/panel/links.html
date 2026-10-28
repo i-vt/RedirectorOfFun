@@ -19,10 +19,10 @@
 <section class="panel page-panel">
   <div class="panel-heading">
     <div><span class="section-label">RELEASE GATES</span><h2>Delivery links</h2><p>Operator-controlled URLs under <code>/g/</code>: key distribution, gated payload downloads, and proxied sources.</p></div>
-    <div><a class="button" href="{% url 'gate-link-create' %}">{% icon "plus" %}New link</a>
+    {% if not read_only %}<div><a class="button" href="{% url 'gate-link-create' %}">{% icon "plus" %}New link</a>
       <button class="button secondary" type="button" id="quick-drop-open">{% icon "upload" %}Quick drop</button>
       <button class="button secondary" type="button" id="batch-open">{% icon "plus" %}Batch generate</button>
-      {% if pending_count %}<span class="status-badge warn">{{ pending_count }} AWAITING APPROVAL</span>{% else %}<span class="status-badge good">NO PENDING</span>{% endif %}</div>
+      {% if pending_count %}<span class="status-badge warn">{{ pending_count }} AWAITING APPROVAL</span>{% else %}<span class="status-badge good">NO PENDING</span>{% endif %}</div>{% else %}<div>{% if pending_count %}<span class="status-badge warn">{{ pending_count }} AWAITING APPROVAL</span>{% else %}<span class="status-badge good">NO PENDING</span>{% endif %}</div>{% endif %}
   </div>
   <div id="quick-drop-modal" class="rof-modal-overlay" hidden>
     <div class="rof-modal-card" role="dialog" aria-modal="true" aria-labelledby="quick-drop-title">

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% load ui_icons %}
+{% block guide %}
+<p>The operation map: campaigns on the left, their links and lures on the right. Edge width follows hits; click any node to open it.</p>
+<ul>
+  <li>Ungrouped content sits under <code>(ungrouped)</code> so nothing hides.</li>
+  <li>A thick edge means that member carries the operation.</li>
+</ul>
+{% endblock %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">OPERATIONS</span><h2>Operation map</h2><p>Campaigns, their links and lures, and the traffic between them.</p></div>
+    <div><a class="button secondary" href="{% url 'gate-campaigns' %}">← Campaigns</a></div>
+  </div>
+  {{ graph_json|json_script:"graph-data" }}
+  <div id="graph-wrap" style="overflow:auto;border:var(--c-panel-border);border-radius:10px;margin-top:14px">
+    <svg id="op-graph" role="img" aria-label="Campaign graph" style="display:block;min-width:100%"></svg>
+  </div>
+  <div id="graph-empty" class="empty-state" hidden><strong>Nothing to map yet</strong><p>Create a campaign and assign links or lures to it.</p></div>
+</section>
+<script>
+(() => {
+  const graph = JSON.parse(document.getElementById("graph-data").textContent);
+  const svg = document.getElementById("op-graph");
+  if (!graph.nodes.length) {
+    document.getElementById("graph-empty").hidden = false;
+    document.getElementById("graph-wrap").hidden = true;
+    return;
+  }
+  const styles = getComputedStyle(document.documentElement);
+  const accent = styles.getPropertyValue("--s-accent").trim() || "#3fb68b";
+  const muted = styles.getPropertyValue("--s-muted").trim() || "#8b949e";
+  const border = styles.getPropertyValue("--s-border").trim() || "#30363d";
+  const text = styles.getPropertyValue("--s-text").trim() || "#e6edf3";
+  const surface = styles.getPropertyValue("--s-surface").trim() || "#161b22";
+
+  const ROW = 56, COL_CAMPAIGN = 24, COL_MEMBER = 420, NODE_W = 300, NODE_H = 42;
+  // group members under their campaigns, stack blocks vertically
+  const byCampaign = new Map();
+  const campaigns = graph.nodes.filter(n => n.kind === "campaign");
+  const members = graph.nodes.filter(n => n.kind !== "campaign");
+  campaigns.forEach(c => byCampaign.set(c.id, []));
+  graph.edges.forEach(e => { if (byCampaign.has(e.a)) byCampaign.get(e.a).push(e.b); });
+  const memberById = Object.fromEntries(members.map(m => [m.id, m]));
+
+  const positions = {};
+  let y = 20;
+  campaigns.forEach(campaign => {
+    const ids = byCampaign.get(campaign.id) || [];
+    const blockH = Math.max(ids.length, 1) * ROW;
+    positions[campaign.id] = {x: COL_CAMPAIGN, y: y + blockH / 2 - NODE_H / 2};
+    ids.forEach((id, i) => { positions[id] = {x: COL_MEMBER, y: y + i * ROW}; });
+    y += blockH + 28;
+  });
+  const height = y + 10;
+  svg.setAttribute("viewBox", `0 0 760 ${height}`);
+  svg.setAttribute("height", height);
+
+  const ns = "http://www.w3.org/2000/svg";
+  const mk = (tag, attrs) => {
+    const el = document.createElementNS(ns, tag);
+    Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+    return el;
+  };
+
+  graph.edges.forEach(edge => {
+    const a = positions[edge.a], b = positions[edge.b];
+    if (!a || !b) return;
+    const width = Math.min(1 + Math.log2(edge.weight + 1), 8);
+    const path = mk("path", {
+      d: `M ${a.x + NODE_W} ${a.y + NODE_H / 2} C ${a.x + NODE_W + 60} ${a.y + NODE_H / 2}, ${b.x - 60} ${b.y + NODE_H / 2}, ${b.x} ${b.y + NODE_H / 2}`,
+      fill: "none", stroke: muted, "stroke-width": width, opacity: .45,
+    });
+    svg.appendChild(path);
+  });
+
+  graph.nodes.forEach(node => {
+    const pos = positions[node.id];
+    if (!pos) return;
+    const g = mk("g", {cursor: node.url ? "pointer" : "default"});
+    if (node.url) g.addEventListener("click", () => { window.location.href = node.url; });
+    const isCampaign = node.kind === "campaign";
+    g.appendChild(mk("rect", {
+      x: pos.x, y: pos.y, width: NODE_W, height: NODE_H, rx: 8,
+      fill: surface, stroke: isCampaign ? accent : border,
+      "stroke-width": isCampaign ? 1.6 : 1,
+    }));
+    const title = mk("text", {
+      x: pos.x + 12, y: pos.y + 18, fill: text, "font-size": 12,
+      "font-family": "JetBrains Mono, monospace",
+    });
+    title.textContent = (node.label || node.name || "?").slice(0, 34);
+    g.appendChild(title);
+    const meta = mk("text", {
+      x: pos.x + 12, y: pos.y + 33, fill: muted, "font-size": 9,
+      "font-family": "JetBrains Mono, monospace",
+    });
+    meta.textContent = isCampaign
+      ? `${node.hits} hits total`
+      : `${node.kind} · ${node.hits} hits${node.subs ? " · " + node.subs + " subs" : ""}${node.active ? "" : " · off"}`;
+    g.appendChild(meta);
+    svg.appendChild(g);
+  });
+})();
+</script>
+{% endblock %}

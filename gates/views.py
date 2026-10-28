@@ -223,6 +223,49 @@ def link_batch_generate(request):
 
 
 @login_required
+def campaign_graph(request):
+    """The operation map: campaigns -> links/lures, edges weighted by hits."""
+    import json as _json
+    from django.urls import reverse
+    nodes, edges = [], []
+    def member(member, kind, campaign_node):
+        node_id = f"{kind}-{member.pk}"
+        nodes.append({
+            "id": node_id, "kind": kind,
+            "label": getattr(member, "path", None) or member.public_path if kind == "lure" else member.path,
+            "name": member.label or getattr(member, "name", "") or "",
+            "hits": getattr(member, "hit_count", 0),
+            "subs": member.submissions.count() if kind == "link" else 0,
+            "active": member.active,
+            "url": str(reverse("gate-link-detail" if kind == "link" else "gate-lure-edit",
+                               args=[member.pk])),
+        })
+        edges.append({"a": campaign_node, "b": node_id, "weight": max(getattr(member, "hit_count", 1), 1)})
+    for campaign in Campaign.objects.prefetch_related("links", "lures"):
+        node_id = f"campaign-{campaign.pk}"
+        nodes.append({"id": node_id, "kind": "campaign", "label": campaign.name,
+                      "name": "", "hits": sum(l.hit_count for l in campaign.links.all()),
+                      "subs": 0, "active": campaign.active,
+                      "url": str(reverse("gate-campaign-detail", args=[campaign.pk]))})
+        for link in campaign.links.all():
+            member(link, "link", node_id)
+        for lure in campaign.lures.all():
+            member(lure, "lure", node_id)
+    # ungrouped content under a synthetic root so nothing is invisible
+    orphans = list(DeliveryLink.objects.filter(campaign__isnull=True)) + list(
+        LureSite.objects.filter(campaign__isnull=True))
+    if orphans:
+        nodes.append({"id": "campaign-0", "kind": "campaign", "label": "(ungrouped)",
+                      "name": "", "hits": 0, "subs": 0, "active": True, "url": ""})
+        for orphan in orphans:
+            kind = "link" if hasattr(orphan, "path") else "lure"
+            member(orphan, kind, "campaign-0")
+    return render(request, "panel/campaign_graph.html", {
+        "title": "Operation map", "graph_json": {"nodes": nodes, "edges": edges},
+    })
+
+
+@login_required
 def theme_css(request, name):
     """Serve a custom theme from ./data/templates/themes/<name>.css."""
     from django.http import Http404

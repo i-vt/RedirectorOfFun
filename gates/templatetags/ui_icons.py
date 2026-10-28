@@ -72,6 +72,7 @@ def palette_destinations(context):
         {"group": "NAVIGATE", "label": "Approvals", "url": reverse("gate-submissions"), "hint": "queue + admissions"},
         {"group": "NAVIGATE", "label": "Gate Intel", "url": reverse("gate-intel"), "hint": "imagery"},
         {"group": "NAVIGATE", "label": "Campaigns", "url": reverse("gate-campaigns"), "hint": "operations"},
+        {"group": "NAVIGATE", "label": "Operation map", "url": reverse("gate-campaign-graph"), "hint": "graph view"},
         {"group": "ADMINISTER", "label": "Banned IPs", "url": reverse("gate-bans"), "hint": ""},
         {"group": "ADMINISTER", "label": "Blocking Rules", "url": reverse("gate-block-rules"), "hint": ""},
         {"group": "ADMINISTER", "label": "Agent Channels", "url": reverse("gate-agents"), "hint": ""},

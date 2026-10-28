@@ -12,6 +12,7 @@
 <section class="panel page-panel">
   <div class="panel-heading">
     <div><span class="section-label">OPERATIONS</span><h2>Campaigns</h2><p>Group links and lures into named operations. Stats roll up per campaign.</p></div>
+    <div><a class="button secondary" href="{% url 'gate-campaign-graph' %}">{% icon "campaigns" %}Operation map</a></div>
   </div>
   <form method="post" class="stacked-form">
     {% csrf_token %}

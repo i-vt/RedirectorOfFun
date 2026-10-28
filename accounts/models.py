@@ -12,6 +12,11 @@ class Operator(AbstractUser):
     totp_enabled = models.BooleanField(default=False)
     backup_code_hashes = models.JSONField(default=list, blank=True)
     theme = models.CharField(max_length=16, choices=THEME_CHOICES, default="default")
+
+    @property
+    def role_name(self):
+        group = self.groups.first()
+        return group.name if group else "Operator"
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

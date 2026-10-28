@@ -225,7 +225,31 @@ def operators_view(request):
     return render(request, "panel/operators.html", {
         "title": "Operators", "form": form, "operators": operators,
         "invitations": invitations, "invitation_url": invitation_url,
+        "roles": [r for r, _ in Invitation.ROLE_CHOICES],
     })
+
+
+@login_required
+def operator_role_view(request, pk):
+    """Change an operator's role (admin only)."""
+    if not is_administrator(request.user):
+        return render(request, "403.html", status=403)
+    target = get_object_or_404(Operator, pk=pk)
+    if request.method == "POST":
+        role = request.POST.get("role", "")
+        from accounts.models import Invitation
+        valid = dict(Invitation.ROLE_CHOICES)
+        if role in valid and target.pk != request.user.pk:
+            from django.contrib.auth.models import Group
+            from .services import ensure_role_groups
+            ensure_role_groups()
+            target.groups.set([Group.objects.get(name=role)])
+            from audit.services import record_event
+            record_event(action="operator.role_changed", actor=request.user, target=target,
+                         metadata={"role": role}, request=request)
+            from django.contrib import messages
+            messages.success(request, f"{target.username} is now {role}.")
+    return redirect("operators")
 
 
 @login_required

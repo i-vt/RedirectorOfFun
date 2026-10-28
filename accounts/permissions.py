@@ -26,3 +26,10 @@ class AdministratorRequiredMixin(UserPassesTestMixin):
 class IsAdministrator(BasePermission):
     def has_permission(self, request, view):
         return is_administrator(request.user)
+
+
+def is_read_only(user):
+    """Auditors watch everything and change nothing. Administrators always write."""
+    return bool(user.is_authenticated and user.is_active
+                and user.groups.filter(name="Auditor").exists()
+                and not is_administrator(user))

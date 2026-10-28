@@ -13,6 +13,7 @@ urlpatterns = [
     path("admissions/admit-all/", views.admission_decide_all, name="gate-admissions-admit-all"),
     path("payloads/", views.payloads_view, name="gate-payloads"),
     path("campaigns/", views.campaigns_view, name="gate-campaigns"),
+    path("campaigns/graph/", views.campaign_graph, name="gate-campaign-graph"),
     path("campaigns/<int:pk>/", views.campaign_detail, name="gate-campaign-detail"),
     path("campaigns/<int:pk>/toggle/", views.campaign_toggle, name="gate-campaign-toggle"),
     path("themes/<str:name>", views.theme_css, name="gate-theme-css"),

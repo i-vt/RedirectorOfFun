@@ -4558,3 +4558,109 @@ class CampaignsAndTrackingTests(TestCase):
         self.assertIn("url", body)
         self.assertTrue(body["url"].startswith("http"))
         self.assertNotIn("127.0.0.1", body["url"])
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class ReadOnlyAuditorTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import Group
+        from accounts.services import ensure_role_groups
+        ensure_role_groups()
+        self.operator = Operator.objects.create_user(username="rop-admin", password="long-enough-password-123")
+        self.operator.groups.add(Group.objects.get(name="Administrator"))
+        self.auditor = Operator.objects.create_user(username="watcher", password="long-enough-password-123")
+        self.auditor.groups.add(Group.objects.get(name="Auditor"))
+        self.client = Client()
+        self.client.force_login(self.auditor)
+
+    def test_auditor_reads_everything_writes_nothing(self):
+        DeliveryLink.objects.create(path="/g/ro/one", kind="key", key_text="K", placeholder="blank")
+        # reads fine
+        self.assertEqual(self.client.get(reverse("gate-links")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("gate-campaigns")).status_code, 200)
+        # writes blocked
+        response = self.client.post(reverse("gate-link-create"), {
+            "path": "/g/ro/no", "kind": "key", "key_text": "K", "gate_type": "none",
+            "cipher": "none", "placeholder": "blank", "on_deny": "not_found"})
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(DeliveryLink.objects.filter(path="/g/ro/no").exists())
+        # decisions blocked too
+        sub_link = DeliveryLink.objects.create(path="/g/ro/sub", kind="key", key_text="K",
+                                               gate_type="submission", cipher="base64",
+                                               requires_approval=True, placeholder="blank")
+        sub = Submission.objects.create(link=sub_link, decoded_json={"hostname": "ws-1"})
+        response = self.client.post(reverse("gate-submission-decide", args=[sub.pk, "approve"]))
+        self.assertEqual(response.status_code, 403)
+        sub.refresh_from_db()
+        self.assertEqual(sub.status, "pending")
+
+    def test_auditor_api_key_is_read_only(self):
+        _, raw = APIKey.create(operator=self.auditor, name="watch")
+        auth = {"HTTP_AUTHORIZATION": f"ApiKey {raw}"}
+        self.assertEqual(self.client.get("/api/v1/links/", **auth).status_code, 200)
+        response = self.client.post("/api/v1/links/", data={
+            "path": "/g/ro/api", "kind": "key", "key_text": "K", "gate_type": "none",
+            "cipher": "none", "placeholder": "blank", "on_deny": "not_found",
+        }, content_type="application/json", **auth)
+        self.assertEqual(response.status_code, 403)
+
+    def test_auditor_badge_shows(self):
+        response = self.client.get(reverse("gate-links"))
+        self.assertContains(response, "READ-ONLY")
+
+    def test_admin_in_auditor_group_still_writes(self):
+        from django.contrib.auth.models import Group
+        both = Operator.objects.create_user(username="boss", password="long-enough-password-123")
+        both.groups.add(Group.objects.get(name="Administrator"))
+        both.groups.add(Group.objects.get(name="Auditor"))
+        client = Client()
+        client.force_login(both)
+        response = client.post(reverse("gate-link-create"), {
+            "path": "/g/ro/boss", "kind": "key", "key_text": "K", "gate_type": "none",
+            "cipher": "none", "placeholder": "blank", "on_deny": "not_found", "active": "on"})
+        self.assertTrue(DeliveryLink.objects.filter(path="/g/ro/boss").exists())
+
+    def test_admin_can_switch_roles(self):
+        admin_client = Client()
+        admin_client.force_login(self.operator)
+        admin_client.post(reverse("operator-role", args=[self.auditor.pk]), {"role": "Operator"})
+        self.auditor.refresh_from_db()
+        self.assertEqual(self.auditor.role_name, "Operator")
+        # and can write now
+        client = Client()
+        client.force_login(self.auditor)
+        response = client.post(reverse("gate-link-create"), {
+            "path": "/g/ro/now", "kind": "key", "key_text": "K", "gate_type": "none",
+            "cipher": "none", "placeholder": "blank", "on_deny": "not_found", "active": "on"})
+        self.assertTrue(DeliveryLink.objects.filter(path="/g/ro/now").exists())
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class CampaignGraphTests(TestCase):
+    def setUp(self):
+        self.operator = Operator.objects.create_user(username="grop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+
+    def test_graph_renders_nodes_and_edges(self):
+        from gates.models import Campaign
+        campaign = Campaign.objects.create(name="October")
+        link = DeliveryLink.objects.create(path="/g/gp/one", kind="key", key_text="K",
+                                           placeholder="blank", campaign=campaign)
+        self.public_get = Client().get("/g/gp/one")
+        response = self.client.get(reverse("gate-campaign-graph"))
+        content = response.content.decode()
+        self.assertIn("October", content)
+        self.assertIn("/g/gp/one", content)
+        self.assertIn(reverse("gate-link-detail", args=[link.pk]), content)
+        self.assertIn("op-graph", content)
+
+    def test_graph_empty_state(self):
+        response = self.client.get(reverse("gate-campaign-graph"))
+        self.assertContains(response, "Nothing to map yet")
+
+    def test_ungrouped_links_appear(self):
+        DeliveryLink.objects.create(path="/g/gp/orphan", kind="key", key_text="K", placeholder="blank")
+        response = self.client.get(reverse("gate-campaign-graph"))
+        self.assertContains(response, "(ungrouped)")
+        self.assertContains(response, "/g/gp/orphan")
