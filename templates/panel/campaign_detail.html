@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load ui_icons %}
+{% load gate_extras %}
+{% block guide %}
+<p>One operation, rolled up: every link and lure in the campaign, plus combined hits, downloads, submissions, and pending approvals.</p>
+{% endblock %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">OPERATIONS / CAMPAIGN</span><h2>{{ campaign.name }}</h2><p>{{ campaign.description|default:"-" }} · {% if campaign.active %}<span class="status-badge good">ACTIVE</span>{% else %}<span class="status-badge">ARCHIVED</span>{% endif %}</p></div>
+    <div><a class="button secondary" href="{% url 'gate-campaigns' %}">← All campaigns</a></div>
+  </div>
+  <div class="stat-grid">
+    <div class="stat-card"><span class="section-label">LINKS</span><strong class="mono">{{ stats.links }}</strong></div>
+    <div class="stat-card"><span class="section-label">LURES</span><strong class="mono">{{ stats.lures }}</strong></div>
+    <div class="stat-card"><span class="section-label">HITS</span><strong class="mono">{{ stats.hits }}</strong></div>
+    <div class="stat-card"><span class="section-label">DOWNLOADS</span><strong class="mono">{{ stats.downloads }}</strong></div>
+    <div class="stat-card"><span class="section-label">SUBMISSIONS</span><strong class="mono">{{ stats.submissions }}</strong></div>
+    <div class="stat-card"><span class="section-label">PENDING</span><strong class="mono {% if stats.pending %}warn-text{% endif %}">{{ stats.pending }}</strong></div>
+  </div>
+
+  <div class="panel-heading" style="margin-top:20px"><div><span class="section-label">MEMBERS</span><h3>Delivery links</h3></div></div>
+  {% if links %}<div class="table-wrap"><table><thead><tr><th>PATH</th><th>STATUS</th><th>USES</th></tr></thead><tbody>
+    {% for link in links %}<tr>
+      <td class="path-cell mono"><a href="{% url 'gate-link-detail' link.pk %}">{{ link.path }}</a></td>
+      <td>{% if link.active %}<span class="status-badge good">LIVE</span>{% else %}<span class="status-badge">OFF</span>{% endif %}</td>
+      <td class="mono">{{ link.hit_count }}</td>
+    </tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted" style="font-size:.72rem">No links assigned - set the campaign on a link's edit form.</p>{% endif %}
+
+  {% if lures %}
+  <div class="panel-heading" style="margin-top:20px"><div><span class="section-label">MEMBERS</span><h3>Lure sites</h3></div></div>
+  <div class="table-wrap"><table><thead><tr><th>NAME</th><th>PUBLIC URL</th><th>STATUS</th></tr></thead><tbody>
+    {% for site in lures %}<tr>
+      <td><a href="{% url 'gate-lure-edit' site.pk %}">{{ site.name }}</a></td>
+      <td class="mono">{{ site.public_path }}</td>
+      <td>{% if site.active %}<span class="status-badge good">LIVE</span>{% else %}<span class="status-badge">OFFLINE</span>{% endif %}</td>
+    </tr>{% endfor %}
+  </tbody></table></div>
+  {% endif %}
+</section>
+{% endblock %}

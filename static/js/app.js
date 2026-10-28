@@ -17,7 +17,12 @@
     if (close) close.closest(".toast")?.remove();
     const copy = event.target.closest("[data-copy]");
     if (copy) {
-      const input = $(copy.dataset.copy);
+      let input = null;
+      if (copy.dataset.copySibling) {
+        input = copy.closest(".copy-row")?.querySelector("input");
+      } else {
+        input = $(copy.dataset.copy);
+      }
       if (!input) return;
       try {
         await navigator.clipboard.writeText(input.value);

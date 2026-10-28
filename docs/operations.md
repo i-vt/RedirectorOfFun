@@ -53,6 +53,14 @@ sequenceDiagram
 - Deny sends the response you set on the link: 404, decoy, or your benevolent
   content. Configure the benevolent response before the engagement.
 
+## Campaigns and per-target IDs
+
+Group links and lures into a named campaign (Delivery Links → Campaigns).
+Stats roll up on the campaign page. For per-target tracking, set a track
+param on a link (`?ffs=403230`); an ID-tracked link shows the decoy for any
+unregistered ID. Batch generate mints N links with random paths and
+registered IDs in one step.
+
 ## When a link is blown
 
 ```mermaid

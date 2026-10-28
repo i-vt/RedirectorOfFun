@@ -4445,3 +4445,116 @@ class BurnSurfaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         link2.refresh_from_db()
         self.assertFalse(link2.active)
+
+
+@override_settings(AUTO_BAN_THRESHOLD=0)
+class CampaignsAndTrackingTests(TestCase):
+    def setUp(self):
+        import shutil
+        import tempfile
+        media = tempfile.mkdtemp(prefix="rof-media-")
+        patch = override_settings(MEDIA_ROOT=media)
+        patch.enable()
+        self.addCleanup(patch.disable)
+        self.addCleanup(shutil.rmtree, media, True)
+        self.operator = Operator.objects.create_user(username="cmop", password="long-enough-password-123")
+        self.client = Client()
+        self.client.force_login(self.operator)
+        self.public = Client()
+
+    def test_campaign_create_assign_rollup(self):
+        from gates.models import Campaign
+        self.client.post(reverse("gate-campaigns"), {"name": "October", "description": "op"})
+        campaign = Campaign.objects.get(name="October")
+        link = DeliveryLink.objects.create(path="/g/cm/one", kind="key", key_text="K",
+                                           placeholder="blank", campaign=campaign)
+        self.public.get("/g/cm/one")
+        detail = self.client.get(reverse("gate-campaign-detail", args=[campaign.pk]))
+        self.assertContains(detail, "October")
+        self.assertContains(detail, "/g/cm/one")
+        self.assertContains(detail, ">1</strong>")  # hits rolled up
+        # nav + palette
+        self.assertContains(self.client.get(reverse("overview")), reverse("gate-campaigns"))
+
+    def test_campaign_on_link_form(self):
+        from gates.models import Campaign
+        campaign = Campaign.objects.create(name="Op X")
+        response = self.client.get(reverse("gate-link-create"))
+        self.assertContains(response, "Op X")
+        self.client.post(reverse("gate-link-create"), {
+            "path": "/g/cm/two", "kind": "key", "key_text": "K", "gate_type": "none",
+            "cipher": "none", "placeholder": "blank", "on_deny": "not_found",
+            "campaign": str(campaign.pk), "active": "on"})
+        link = DeliveryLink.objects.get(path="/g/cm/two")
+        self.assertEqual(link.campaign, campaign)
+
+    def test_tracked_link_requires_registered_id(self):
+        link = DeliveryLink.objects.create(
+            path="/g/cm/tracked/doc.docx", kind="key", key_text="K", placeholder="blank",
+            track_param="ffs", track_ids=["403230"], require_track_id=True)
+        # no id / wrong id -> decoy, not the content
+        missing = self.public.get("/g/cm/tracked/doc.docx")
+        self.assertContains(missing, "Update Service")
+        wrong = self.public.get("/g/cm/tracked/doc.docx?ffs=nope")
+        self.assertContains(wrong, "Update Service")
+        # registered id -> content
+        ok = self.public.get("/g/cm/tracked/doc.docx?ffs=403230")
+        self.assertEqual(ok.status_code, 200)
+        hit = HitEvent.objects.filter(link=link, category="hit").latest("created_at")
+        self.assertEqual(hit.detail["track_id"], "403230")
+
+    def test_tracking_without_requirement_just_records(self):
+        link = DeliveryLink.objects.create(path="/g/cm/soft/doc.docx", kind="key", key_text="K",
+                                           placeholder="blank", track_param="rid")
+        self.assertEqual(self.public.get("/g/cm/soft/doc.docx").status_code, 200)
+        self.assertEqual(self.public.get("/g/cm/soft/doc.docx?rid=ab12").status_code, 200)
+        hit = HitEvent.objects.filter(link=link).latest("created_at")
+        self.assertEqual(hit.detail["track_id"], "ab12")
+
+    def test_track_visualizer_on_detail(self):
+        link = DeliveryLink.objects.create(path="/g/cm/viz/d.docx", kind="key", key_text="K",
+                                           placeholder="blank", track_param="id")
+        self.public.get("/g/cm/viz/d.docx?id=aa")
+        self.public.get("/g/cm/viz/d.docx?id=aa")
+        self.public.get("/g/cm/viz/d.docx?id=bb")
+        response = self.client.get(reverse("gate-link-detail", args=[link.pk]))
+        self.assertContains(response, "TARGET TRACKING")
+        self.assertContains(response, "track-series")
+        self.assertContains(response, "aa")
+
+    def test_batch_generate(self):
+        response = self.client.post(reverse("gate-link-batch"), {
+            "count": "3", "filename": "document.docx", "path_style": "short",
+            "track_param": "ffs", "ids_per_link": "2", "id_length": "6",
+            "require_track_id": "on"})
+        self.assertEqual(response.status_code, 200)
+        links = DeliveryLink.objects.order_by("-id")[:3]
+        self.assertEqual(len(links), 3)
+        for link in links:
+            self.assertTrue(link.require_track_id)
+            self.assertEqual(len(link.track_ids), 2)
+            self.assertIn("/document.docx", link.path)
+        # paths are non-sequential
+        paths = [l.path for l in links]
+        self.assertEqual(len(set(paths)), 3)
+        # results page shows absolute URLs
+        self.assertContains(response, "http")
+
+    def test_public_url_never_loopback(self):
+        from gates import services
+        from django.test import RequestFactory
+        request = RequestFactory().get("/", HTTP_HOST="127.0.0.1:8000")
+        base = services.public_base(request)
+        self.assertNotIn("127.0.0.1", base)
+        self.assertNotIn("localhost", base)
+        with override_settings(PUBLIC_URL="https://updates.example.com"):
+            request = RequestFactory().get("/", HTTP_HOST="127.0.0.1:8000")
+            self.assertEqual(services.public_base(request), "https://updates.example.com")
+
+    def test_quick_drop_returns_absolute_url(self):
+        response = self.client.post(reverse("gate-link-quick-drop"),
+                                    {"file": ContentFile(b"D", name="d.bin")})
+        body = response.json()
+        self.assertIn("url", body)
+        self.assertTrue(body["url"].startswith("http"))
+        self.assertNotIn("127.0.0.1", body["url"])

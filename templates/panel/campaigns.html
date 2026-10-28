@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load ui_icons %}
+{% load gate_extras %}
+{% block guide %}
+<p>Campaigns group links and lures into named operations with roll-up stats. Use one per engagement.</p>
+<ul>
+  <li>Assign links from their edit form, lures from their settings.</li>
+  <li>The detail page rolls up hits, downloads, submissions, and pending work.</li>
+</ul>
+{% endblock %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">OPERATIONS</span><h2>Campaigns</h2><p>Group links and lures into named operations. Stats roll up per campaign.</p></div>
+  </div>
+  <form method="post" class="stacked-form">
+    {% csrf_token %}
+    <fieldset>
+      <legend>NEW CAMPAIGN</legend>
+      <div class="grid-2">
+        <label><span>NAME</span><input class="field-input" name="name" maxlength="120" placeholder="October rollout"></label>
+        <label><span>DESCRIPTION</span><input class="field-input" name="description" maxlength="240" placeholder="optional"></label>
+      </div>
+      <button class="button" type="submit">{% icon "campaigns" %}Create campaign</button>
+    </fieldset>
+  </form>
+  {% if campaigns %}
+  <div class="table-wrap" style="margin-top:18px"><table><thead><tr><th>NAME</th><th>LINKS</th><th>LURES</th><th>STATUS</th><th></th></tr></thead><tbody>
+    {% for campaign in campaigns %}
+    <tr>
+      <td><a href="{% url 'gate-campaign-detail' campaign.pk %}"><strong>{{ campaign.name }}</strong></a>{% if campaign.description %}<br><span class="muted" style="font-size:.68rem">{{ campaign.description }}</span>{% endif %}</td>
+      <td class="mono">{{ campaign.link_count }}</td>
+      <td class="mono">{{ campaign.lure_count }}</td>
+      <td>{% if campaign.active %}<span class="status-badge good">ACTIVE</span>{% else %}<span class="status-badge">ARCHIVED</span>{% endif %}</td>
+      <td><form method="post" action="{% url 'gate-campaign-toggle' campaign.pk %}" style="display:inline">{% csrf_token %}<button class="text-button" type="submit">{{ campaign.active|yesno:"ARCHIVE,REOPEN" }}</button></form></td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% else %}
+  <div class="empty-state"><strong>No campaigns yet</strong><p>Create one above, then assign links and lures to it.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

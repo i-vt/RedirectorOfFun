@@ -159,6 +159,23 @@ BENEVOLENT_TARGETS = [
 ]
 
 
+class Campaign(models.Model):
+    """A named operation grouping links and lures, with roll-up stats."""
+
+    name = models.CharField(max_length=120, unique=True)
+    description = models.CharField(max_length=240, blank=True)
+    active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="campaigns")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
+
+
 class DeliveryLink(models.Model):
     """An operator-controlled URL that gates access to keys, payloads, or proxied content."""
 
@@ -203,6 +220,8 @@ class DeliveryLink(models.Model):
     kind = models.CharField(max_length=10, choices=KIND_CHOICES)
     label = models.CharField(max_length=120, blank=True)
     agent_label = models.CharField(max_length=120, blank=True, help_text="Free-form tag, e.g. agent/build name this link was generated for.")
+    campaign = models.ForeignKey(Campaign, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="links", help_text="Operation this link belongs to.")
 
     key_text = models.TextField(blank=True, help_text="Plain content for kind=key.")
     pwndrop_url = models.URLField(blank=True, help_text="Source URL fetched server-side for kind=proxy (pwndrop location is never exposed to the client).")
@@ -268,6 +287,13 @@ class DeliveryLink(models.Model):
                                    help_text="JSON list of IPs/CIDRs allowed to see this link; empty = any.")
     header_contract = models.JSONField(default=list, blank=True, validators=[validate_header_contract],
                                        help_text='Malleable-profile contract: [{"name": "X-Api-Version", "value": "2.1"}] exact or {"name": ..., "pattern": "regex"}. Requests missing or mismatching a header are dropped.')
+    track_param = models.CharField(max_length=12, blank=True,
+                                   help_text="Query param carrying the per-target ID (e.g. 'ffs' in ?ffs=403230). Empty = no tracking.")
+    track_ids = models.JSONField(default=list, blank=True,
+                                 help_text="Registered per-target IDs (1-32 chars each).")
+    require_track_id = models.BooleanField(
+        default=False,
+        help_text="ID-tracked: a hit without a registered ID gets the decoy; anything unregistered looks like a wrong path.")
     replay_dedupe = models.BooleanField(default=False,
                                         help_text="Refuse a request that repeats an earlier accepted request verbatim (method + path + query + UA + body).")
     active_window_start = models.TimeField(null=True, blank=True,
@@ -642,6 +668,8 @@ class LureSite(models.Model):
     active = models.BooleanField(default=True, db_index=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                    on_delete=models.SET_NULL, related_name="lure_sites")
+    campaign = models.ForeignKey(Campaign, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="lures", help_text="Operation this site belongs to.")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

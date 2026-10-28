@@ -27,7 +27,7 @@
     });
     if (!response.ok) { out.textContent = "Drop failed."; return; }
     const body = await response.json();
-    const url = location.origin + body.path;
+    const url = body.url || (location.origin + body.path);
     out.innerHTML = "";
     const link = document.createElement("a");
     link.href = url; link.textContent = url; link.style.color = "var(--accent)";

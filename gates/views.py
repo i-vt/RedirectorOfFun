@@ -14,9 +14,9 @@ from audit.services import record_event
 from notifications.services import notify
 
 from .models import (
-    AgentChannel, BannedIP, BlockingRule, BUILTIN_DECOYS, DecoyPage, DeliveryLink,
-    GateConfig, HitEvent, LureSite, RuleSet, seed_blocking_rule_presets, Submission,
-    SubmissionImage, validate_auto_rules, validate_header_contract,
+    AgentChannel, BannedIP, BlockingRule, BUILTIN_DECOYS, Campaign, DecoyPage,
+    DeliveryLink, GateConfig, HitEvent, LureSite, RuleSet, seed_blocking_rule_presets,
+    Submission, SubmissionImage, validate_auto_rules, validate_header_contract,
 )
 from .link_templates import get_templates
 from . import library, services
@@ -103,6 +103,126 @@ def link_export_template(request, pk):
 
 
 @login_required
+def campaigns_view(request):
+    """Operations: named groups of links and lures with roll-up stats."""
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()[:120]
+        if not name:
+            messages.error(request, "Name is required.")
+            return redirect("gate-campaigns")
+        campaign = Campaign(name=name, description=request.POST.get("description", "").strip()[:240],
+                            created_by=request.user)
+        try:
+            campaign.full_clean()
+        except ValidationError as exc:
+            _file_form_error(request, exc)
+            return redirect("gate-campaigns")
+        campaign.save()
+        record_event(action="gate.campaign_created", actor=request.user, target=campaign,
+                     request=request)
+        messages.success(request, f"Campaign '{campaign.name}' created.")
+        return redirect("gate-campaign-detail", pk=campaign.pk)
+    from django.db.models import Count
+    campaigns = Campaign.objects.annotate(
+        link_count=Count("links", distinct=True),
+        lure_count=Count("lures", distinct=True))
+    return render(request, "panel/campaigns.html", {
+        "title": "Campaigns", "campaigns": campaigns,
+    })
+
+
+@login_required
+def campaign_detail(request, pk):
+    from django.db.models import Count
+    campaign = get_object_or_404(Campaign, pk=pk)
+    links = campaign.links.all()
+    hits = HitEvent.objects.filter(link__campaign=campaign)
+    stats = {
+        "links": links.count(),
+        "lures": campaign.lures.count(),
+        "hits": hits.count(),
+        "downloads": hits.filter(category="download").count(),
+        "submissions": Submission.objects.filter(link__campaign=campaign).count(),
+        "pending": Submission.objects.filter(link__campaign=campaign, status="pending").count(),
+    }
+    return render(request, "panel/campaign_detail.html", {
+        "title": campaign.name, "campaign": campaign, "stats": stats,
+        "links": links, "lures": campaign.lures.all(),
+        "recent_hits": hits.select_related("link")[:25],
+    })
+
+
+@login_required
+@transaction.atomic
+def campaign_toggle(request, pk):
+    campaign = get_object_or_404(Campaign, pk=pk)
+    if request.method == "POST":
+        campaign.active = not campaign.active
+        campaign.save(update_fields=["active"])
+        record_event(action="gate.campaign_toggled", actor=request.user, target=campaign,
+                     metadata={"active": campaign.active}, request=request)
+    return redirect("gate-campaigns")
+
+
+@login_required
+@transaction.atomic
+def link_batch_generate(request):
+    """Mint N ready links at once: random non-sequential paths, per-target IDs,
+    optional template defaults - ready to deploy and copy."""
+    if request.method != "POST":
+        return redirect("gate-links")
+    import secrets
+    count = request.POST.get("count", "5")
+    count = min(max(int(count), 1), 50) if count.isdigit() else 5
+    filename = request.POST.get("filename", "").strip()[:80] or "document.docx"
+    path_style = request.POST.get("path_style", "short")
+    track_param = request.POST.get("track_param", "").strip()[:12]
+    ids_per = request.POST.get("ids_per_link", "1")
+    ids_per = min(max(int(ids_per), 1), 25) if ids_per.isdigit() else 1
+    id_length = request.POST.get("id_length", "6")
+    id_length = min(max(int(id_length), 1), 32) if id_length.isdigit() else 6
+    require_track_id = request.POST.get("require_track_id") == "on"
+    campaign_id = request.POST.get("campaign", "").strip()
+    campaign = Campaign.objects.filter(pk=campaign_id).first() if campaign_id.isdigit() else None
+    template = get_templates().get(request.POST.get("template", ""))
+    base = _base_path()
+    alphabet = "abcdef0123456789"
+
+    def fresh_id():
+        return "".join(secrets.choice(alphabet) for _ in range(id_length))
+
+    rows = []
+    for index in range(count):
+        segment = secrets.token_urlsafe(4)[:5] if path_style == "short" else __import__("uuid").uuid4().hex[:12]
+        link = DeliveryLink(
+            path=f"{base}{segment}/{filename}", kind="file",
+            label=f"batch-{timezone.now():%m%d-%H%M}-{index + 1}",
+            placeholder="blank", on_deny="not_found",
+            track_param=track_param, require_track_id=require_track_id,
+            campaign=campaign, created_by=request.user)
+        if template:
+            for field, value in template["defaults"].items():
+                if field in {"path", "label"}:
+                    continue
+                setattr(link, field, value)
+        link.path = f"{base}{segment}/{filename}"
+        link.track_param = track_param
+        link.require_track_id = require_track_id
+        link.campaign = campaign
+        link.track_ids = [fresh_id() for _ in range(ids_per)] if track_param else []
+        link.full_clean()
+        link.save()
+        record_event(action="gate.link_batch_created", actor=request.user, target=link,
+                     metadata={"batch": index + 1, "of": count}, request=request)
+        rows.append({"path": link.path, "url": services.public_url_for(request, link.path),
+                     "ids": link.track_ids})
+    messages.success(request, f"Generated {len(rows)} link(s).")
+    return render(request, "panel/batch_results.html", {
+        "title": "Batch generated", "rows": rows, "count": len(rows),
+    })
+
+
+@login_required
 def theme_css(request, name):
     """Serve a custom theme from ./data/templates/themes/<name>.css."""
     from django.http import Http404
@@ -127,6 +247,7 @@ def links_view(request):
     return render(request, template, {
         "title": "Delivery Links", "page": page, "links": page.object_list,
         "pending_count": DeliveryLink.objects.filter(requires_approval=True, approval_status="pending").count(),
+        "templates": get_templates(), "campaigns": Campaign.objects.filter(active=True),
     })
 
 
@@ -167,6 +288,8 @@ def _render_link_form(request, link, title):
         "allowed_uas_csv": ", ".join(link.allowed_uas or []),
         "allowed_ips_csv": ", ".join(link.allowed_ips or []),
         "domains": getattr(settings, "REDIRECTOR_DOMAINS", []),
+        "campaigns": Campaign.objects.filter(active=True),
+        "track_ids_text": "\n".join(link.track_ids or []),
         "templates": get_templates(),
         "loading_pages": services.page_pool("loading"),
         "fingerprint_pages": services.page_pool("fingerprint"),
@@ -291,6 +414,11 @@ def _link_from_post(request, link):
     else:
         link.header_contract = []
     link.replay_dedupe = request.POST.get("replay_dedupe") == "on"
+    link.track_param = request.POST.get("track_param", "").strip()[:12]
+    link.track_ids = _split_csv(request.POST.get("track_ids", "").replace("\n", ","))
+    link.require_track_id = request.POST.get("require_track_id") == "on"
+    campaign_id = request.POST.get("campaign", "").strip()
+    link.campaign = Campaign.objects.filter(pk=campaign_id).first() if campaign_id.isdigit() else None
     from django.utils.dateparse import parse_time
     link.active_window_start = parse_time(request.POST.get("active_window_start", "").strip() or "") \
         if request.POST.get("active_window_start", "").strip() else None
@@ -333,15 +461,25 @@ def link_detail(request, pk):
         series.append({"day": day, "count": daily.get(day, 0)})
     intel_qs = SubmissionImage.objects.filter(
         submission__link=link).select_related("submission").order_by("-created_at")
+    track_series = []
+    if link.track_param:
+        from django.db.models import Count, Max, Min
+        per_id = (link.hit_events.filter(detail__has_key="track_id")
+                  .values("detail__track_id")
+                  .annotate(count=Count("id"), first=Min("created_at"), last=Max("created_at"))
+                  .order_by("-count"))
+        track_series = [{"id": row["detail__track_id"], "count": row["count"],
+                         "first": row["first"], "last": row["last"]} for row in per_id]
     return render(request, "panel/link_detail.html", {
         "title": f"Link {link.path}", "link": link, "submissions": submissions,
         "hits": link.hit_events.all()[:30], "is_administrator": is_administrator(request.user),
         "undo_seconds": services_undo_window(), "series_json": series,
         "intel_images": intel_qs[:24], "intel_total": intel_qs.count(),
-        "public_url": request.build_absolute_uri(link.path),
+        "public_url": services.public_url_for(request, link.path),
         "admissions": link.admissions.select_related("decided_by")[:20],
         "pending_admissions": link.admissions.filter(status="pending").count(),
         "reveal_ids": _reveal_ids(request),
+        "track_series": track_series,
     })
 
 
@@ -357,13 +495,13 @@ def _reveal_ids(request):
 def link_qr(request, pk):
     """QR code (SVG) for a link's public URL - scan-to-visit from a phone."""
     link = get_object_or_404(DeliveryLink, pk=pk)
-    return _qr_svg_response(request.build_absolute_uri(link.path))
+    return _qr_svg_response(services.public_url_for(request, link.path))
 
 
 @login_required
 def lure_qr(request, pk):
     site = get_object_or_404(LureSite, pk=pk)
-    return _qr_svg_response(request.build_absolute_uri(site.public_path))
+    return _qr_svg_response(services.public_url_for(request, site.public_path))
 
 
 def _qr_svg_response(text):
@@ -431,7 +569,8 @@ def link_quick_drop(request):
         pass  # the library is a convenience; never break a drop
     record_event(action="gate.link_quick_dropped", actor=request.user, target=link,
                  metadata={"size": file.size}, request=request)
-    return JsonResponse({"path": link.path, "label": link.label, "id": link.pk})
+    return JsonResponse({"path": link.path, "label": link.label, "id": link.pk,
+                         "url": services.public_url_for(request, link.path)})
 
 
 @login_required
@@ -634,9 +773,11 @@ def lures_view(request):
         return redirect("gate-lure-edit", pk=site.pk)
     from django.db.models import Count
     sites = LureSite.objects.annotate(file_count=Count("files"))
+    base = services.public_base(request)
     return render(request, "panel/lures.html", {
         "title": "Lures", "sites": sites,
         "lure_base": _base_path_setting("LURE_BASE_PATH", "/l/"),
+        "public_base": base,
     })
 
 
@@ -766,6 +907,7 @@ def lure_edit(request, pk):
     return render(request, "panel/lure_edit.html", {
         "title": f"Lure {site.slug}", "site": site, "files": files, "current": current,
         "library_files": _library_file_choices(),
+        "public_base": services.public_base(request),
     })
 
 

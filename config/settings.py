@@ -192,6 +192,10 @@ MEDIA_URL = "/media/"
 # All operator content lives under ./data/: the payload library, the custom
 # page pools, uploaded files, and the surface-document overrides.
 DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
+# Absolute base for operator-facing URLs (QR codes, copy buttons). Set it to
+# the public domain (https://updates.example.com) or leave empty to use the
+# request host, falling back to the server's primary IP - never loopback.
+PUBLIC_URL = os.getenv("PUBLIC_URL", "")
 # Payload library: one folder per bundle (files + notes.md + favicon.ico).
 PAYLOAD_LIBRARY_DIR = Path(os.getenv("PAYLOAD_LIBRARY_DIR", str(DATA_DIR / "payloads")))
 # Custom held-view pages: loading/fingerprint/download/benevolent pools.

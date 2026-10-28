@@ -53,6 +53,7 @@
         <label><span>SERVED ON DOMAIN (set REDIRECTOR_DOMAINS to enable the list)</span><input class="field-input mono" name="domain" maxlength="253" value="{{ link.domain }}" placeholder="updates.example.com"></label>
         {% endif %}
         <label><span>AGENT / BUILD TAG {% tip "Free-form tag tying this link to an agent or build, e.g. agent-42 / 2026-10. Useful for filtering and the payloads page." %}</span><input class="field-input" name="agent_label" maxlength="120" value="{{ link.agent_label }}" placeholder="agent-42 / build 2026-10"></label>
+        <label><span>CAMPAIGN {% tip "The operation this link belongs to; stats roll up on the campaign page." %}</span><select class="field-input" name="campaign"><option value="">(none)</option>{% for c in campaigns %}<option value="{{ c.pk }}" {% if link.campaign_id == c.pk %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select></label>
       </details>
     </fieldset>
     <fieldset>
@@ -169,6 +170,14 @@
         <label class="check" style="align-self:end"><input type="checkbox" name="replay_dedupe" {% if link.replay_dedupe %}checked{% endif %}> <span>REFUSE REPLAYED REQUESTS {% tip "Stores a digest of every accepted request; a verbatim repeat is held as suspicious." %}</span></label>
       </div>
       <p class="muted" style="font-size:.68rem">Time window: both empty = always available; windows may cross midnight (22:00-02:00). Outside the window the link looks expired (410).</p>
+    </details>
+    <details class="adv" {% if link.track_param or link.require_track_id %}open{% endif %}>
+      <summary>PER-TARGET TRACKING <span class="adv-hint">per-visitor IDs in the URL - unregistered IDs see the decoy</span></summary>
+      <div class="grid-3">
+        <label><span>TRACK PARAM {% tip "The query parameter carrying the ID, e.g. 'ffs' in ?ffs=403230. Empty = no tracking." %}</span><input class="field-input mono" name="track_param" maxlength="12" value="{{ link.track_param }}" placeholder="ffs"></label>
+        <label><span>REGISTERED IDs (one per line or comma-separated) {% tip "Only these IDs may pass when the link is ID-tracked. 1-32 chars each; non-sequential, random-looking values are strongest." %}</span><textarea class="field-input mono" name="track_ids" rows="2" placeholder="403230&#10;40ff23fa32">{{ track_ids_text }}</textarea></label>
+        <label class="check" style="align-self:end"><input type="checkbox" name="require_track_id" {% if link.require_track_id %}checked{% endif %}> <span>ID-TRACKED {% tip "A hit without a registered ID gets the decoy - everything unregistered looks like a wrong path." %}</span></label>
+      </div>
     </details>
     <button class="button" type="submit">Save link</button>
   </form>

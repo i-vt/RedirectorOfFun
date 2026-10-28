@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load ui_icons %}
+{% load gate_extras %}
 {% block guide %}
 <p>Delivery links are the URLs you hand out or embed in agents. Each one serves a key, a file, or a proxied download behind whatever gate you set.</p>
 <h3>QUICK PATH</h3>
@@ -20,6 +21,7 @@
     <div><span class="section-label">RELEASE GATES</span><h2>Delivery links</h2><p>Operator-controlled URLs under <code>/g/</code>: key distribution, gated payload downloads, and proxied sources.</p></div>
     <div><a class="button" href="{% url 'gate-link-create' %}">{% icon "plus" %}New link</a>
       <button class="button secondary" type="button" id="quick-drop-open">{% icon "upload" %}Quick drop</button>
+      <button class="button secondary" type="button" id="batch-open">{% icon "plus" %}Batch generate</button>
       {% if pending_count %}<span class="status-badge warn">{{ pending_count }} AWAITING APPROVAL</span>{% else %}<span class="status-badge good">NO PENDING</span>{% endif %}</div>
   </div>
   <div id="quick-drop-modal" class="rof-modal-overlay" hidden>
@@ -77,11 +79,46 @@
       });
       if (!response.ok) { chosen.textContent = "Drop failed."; return; }
       const body = await response.json();
-      urlField.value = location.origin + body.path;
+      urlField.value = body.url || (location.origin + body.path);
       document.getElementById("quick-drop-qr").src = "{% url 'gate-link-qr' 0 %}".replace("/0/", "/" + body.id + "/");
       result.hidden = false;
       setTimeout(() => location.reload(), 2500);
     });
+  })();
+  </script>
+  <div id="batch-modal" class="rof-modal-overlay" hidden>
+    <div class="rof-modal-card" role="dialog" aria-modal="true" aria-labelledby="batch-title">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div><span class="section-label">READY TO DEPLOY</span><h2 id="batch-title">Batch generate</h2><p>Mint N links at once: random non-sequential paths, per-target IDs, optional template defaults.</p></div>
+        <button class="text-button" type="button" id="batch-close">[ CLOSE ]</button>
+      </div>
+      <form method="post" action="{% url 'gate-link-batch' %}" class="stacked-form" style="margin-top:10px">
+        {% csrf_token %}
+        <div class="grid-3">
+          <label><span>COUNT</span><input class="field-input" type="number" name="count" min="1" max="50" value="5"></label>
+          <label><span>FILENAME</span><input class="field-input mono" name="filename" maxlength="80" value="document.docx"></label>
+          <label><span>TEMPLATE (optional)</span><select class="field-input" name="template"><option value="">(none)</option>{% for key, tpl in templates.items %}<option value="{{ key }}">{{ tpl.label }}</option>{% endfor %}</select></label>
+        </div>
+        <div class="grid-3">
+          <label><span>PATH STYLE</span><select class="field-input" name="path_style"><option value="short">Short random (/g/ab3k7/…)</option><option value="uuid">UUID-like (/g/40ff23fa32c1/…)</option></select></label>
+          <label><span>TRACK PARAM {% tip "Query parameter carrying the per-target ID. Empty = no tracking." %}</span><input class="field-input mono" name="track_param" maxlength="12" placeholder="ffs"></label>
+          <label><span>CAMPAIGN</span><select class="field-input" name="campaign"><option value="">(none)</option>{% for c in campaigns %}<option value="{{ c.pk }}">{{ c.name }}</option>{% endfor %}</select></label>
+        </div>
+        <div class="grid-3">
+          <label><span>IDS PER LINK</span><input class="field-input" type="number" name="ids_per_link" min="1" max="25" value="1"></label>
+          <label><span>ID LENGTH</span><input class="field-input" type="number" name="id_length" min="1" max="32" value="6"></label>
+          <label class="check" style="align-self:end"><input type="checkbox" name="require_track_id" checked> <span>ID-TRACKED (unregistered IDs get the decoy)</span></label>
+        </div>
+        <button class="button" type="submit">{% icon "plus" %}Generate</button>
+      </form>
+    </div>
+  </div>
+  <script>
+  (() => {
+    const modal = document.getElementById("batch-modal");
+    document.getElementById("batch-open").addEventListener("click", () => { modal.hidden = false; });
+    document.getElementById("batch-close").addEventListener("click", () => { modal.hidden = true; });
+    modal.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
   })();
   </script>
   <form class="filter-bar" method="get" action="{% url 'gate-links' %}" hx-get="{% url 'gate-links' %}" hx-target="#links-table" hx-push-url="true" hx-trigger="submit, keyup changed delay:450ms from:#filter-label, change from:#filter-kind">

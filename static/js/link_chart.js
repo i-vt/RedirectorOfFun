@@ -35,3 +35,30 @@
     },
   });
 })();
+
+// Per-target ID bar chart (when the link is ID-tracked)
+(() => {
+  const canvas = document.getElementById("track-chart");
+  const source = document.getElementById("track-series");
+  if (!canvas || !source || typeof Chart === "undefined") return;
+  const series = JSON.parse(source.textContent);
+  const styles = getComputedStyle(document.documentElement);
+  const accent = styles.getPropertyValue("--p-mint").trim() || "#3fb68b";
+  const muted = styles.getPropertyValue("--p-muted").trim();
+  const grid = "rgba(80, 110, 145, .16)";
+  new Chart(canvas.getContext("2d"), {
+    type: "bar",
+    data: {labels: series.map(item => item.id), datasets: [{
+      label: "Hits", data: series.map(item => item.count),
+      backgroundColor: accent, borderRadius: 4, maxBarThickness: 42,
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: {duration: 180},
+      plugins: {legend: {display: false}},
+      scales: {
+        x: {grid: {display: false}, ticks: {color: muted, font: {family: "JetBrains Mono", size: 9}}},
+        y: {beginAtZero: true, grid: {color: grid}, border: {display: false}, ticks: {color: muted, precision: 0, font: {family: "JetBrains Mono", size: 9}}},
+      },
+    },
+  });
+})();

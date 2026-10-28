@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load ui_icons %}
+{% load gate_extras %}
+{% block guide %}
+<p>A freshly generated batch of delivery links. Every URL is absolute and copy-paste ready.</p>
+<ul>
+  <li>When the links are ID-tracked, share the URL plus one registered ID per target: <code>&lt;url&gt;?&lt;param&gt;=&lt;id&gt;</code>.</li>
+  <li>Anything unregistered gets the decoy.</li>
+</ul>
+{% endblock %}
+{% block content %}
+<section class="panel page-panel">
+  <div class="panel-heading">
+    <div><span class="section-label">BATCH</span><h2>{{ count }} link{{ count|pluralize }} generated</h2><p>All URLs are absolute - copy and deploy. Find them any time under Delivery Links.</p></div>
+    <div><a class="button secondary" href="{% url 'gate-links' %}">← All links</a></div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>PATH</th><th>URL (copy-ready)</th><th>{% if rows.0.ids %}REGISTERED IDs{% endif %}</th></tr></thead><tbody>
+    {% for row in rows %}
+    <tr>
+      <td class="mono muted">{{ row.path }}</td>
+      <td><div class="copy-row"><input class="field-input mono" readonly value="{{ row.url }}"><button class="button secondary" type="button" data-copy="input" data-copy-sibling="1">Copy</button></div></td>
+      <td class="mono" style="font-size:.66rem">{% for id in row.ids %}<code>{{ id }}</code> {% endfor %}</td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+  <p class="muted" style="font-size:.68rem;margin-top:10px">{% if rows.0.ids %}Share one registered ID per target; the gate answers the rest with the decoy.{% else %}These links carry no per-target IDs.{% endif %}</p>
+</section>
+{% endblock %}

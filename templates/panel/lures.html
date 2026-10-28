@@ -32,7 +32,7 @@
     {% for site in sites %}
     <tr>
       <td><strong>{{ site.name }}</strong>{% if site.description %}<br><span class="muted" style="font-size:.68rem">{{ site.description }}</span>{% endif %}</td>
-      <td class="mono"><a href="{{ site.public_path }}" target="_blank" rel="noopener">{{ site.public_path }}</a></td>
+      <td class="mono"><a href="{{ public_base }}{{ site.public_path }}" target="_blank" rel="noopener">{{ public_base }}{{ site.public_path }}</a></td>
       <td class="mono muted">{{ site.file_count }}</td>
       <td>{% if site.active %}<span class="status-badge good">LIVE</span>{% else %}<span class="status-badge">OFFLINE</span>{% endif %}</td>
       <td>

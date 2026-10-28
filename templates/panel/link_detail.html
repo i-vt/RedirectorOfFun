@@ -53,6 +53,19 @@
     </div>
   </details>
   <div class="panel-heading"><div><span class="section-label">PAYLOAD TELEMETRY</span><h2>Downloads / 14 days</h2></div><a class="text-link" href="{% url 'gate-payloads' %}">ALL PAYLOADS →</a></div>
+  {% if track_series %}
+  <div class="panel-heading"><div><span class="section-label">TARGET TRACKING</span><h3>Hits per registered ID</h3></div></div>
+  <div class="chart-wrap" style="height:180px"><canvas id="track-chart" aria-label="Bar chart of hits per target ID" role="img"></canvas></div>
+  {{ track_series|json_script:"track-series" }}
+  <div class="table-wrap contained"><table><thead><tr><th>ID</th><th>HITS</th><th>FIRST SEEN</th><th>LAST SEEN</th></tr></thead><tbody>
+    {% for row in track_series %}<tr>
+      <td class="mono"><code>{{ row.id }}</code></td>
+      <td class="mono">{{ row.count }}</td>
+      <td class="mono muted">{{ row.first|date:"m-d H:i" }}</td>
+      <td class="mono muted">{{ row.last|date:"m-d H:i" }}</td>
+    </tr>{% endfor %}
+  </tbody></table></div>
+  {% endif %}
   <div class="chart-wrap"><canvas id="payload-chart" aria-label="Line chart of hits on this link over 14 days" role="img"></canvas></div>
   {{ series_json|json_script:"payload-series" }}
   {% if link.requires_approval %}

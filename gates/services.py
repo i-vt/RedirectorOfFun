@@ -923,8 +923,11 @@ def serve_link(link, request):
             record_hit("expired", request=request, path=link.path, link=link, status_code=410)
             return HttpResponse(status=410)
         _mark_served(link)
+        detail = {"watermark": marker} if marker else {}
+        if getattr(request, "_track_id", None):
+            detail["track_id"] = request._track_id
         record_hit("key_served", request=request, path=link.path, link=link,
-                   detail={"watermark": marker} if marker else {})
+                   detail=detail)
         notify("gates", {"title": "Key retrieved", "detail": f"{link.path} served its key ({link.hit_count} use(s))."})
         key_text = link.key_text + (f"\n{marker}\n" if marker else "")
         return range_aware_response(
@@ -976,6 +979,8 @@ def serve_link(link, request):
         detail.update(detail_masquerade)
         if marker:
             detail["watermark"] = marker
+        if getattr(request, "_track_id", None):
+            detail["track_id"] = request._track_id
         record_hit("download", request=request, path=link.path, link=link, detail=detail)
         return range_aware_response(request, content, filename=filename,
                                     content_type=content_type or "application/octet-stream")
@@ -990,6 +995,8 @@ def serve_link(link, request):
     detail.update(detail_masquerade)
     if marker:
         detail["watermark"] = marker
+    if getattr(request, "_track_id", None):
+        detail["track_id"] = request._track_id
     record_hit("download", request=request, path=link.path, link=link, detail=detail)
     notify("gates", {
         "title": "Gated download released",
@@ -1010,6 +1017,39 @@ def _link_content(link):
         with link.payload.open("rb") as handle:
             return handle.read(), link.payload.name.rsplit("/", 1)[-1], "application/octet-stream"
     raise RuntimeError("file link has no payload attached.")
+
+
+@functools.lru_cache(maxsize=1)
+def _detect_host_ip():
+    """The server's primary outbound IP, via a UDP connect (no traffic sent)."""
+    import socket
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.connect(("8.8.8.8", 80))
+        ip = sock.getsockname()[0]
+        sock.close()
+        return ip
+    except OSError:
+        return "127.0.0.1"
+
+
+def public_base(request):
+    """Absolute base for operator-facing URLs. PUBLIC_URL wins; a loopback
+    request host never leaks into a copyable URL - the server's IP is used."""
+    public = getattr(settings, "PUBLIC_URL", "").strip().rstrip("/")
+    if public:
+        return public
+    host = request.get_host().split(":")[0].strip("[]").lower() if request is not None else ""
+    if host and host != "localhost" and not host.startswith("127.") and host != "::1":
+        return request.build_absolute_uri("/").rstrip("/")
+    port = request.get_port() if request is not None else "80"
+    suffix = f":{port}" if port not in ("80", "443") else ""
+    return f"{request.scheme if request is not None else 'http'}://{_detect_host_ip()}{suffix}"
+
+
+def public_url_for(request, path):
+    """Copy-paste-ready absolute URL for a path - never 127.anything."""
+    return f"{public_base(request)}{path}"
 
 
 def dispatch(request, path):
@@ -1096,6 +1136,20 @@ def dispatch(request, path):
                        detail={"reason": "wrong domain", "expected": link.domain})
             return None
 
+    # ID-tracked links: an unregistered ID looks like a wrong path, before any
+    # other answer (even 410/expired) can reveal the path existed.
+    if link.track_param:
+        track_id = request.GET.get(link.track_param, "")[:32] or None
+        if link.require_track_id and track_id not in (link.track_ids or []):
+            record_hit("not_found", request=request, path=path, status_code=404,
+                       link=link, detail={"reason": "unregistered track id"})
+            return None
+        request._track_id = track_id  # ride onto release hits (key_served/download)
+        record_hit("hit", request=request, path=normalized, link=link,
+                   detail={"track_id": track_id} if track_id else {})
+    else:
+        record_hit("hit", request=request, path=normalized, link=link)
+
     if not link.available:
         # A signed download-continuation token still serves the bytes: the
         # interstitial page counted the release (one_time links deactivate
@@ -1106,7 +1160,6 @@ def dispatch(request, path):
         record_hit("expired", request=request, path=normalized, link=link, status_code=410)
         return HttpResponse(status=410)
 
-    record_hit("hit", request=request, path=normalized, link=link)
 
     passed, gate_reason = gate_passed(link, request)
     if not passed:

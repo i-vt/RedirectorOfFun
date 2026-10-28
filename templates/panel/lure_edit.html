@@ -15,7 +15,7 @@
 {% block content %}
 <section class="panel page-panel">
   <div class="panel-heading">
-    <div><span class="section-label">HOSTED CONTENT / LURE</span><h2>{{ site.name }}</h2><p>Live at <a class="mono" href="{{ site.public_path }}" target="_blank" rel="noopener">{{ site.public_path }}</a> · {% if site.active %}<span class="status-badge good">LIVE</span>{% else %}<span class="status-badge">OFFLINE</span>{% endif %}</p></div>
+    <div><span class="section-label">HOSTED CONTENT / LURE</span><h2>{{ site.name }}</h2><p>Live at <a class="mono" href="{{ public_base }}{{ site.public_path }}" target="_blank" rel="noopener">{{ public_base }}{{ site.public_path }}</a> · {% if site.active %}<span class="status-badge good">LIVE</span>{% else %}<span class="status-badge">OFFLINE</span>{% endif %}</p></div>
     <div><a class="button secondary" href="{% url 'gate-lures' %}">← All lures</a></div>
   </div>
 
