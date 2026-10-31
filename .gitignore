@@ -13,6 +13,7 @@ payloads/
 var/
 # Operator content stays local; only the shipped samples are tracked.
 data/*
+!data/prompts/
 !data/README.md
 !data/loading/
 data/loading/*

@@ -15,4 +15,5 @@ Everything the operator creates or uploads lives here:
 | `robots.txt`, `sitemap.xml` | surface-document overrides (optional) |
 
 Only the shipped samples (`example.*`, `payloads/example-bundle/`, and
-the three `decoys/` pages) are tracked in git. `prompts/` is never tracked. Your own files stay local and are never committed or pushed.
+the three `decoys/` pages) are tracked in git - plus the prompt specs in
+`prompts/` (loading, lure, fingerprint, benevolent, portal, download, decoy). Your own files stay local and are never committed or pushed.
